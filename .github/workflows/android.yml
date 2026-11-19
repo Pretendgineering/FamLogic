@@ -23,6 +23,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle # reuse downloaded dependencies; fewer trips to Maven Central
       # The Android SDK comes preinstalled on GitHub's Ubuntu runners (ANDROID_HOME).
 
       # Sign with the project's release key (see docs/RELEASING.md). Pull requests and
