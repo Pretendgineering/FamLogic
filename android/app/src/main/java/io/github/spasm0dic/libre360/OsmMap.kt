@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -89,7 +90,8 @@ fun OsmMap(
         }
     }
 
-    AndroidView(factory = { mapView }, modifier = modifier) { map ->
+    // clipToBounds: osmdroid paints tiles past its edges, which would cover the banners above it.
+    AndroidView(factory = { mapView }, modifier = modifier.clipToBounds()) { map ->
         if (state.tileUrl != tileUrl) {
             map.setTileSource(TemplateTileSource(tileUrl, attribution))
             state.tileUrl = tileUrl
