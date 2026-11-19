@@ -92,7 +92,12 @@ $("#logout-btn").addEventListener("click", async () => {
 function ensureMap(server) {
   if (map) return;
   map = L.map("map", { zoomControl: true }).setView([20, 0], 2);
-  L.tileLayer(server.tileUrl, { maxZoom: 19, attribution: server.tileAttribution }).addTo(map);
+  // Tile servers (OpenStreetMap's in particular) require a Referer; send only our origin.
+  L.tileLayer(server.tileUrl, {
+    maxZoom: 19,
+    attribution: server.tileAttribution,
+    referrerPolicy: "strict-origin-when-cross-origin",
+  }).addTo(map);
 }
 
 function renderMembers(members) {
