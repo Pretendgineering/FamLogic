@@ -38,9 +38,38 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          # Lengths are printed (never contents) so a truncated copy-paste is easy to spot.
+          echo "LIBRE360_KEYSTORE_B64 is ${#KEYSTORE_B64} characters long (a 4096-bit key is usually about 5,600)."
+          if ! printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/release.p12" 2>/dev/null; then
+            echo "::error::LIBRE360_KEYSTORE_B64 is not valid base64. Re-copy the whole contents of libre360-release.b64 into the secret."
+            exit 1
+          fi
           echo "LIBRE360_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
           echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check signing key
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          STORE_PASSWORD: ${{ secrets.LIBRE360_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.LIBRE360_KEY_ALIAS }}
+        run: |
+          if [ -z "$STORE_PASSWORD" ]; then
+            echo "::error::The LIBRE360_KEYSTORE_PASSWORD secret is missing or empty (check its exact name)."
+            exit 1
+          fi
+          alias="${KEY_ALIAS:-libre360}"
+          if ! out=$(keytool -list -keystore "$LIBRE360_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD -alias "$alias" 2>&1); then
+            case "$out" in
+              *"password was incorrect"*)
+                echo "::error::The key file is fine but LIBRE360_KEYSTORE_PASSWORD doesn't match it. Re-enter the password from when you created the key." ;;
+              *"does not exist"*)
+                echo "::error::The key file has no key named '$alias'. Set LIBRE360_KEY_ALIAS to the -alias you used." ;;
+              *)
+                echo "::error::Couldn't read the key file: it looks incomplete or damaged ($(stat -c %s "$LIBRE360_KEYSTORE") bytes after decoding). The LIBRE360_KEYSTORE_B64 secret is probably cut off; re-copy the WHOLE contents of libre360-release.b64 into it." ;;
+            esac
+            exit 1
+          fi
+          echo "Signing key OK (alias '$alias')."
 
       - name: Build
         env:
