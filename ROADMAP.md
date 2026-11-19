@@ -20,12 +20,21 @@ The phone already contacts the server every interval to send its location. The r
 
 ## Features
 
-### 1. Places with arrive/leave alerts
-- Anyone can add a place (name, position, radius) by long-pressing the map. Places are shared with the whole family.
+### 1. Places and geofences (arrive/leave alerts)
+- A **place** is a named area on the map: a circle with an adjustable radius, e.g. Home, School, Work. Anyone can add one by long-pressing the map or searching an address. Places belong to a circle (see Circles), so a work circle and a family circle each have their own.
+- **Geofence alerts**: "Sam arrived at School", "Alex left Work".
+- **Fine-grained alerts** (set on the phone):
+  - choose per person and per place whether to get alerts for **arrivals, departures or both**
+  - optional active hours (e.g. only alert about School between 7am and 5pm on weekdays)
 - **Switches:**
   - "Announce when I arrive at or leave places" (stored on the server, default on)
-  - "Notify me when others arrive or leave" (on the phone, default on, with an optional per-person or per-place mute)
-- The server detects arrivals and departures from the location reports. A small buffer zone stops someone standing at the edge of a place from triggering alerts over and over.
+  - "Notify me when others arrive or leave" (on the phone, default on)
+- **Sensible behaviour:**
+  - the server detects arrivals and departures from location reports
+  - a small buffer zone stops someone standing at the edge of a place from triggering alerts over and over
+  - inaccurate fixes are ignored
+  - a departure must hold for a minute before it alerts, so a GPS blip doesn't trigger one
+- **Optional extra:** while you're near a place, the app checks your location more often, so arrivals register sooner without using more battery the rest of the time.
 
 ### 2. Trail / history
 - Shows where someone has been over the last few hours as a line on the map.
@@ -59,11 +68,34 @@ The phone already contacts the server every interval to send its location. The r
 - Purely a convenience on the dashboard, so it needs no switch.
 - Optional extra: a "Scan invite" button on the app's join screen.
 
+### 7. Circles (share with different groups)
+Like Life360's circles: separate groups such as Family, Grandparents or Friends, where you choose what each one sees.
+- **Membership:** a person can be in several circles. You only see people you share a circle with, and only in the circles where they share.
+- **One sharing switch per circle in the app**, e.g. share with Family but pause sharing with Friends. The global pause switch still stops everything at once.
+- **Map switcher:** a circle picker at the top of the map, plus "All circles".
+- **Invites are for a circle.** The dashboard admin creates circles and invites people into them. A person already on the server can be added to another circle without reinstalling.
+- **What belongs to a circle:** places, check-ins, SOS and battery alerts all go to the circles you share with, with a per-circle choice for SOS.
+- **Upgrading:** existing servers become one circle named after `FAMILY_NAME`, so nothing changes until a second circle is created.
+- **Build timing:** this changes who-sees-whom everywhere, so it should land **before places and trails**. That way those features are built on circles from the start rather than retrofitted.
+
+### 8. Profile pictures on map pins
+Friendlier pins: your photo in the map bubble instead of an initial.
+- **Choosing a photo:** pick one in the app (Settings → Your photo) with a simple square crop. The phone shrinks it to about 256 px before uploading, so files stay tiny.
+- **Storage:** the server keeps it next to `libre360.json` in the data folder, so the one-folder backup still holds.
+- **Who sees it:** only people who share a circle with you.
+- **Where it shows:** map pins, the people list and the web dashboard. Pins fall back to the coloured initial when there's no photo.
+- **Switches:**
+  - "Use my photo" (on the server; turning it off deletes the photo)
+  - "Show photos on the map" (on the phone, for anyone who prefers plain pins)
+- The dashboard admin can remove a photo.
+
 ## Suggested order
 
 1. **Delivery mechanism plus low-battery alerts.** This is the smallest feature, and it proves out alerts end to end.
 2. **Check-in and SOS**, which use the same mechanism.
-3. **Places with arrive/leave alerts.**
-4. **Trail / history.**
-5. **QR code invites.** Small and independent, so it can slot in anywhere.
-6. **Optional UnifiedPush** for instant SOS.
+3. **Circles** (medium priority). This comes before places and trails, which depend on it.
+4. **Places and geofences** with arrive/leave alerts.
+5. **Trail / history.**
+6. **QR code invites.** Small and independent, so it can slot in anywhere.
+7. **Optional UnifiedPush** for instant SOS.
+8. **Profile pictures** (later).

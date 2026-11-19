@@ -159,4 +159,4 @@ Device tokens are stored only as SHA-256 hashes. The dashboard cookie is HMAC-si
 
 ## Roadmap
 
-Planned: arrive/leave alerts for places, trail history, check-in and SOS buttons, low-battery alerts, and QR code invites. Each one can be switched on or off in the app. See [ROADMAP.md](ROADMAP.md) for the design.
+Planned: places and geofences with arrive/leave alerts, circles (share with different groups), trail history, check-in and SOS buttons, low-battery alerts, QR code invites, and profile pictures on map pins. Each one can be switched on or off in the app. See [ROADMAP.md](ROADMAP.md) for the design.
