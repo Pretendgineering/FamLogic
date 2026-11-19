@@ -24,7 +24,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
+      # The Android SDK comes preinstalled on GitHub's Ubuntu runners (ANDROID_HOME).
 
       # Optional: sign with your own key so updates install over the previous version.
       # Add the repository secrets described in the README to enable this.
