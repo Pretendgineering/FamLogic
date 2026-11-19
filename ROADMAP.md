@@ -89,6 +89,17 @@ Friendlier pins: your photo in the map bubble instead of an initial.
   - "Show photos on the map" (on the phone, for anyone who prefers plain pins)
 - The dashboard admin can remove a photo.
 
+### 9. One-tap shareable invite message
+Make adding someone a single copy-paste. The dashboard's **Copy invite** button (and later an "Invite someone" button in the app) copies a complete, friendly message, for example:
+
+> Join our family on Libre360!
+> 1. Get the app: https://f-droid.org/packages/io.github.spasm0dic.libre360/
+> 2. Then tap this link to join: https://family.example.com/join/ABCD-EFGH
+
+- The app-store link points at F-Droid or IzzyOnDroid once Libre360 is listed there, with the GitHub release or Obtainium as the fallback before that.
+- The invite page (`/join/<code>`) shows the same download link, so a link opened on a phone without the app installed still makes sense.
+- Wait until the app is in a store, so the message doesn't send people to sideload an APK.
+
 ## Suggested order
 
 1. **Delivery mechanism plus low-battery alerts.** This is the smallest feature, and it proves out alerts end to end.
@@ -99,3 +110,4 @@ Friendlier pins: your photo in the map bubble instead of an initial.
 6. **QR code invites.** Small and independent, so it can slot in anywhere.
 7. **Optional UnifiedPush** for instant SOS.
 8. **Profile pictures** (later).
+9. **Shareable invite message** with an app download link (once the app is on F-Droid or IzzyOnDroid).
