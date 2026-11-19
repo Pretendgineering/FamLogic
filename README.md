@@ -131,12 +131,6 @@ Push a tag such as `v0.1.0`. CI then publishes `ghcr.io/spasm0dic/libre360:0.1.0
 
 Device tokens are stored only as SHA-256 hashes. The dashboard cookie is HMAC-signed, `HttpOnly` and `SameSite=Strict`, and wrong passwords are slowed down to stop guessing.
 
-## Ideas for later
+## Roadmap
 
-Deliberately left out to keep things simple, but each would fit:
-
-- **Places with arrive/leave alerts** ("Sam arrived at School"). This is the big Life360 feature. Doing it without Google push would mean [UnifiedPush](https://unifiedpush.org) (e.g. ntfy).
-- **Short trail / history** (e.g. the last 24 hours), off by default.
-- **"Check in" / SOS button** that notifies everyone right away.
-- **Low-battery alerts** for other members.
-- **QR code invites** shown in the dashboard.
+Planned: arrive/leave alerts for places, trail history, check-in and SOS buttons, low-battery alerts, and QR code invites. Each one can be switched on or off in the app. See [ROADMAP.md](ROADMAP.md) for the design.
