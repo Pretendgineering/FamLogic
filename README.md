@@ -136,7 +136,7 @@ Then add these repository secrets (Settings → Secrets and variables → Action
 
 ### Releases
 
-Push a tag such as `v0.1.0`. CI then publishes `ghcr.io/spasm0dic/libre360:0.1.0` (plus `latest` from `main`) and attaches the APK to a GitHub release.
+Every push to `main` publishes the server image as `ghcr.io/spasm0dic/libre360:latest`. To release a new app version, bump `versionName` and `versionCode` in `android/app/build.gradle.kts`. When that lands on `main`, CI creates a GitHub release (e.g. `v0.2.0`) with the APK attached. Pushing a `v*` tag yourself also publishes versioned server images (`:0.2.0`).
 
 ## How it works
 

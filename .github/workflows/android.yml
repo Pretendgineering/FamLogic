@@ -3,7 +3,6 @@ name: Android
 on:
   push:
     branches: [main]
-    tags: ["v*"]
     paths: ["android/**", ".github/workflows/android.yml"]
   pull_request:
     paths: ["android/**", ".github/workflows/android.yml"]
@@ -49,8 +48,21 @@ jobs:
           name: libre360-apk
           path: android/libre360.apk
 
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: android/libre360.apk
+      # Every build on main whose versionName has no release yet becomes a GitHub release
+      # (e.g. v0.1.0) with the APK attached. To ship a new release, bump versionName
+      # (and versionCode) in app/build.gradle.kts.
+      - name: Publish release for new versions
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; nothing to publish."
+          else
+            gh release create "$tag" libre360.apk \
+              --target "$GITHUB_SHA" \
+              --title "Libre360 $version" \
+              --notes "Install libre360.apk on your Android phone. The server image is ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/libre360:latest. See the README for setup."
+          fi
