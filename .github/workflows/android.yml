@@ -25,15 +25,21 @@ jobs:
           java-version: 17
       # The Android SDK comes preinstalled on GitHub's Ubuntu runners (ANDROID_HOME).
 
-      # Optional: sign with your own key so updates install over the previous version.
-      # Add the repository secrets described in the README to enable this.
+      # Sign with the project's release key (see docs/RELEASING.md). Pull requests and
+      # forks don't get the secrets; they still build, signed with a throwaway debug key.
       - name: Set up signing key
+        id: signing
         env:
           KEYSTORE_B64: ${{ secrets.LIBRE360_KEYSTORE_B64 }}
-        if: env.KEYSTORE_B64 != ''
         run: |
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          echo "LIBRE360_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::LIBRE360_KEYSTORE_B64 secret not set: building with a throwaway debug key. This APK will not be published as a release."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          echo "LIBRE360_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Build
         env:
@@ -42,27 +48,40 @@ jobs:
           LIBRE360_KEY_PASSWORD: ${{ secrets.LIBRE360_KEY_PASSWORD }}
         run: ./gradlew --no-daemon assembleRelease lintDebug
 
-      - run: mv app/build/outputs/apk/release/app-release.apk libre360.apk
+      - name: Show signing certificate
+        id: cert
+        run: |
+          mv app/build/outputs/apk/release/app-release.apk libre360.apk
+          apksigner="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$apksigner" verify --print-certs libre360.apk | tee certs.txt
+          sha=$(sed -n 's/.*certificate SHA-256 digest: //p' certs.txt | head -1)
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "Signing certificate SHA-256: \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         with:
           name: libre360-apk
           path: android/libre360.apk
 
       # Every build on main whose versionName has no release yet becomes a GitHub release
-      # (e.g. v0.1.0) with the APK attached. To ship a new release, bump versionName
-      # (and versionCode) in app/build.gradle.kts.
+      # (e.g. v0.1.1) with the APK attached, but only when signed with the release key.
+      # To ship a new release, bump versionName and versionCode in app/build.gradle.kts.
       - name: Publish release for new versions
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.signing.outputs.signed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          CERT_SHA256: ${{ steps.cert.outputs.sha256 }}
         run: |
           version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
           tag="v$version"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; nothing to publish."
-          else
-            gh release create "$tag" libre360.apk \
-              --target "$GITHUB_SHA" \
-              --title "Libre360 $version" \
-              --notes "Install libre360.apk on your Android phone. The server image is ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/libre360:latest. See the README for setup."
+            exit 0
           fi
+          cat > notes.md <<NOTES
+          Install \`libre360.apk\` on your Android phone. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/libre360:latest\`. See the README for setup.
+
+          Signing certificate SHA-256 (every official Libre360 APK has this same fingerprint):
+          \`$CERT_SHA256\`
+          NOTES
+          gh release create "$tag" libre360.apk --target "$GITHUB_SHA" --title "Libre360 $version" --notes-file notes.md

@@ -12,20 +12,24 @@ android {
         applicationId = "io.github.spasm0dic.libre360"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
-    // Release signing comes from environment variables so no secrets live in the repo.
-    // Without them, release builds are signed with the debug key (fine for personal use).
+    // Release signing comes from environment variables so no secrets live in the repo
+    // (see docs/RELEASING.md). Without them, release builds are signed with the local
+    // debug key: fine for trying things out, but such APKs can't update a real install.
     val keystorePath = System.getenv("LIBRE360_KEYSTORE")
     signingConfigs {
-        if (keystorePath != null) {
+        if (!keystorePath.isNullOrBlank()) {
             create("release") {
+                val password = System.getenv("LIBRE360_KEYSTORE_PASSWORD")
+                    ?: error("LIBRE360_KEYSTORE is set but LIBRE360_KEYSTORE_PASSWORD is not")
                 storeFile = file(keystorePath)
-                storePassword = System.getenv("LIBRE360_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("LIBRE360_KEY_ALIAS")
-                keyPassword = System.getenv("LIBRE360_KEY_PASSWORD")
+                storePassword = password
+                keyAlias = System.getenv("LIBRE360_KEY_ALIAS")?.ifBlank { null } ?: "libre360"
+                // PKCS12 keystores use the same password for the key; allow a separate one anyway.
+                keyPassword = System.getenv("LIBRE360_KEY_PASSWORD")?.ifBlank { null } ?: password
             }
         }
     }

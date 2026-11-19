@@ -1,2 +1,8 @@
 server/data/
 server/libre360
+
+# Signing keys: never commit these (see docs/RELEASING.md)
+*.p12
+*.jks
+*.keystore
+*.b64

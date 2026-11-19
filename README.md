@@ -123,20 +123,11 @@ cd android
 ./gradlew assembleRelease   # -> app/build/outputs/apk/release/app-release.apk
 ```
 
-### Signing the APK so updates install cleanly
+### Signing and releases
 
-Android only installs an update if it's signed with the same key as the installed version. CI builds are signed with a throwaway key unless you add your own:
+Official APKs are all signed with one project key, so updates install cleanly over each other. To set up the key, cut a release or get the app onto F-Droid, see **[docs/RELEASING.md](docs/RELEASING.md)**. In short: bump `versionName`/`versionCode` in `android/app/build.gradle.kts`, merge to `main`, and CI publishes a signed GitHub release with the APK.
 
-```sh
-keytool -genkeypair -v -keystore libre360.jks -alias libre360 -keyalg RSA -keysize 4096 -validity 10000
-base64 -w0 libre360.jks   # copy the output
-```
-
-Then add these repository secrets (Settings → Secrets and variables → Actions): `LIBRE360_KEYSTORE_B64` (the base64 text), `LIBRE360_KEYSTORE_PASSWORD`, `LIBRE360_KEY_ALIAS` (`libre360`) and `LIBRE360_KEY_PASSWORD`. Keep `libre360.jks` safe and **never commit it**.
-
-### Releases
-
-Every push to `main` publishes the server image as `ghcr.io/spasm0dic/libre360:latest`. To release a new app version, bump `versionName` and `versionCode` in `android/app/build.gradle.kts`. When that lands on `main`, CI creates a GitHub release (e.g. `v0.2.0`) with the APK attached. Pushing a `v*` tag yourself also publishes versioned server images (`:0.2.0`).
+Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/libre360:latest`.
 
 ## How it works
 
