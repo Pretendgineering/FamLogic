@@ -1,0 +1,27 @@
+services:
+  libre360:
+    # Use the published image, or comment this out and uncomment "build" to build it yourself.
+    image: ghcr.io/spasm0dic/libre360:latest
+    # build: ./server
+    container_name: libre360
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Password for the web dashboard (where you invite people). Required, 8+ characters.
+      ADMIN_PASSWORD: "change-me-please"
+      # Shown in the app and dashboard.
+      FAMILY_NAME: "Our Family"
+      # The address phones use to reach this server. Set it if invite links come out wrong
+      # (for example behind some reverse proxies).
+      # PUBLIC_URL: "https://family.example.com"
+      # Map tiles. The default is the free OpenStreetMap server, which is fine for a family.
+      # TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      # TILE_ATTRIBUTION: "© OpenStreetMap contributors"
+      # How long an invite link works, in hours.
+      # INVITE_HOURS: "72"
+    volumes:
+      - libre360-data:/data
+
+volumes:
+  libre360-data:

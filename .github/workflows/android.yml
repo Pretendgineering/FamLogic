@@ -1,0 +1,56 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths: ["android/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["android/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # to attach the APK to releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+
+      # Optional: sign with your own key so updates install over the previous version.
+      # Add the repository secrets described in the README to enable this.
+      - name: Set up signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.LIBRE360_KEYSTORE_B64 }}
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "LIBRE360_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          LIBRE360_KEYSTORE_PASSWORD: ${{ secrets.LIBRE360_KEYSTORE_PASSWORD }}
+          LIBRE360_KEY_ALIAS: ${{ secrets.LIBRE360_KEY_ALIAS }}
+          LIBRE360_KEY_PASSWORD: ${{ secrets.LIBRE360_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease lintDebug
+
+      - run: mv app/build/outputs/apk/release/app-release.apk libre360.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libre360-apk
+          path: android/libre360.apk
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/libre360.apk

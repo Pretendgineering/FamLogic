@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Libre360</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <section id="login" class="join" hidden>
+    <form class="card" id="login-form">
+      <h1>Libre360</h1>
+      <p class="muted">Log in to see your family and send invites.</p>
+      <label>Admin password <input type="password" id="password" autocomplete="current-password" required autofocus></label>
+      <p class="error" id="login-error"></p>
+      <button type="submit">Log in</button>
+    </form>
+  </section>
+
+  <section id="app" hidden>
+    <header>
+      <h1 id="family-name">Libre360</h1>
+      <div class="actions">
+        <button id="invite-btn">+ Invite someone</button>
+        <button id="logout-btn" class="secondary">Log out</button>
+      </div>
+    </header>
+    <div class="layout">
+      <aside>
+        <h2>People</h2>
+        <ul id="members" class="list"></ul>
+        <p id="no-members" class="muted" hidden>Nobody has joined yet. Use <strong>Invite someone</strong> to add the first phone.</p>
+        <h2>Open invites</h2>
+        <ul id="invites" class="list"></ul>
+        <p id="no-invites" class="muted">No open invites.</p>
+      </aside>
+      <div id="map"></div>
+    </div>
+  </section>
+
+  <dialog id="invite-dialog">
+    <form id="invite-form" method="dialog">
+      <h2>Invite someone</h2>
+      <label>Their name (optional) <input id="invite-name" maxlength="40" placeholder="e.g. Grandma"></label>
+      <div class="row"><button type="submit">Create invite</button><button type="button" class="secondary" data-close>Cancel</button></div>
+    </form>
+    <div id="invite-result" hidden>
+      <h2>Invite ready</h2>
+      <p>Send this link to their phone. It works once and expires in a few days.</p>
+      <div class="copy"><input id="invite-link" readonly><button type="button" id="copy-link">Copy</button></div>
+      <p class="muted">Or in the app, enter server <code id="invite-server"></code> and code <code id="invite-code"></code>.</p>
+      <div class="row"><button type="button" data-close>Done</button></div>
+    </div>
+  </dialog>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
