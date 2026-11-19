@@ -16,42 +16,42 @@ The key lives in a small file (`libre360-release.p12`) protected by a password. 
 
 ### 1. Create the key
 
-On any machine with Docker, such as your TrueNAS shell:
+You only need a machine with Docker. These steps are for a **TrueNAS shell** (System → Shell, or SSH). On TrueNAS, Docker needs `sudo`, and your user may have no writable home folder, so the key goes in a folder on one of your **SMB shares**. That way you can reach it from your computer afterwards.
 
 ```sh
-mkdir -p ~/libre360-key && cd ~/libre360-key
-docker run --rm -it -v "$PWD":/keys -w /keys eclipse-temurin:21-jre \
+# A folder on a share you can open from your computer. Change this path.
+KEYDIR=/mnt/POOL/SHARE/libre360-key
+
+sudo mkdir -p "$KEYDIR"
+sudo docker run --rm -it -v "$KEYDIR":/keys -w /keys eclipse-temurin:21-jre \
   keytool -genkeypair -keystore libre360-release.p12 -storetype PKCS12 \
   -alias libre360 -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Libre360"
 ```
 
-It asks for a password twice. Use a long one and save it in your password manager.
+It asks for a password twice. Use a long one and save it in your password manager right away.
 
-(With Java installed you can run the `keytool ...` part directly instead.)
-
-### 2. Back it up
-
-Put **both** of these somewhere safe, ideally your password manager (most can hold file attachments) plus one offline copy:
-
-- the file `libre360-release.p12`
-- its password
-
-### 3. Give it to GitHub
-
-Turn the file into text:
+Then turn the key into text for GitHub, and give the files to your own user so you can open them over SMB:
 
 ```sh
-base64 -w0 libre360-release.p12 > libre360-release.b64
+sudo sh -c "base64 -w0 '$KEYDIR/libre360-release.p12' > '$KEYDIR/libre360-release.b64'"
+sudo chown -R "$(id -un)" "$KEYDIR"
 ```
 
-Then in the GitHub repo, go to **Settings → Secrets and variables → Actions → New repository secret** and add two secrets:
+(On a regular Linux or Mac machine with Java installed, you can instead run just the `keytool ...` part in any folder, then `base64 -w0 libre360-release.p12 > libre360-release.b64`. On a Mac, use `base64 -i libre360-release.p12 -o libre360-release.b64`.)
+
+### 2. Give it to GitHub
+
+From your computer, open the share and the `libre360-key` folder. In the GitHub repo, go to **Settings → Secrets and variables → Actions → New repository secret** and add two secrets:
 
 | Name | Value |
 |---|---|
-| `LIBRE360_KEYSTORE_B64` | the entire contents of `libre360-release.b64` (one long line) |
+| `LIBRE360_KEYSTORE_B64` | the entire contents of `libre360-release.b64`: open it in a text editor, select all, copy. It's one long line. |
 | `LIBRE360_KEYSTORE_PASSWORD` | the password from step 1 |
 
-Then delete the `.b64` file: `rm libre360-release.b64`.
+### 3. Back it up, then clean up
+
+- Put `libre360-release.p12` and its password in your password manager (most accept file attachments). Keep a second copy offline, such as a USB stick in a drawer.
+- Then **delete the `libre360-key` folder from the share**. GitHub and your backups now hold the only copies, and a key sitting on a network share is easy to leak.
 
 ### 4. Check it
 

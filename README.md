@@ -8,6 +8,8 @@ Libre360 does one thing: each phone reports where it is to **your own server**, 
 - **Android app**: join with an invite link. You get a map of everyone, last-seen times, battery levels, distances and a "Directions" button.
 - **Web dashboard**: see the map from a computer, invite people, rename or remove them.
 
+> **Who runs the server?** You do. There's no central Libre360 service. Every family runs its own server, and the app simply connects to whatever address you type in. The Docker image and APK published from this repo are just ready-made builds of the code: other people download them and run them on their own hardware, and none of their data ever touches anyone else's server. You can also build both yourself from this repo.
+
 ## What's in the box
 
 | | |
