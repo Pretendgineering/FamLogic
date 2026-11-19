@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -174,5 +175,53 @@ func TestStorePersists(t *testing.T) {
 	}
 	if s2.Secret() != s.Secret() {
 		t.Fatal("secret changed across restarts; admins would be logged out")
+	}
+}
+
+func TestAlertsOverHTTP(t *testing.T) {
+	e := newEnv(t)
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	join := func(name string) string {
+		_, inv := e.do("POST", "/api/admin/invites", "", map[string]string{"name": name})
+		_, j := e.do("POST", "/api/join", "", map[string]string{"code": inv["code"].(string)})
+		return j["token"].(string)
+	}
+	alex, bob := join("Alex"), join("Bob")
+
+	// Bob's phone has no cursor yet: it gets one, and no backlog.
+	_, list := e.do("GET", "/api/members?since=-1", bob, nil)
+	cursor := int64(list["cursor"].(float64))
+	if evs := list["events"].([]any); len(evs) != 0 {
+		t.Fatalf("fresh phone got backlog: %v", evs)
+	}
+	if list["settings"].(map[string]any)["shareLowBattery"] != true {
+		t.Fatalf("shareLowBattery should default to on: %v", list["settings"])
+	}
+
+	// Old-style request without ?since still works and gets 204.
+	if r, _ := e.do("POST", "/api/location", alex, map[string]any{"lat": 1, "lon": 1, "battery": 50}); r.StatusCode != 204 {
+		t.Fatalf("location without since: %d", r.StatusCode)
+	}
+	e.do("POST", "/api/location", alex, map[string]any{"lat": 1, "lon": 1, "battery": 14, "time": time.Now().UnixMilli()})
+
+	// Bob picks the alert up in the reply to his own location report.
+	r, resp := e.do("POST", fmt.Sprintf("/api/location?since=%d", cursor), bob, map[string]any{"lat": 2, "lon": 2, "battery": 90})
+	if r.StatusCode != 200 {
+		t.Fatalf("location with since: %d", r.StatusCode)
+	}
+	evs := resp["events"].([]any)
+	if len(evs) != 1 {
+		t.Fatalf("want 1 alert, got %v", evs)
+	}
+	ev := evs[0].(map[string]any)
+	if ev["type"] != "battery_low" || ev["name"] != "Alex" || ev["battery"] != float64(14) || ev["level"] != float64(15) {
+		t.Fatalf("unexpected alert %v", ev)
+	}
+
+	// Alex switches the alerts off from the app.
+	e.do("POST", "/api/me", alex, map[string]any{"shareLowBattery": false})
+	_, list = e.do("GET", "/api/members?since=-1", alex, nil)
+	if list["settings"].(map[string]any)["shareLowBattery"] != false {
+		t.Fatalf("switch not saved: %v", list["settings"])
 	}
 }

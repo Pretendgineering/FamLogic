@@ -19,6 +19,7 @@ Libre360 does one thing: each phone reports where it is to **your own server**, 
 | Privacy | Only the **latest** position is stored. Pausing wipes it from the server. Removing a member deletes them. |
 | Battery | Updates every 1/2/5/15 minutes (your choice) using balanced-power location. |
 | Joining | The admin creates a one-time invite link. The person taps it on their phone and the app opens with everything filled in. |
+| Alerts | Low-battery alerts for family members, each switchable in the app. They arrive with normal location updates, so no push service is needed. |
 | Reliability | Restarts after reboot. The app walks you through "Allow all the time" and the battery-saver exemption. |
 | License | GPLv3. All dependencies are open source. |
 
@@ -142,9 +143,9 @@ Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/libre
 | Endpoint | Auth | Purpose |
 |---|---|---|
 | `POST /api/join` `{code, name}` | invite code | Returns a device token |
-| `POST /api/location` `{lat, lon, acc, speed, battery, charging, time}` | `Bearer <token>` | Report a fix |
-| `GET /api/members` | `Bearer <token>` | Everyone's latest position + map settings |
-| `PATCH` or `POST /api/me` `{name?, paused?}` | `Bearer <token>` | Rename yourself / pause |
+| `POST /api/location?since=<cursor>` `{lat, lon, acc, speed, battery, charging, time}` | `Bearer <token>` | Report a fix; the reply carries new alerts `{events, cursor}` |
+| `GET /api/members?since=<cursor>` | `Bearer <token>` | Everyone's latest position, map settings, your feature settings, and new alerts |
+| `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?}` | `Bearer <token>` | Rename yourself / pause / feature switches |
 | `DELETE /api/me` | `Bearer <token>` | Leave |
 | `/api/admin/*` | dashboard login cookie | Invites and members |
 

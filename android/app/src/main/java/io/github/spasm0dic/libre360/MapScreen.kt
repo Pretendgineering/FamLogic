@@ -69,7 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -98,6 +98,7 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
     var cameraSeq by remember { mutableIntStateOf(0) }
     var fittedOnce by remember { mutableStateOf(false) }
     var perms by remember { mutableStateOf(PermissionState.read(context)) }
+    var shareLowBattery by remember { mutableStateOf<Boolean?>(null) } // null until the server tells us
     // Bumped every minute so "5 min ago" labels stay current.
     var tick by remember { mutableIntStateOf(0) }
 
@@ -109,7 +110,10 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
 
     suspend fun refresh() {
         try {
-            val res = Api(prefs.serverUrl, prefs.token).members()
+            val res = Api(prefs.serverUrl, prefs.token).members(since = prefs.eventCursor)
+            // Alerts also come in here, so they show while the app is open even if sharing is paused.
+            Alerts.handle(context, res.events)
+            shareLowBattery = res.shareLowBattery
             members = res.members
             familyName = res.server.name
             tileUrl = res.server.tileUrl
@@ -189,6 +193,19 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
             perms = perms,
             sharing = sharing,
             onSharingChange = ::setSharing,
+            shareLowBattery = shareLowBattery,
+            onShareLowBatteryChange = { on ->
+                val before = shareLowBattery
+                shareLowBattery = on
+                scope.launch {
+                    try {
+                        Api(prefs.serverUrl, prefs.token).setShareLowBattery(on)
+                    } catch (e: IOException) {
+                        shareLowBattery = before
+                        Toast.makeText(context, "Couldn't save: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
             onBack = { showSettings = false; scope.launch { refresh() } },
             onLeave = {
                 scope.launch {
@@ -353,7 +370,12 @@ private fun requestBatteryExemption(context: Context) {
     }
 }
 
-data class PermissionState(val location: Boolean, val background: Boolean, val batteryUnrestricted: Boolean) {
+data class PermissionState(
+    val location: Boolean,
+    val background: Boolean,
+    val batteryUnrestricted: Boolean,
+    val notifications: Boolean,
+) {
     companion object {
         fun read(ctx: Context): PermissionState {
             val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -361,6 +383,7 @@ data class PermissionState(val location: Boolean, val background: Boolean, val b
                 location = LocationService.hasLocationPermission(ctx),
                 background = LocationService.hasBackgroundPermission(ctx),
                 batteryUnrestricted = pm.isIgnoringBatteryOptimizations(ctx.packageName),
+                notifications = NotificationManagerCompat.from(ctx).areNotificationsEnabled(),
             )
         }
 
@@ -379,6 +402,8 @@ private fun SettingsScreen(
     perms: PermissionState,
     sharing: Boolean,
     onSharingChange: (Boolean) -> Unit,
+    shareLowBattery: Boolean?,
+    onShareLowBatteryChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onLeave: () -> Unit,
 ) {
@@ -388,6 +413,8 @@ private fun SettingsScreen(
     var name by remember { mutableStateOf("") }
     var nameMsg by remember { mutableStateOf<String?>(null) }
     var confirmLeave by remember { mutableStateOf(false) }
+    var notifyLowBattery by remember { mutableStateOf(prefs.notifyLowBattery) }
+    var lowBatteryThreshold by remember { mutableIntStateOf(prefs.lowBatteryThreshold) }
 
     Scaffold(
         topBar = {
@@ -461,11 +488,51 @@ private fun SettingsScreen(
             nameMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             HorizontalDivider()
 
+            // ---- Features: each one can be switched on or off here. ----
+            Text("Features", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+            Text("Low battery alerts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+            SwitchRow(
+                title = "Tell my family when my battery is low",
+                detail = "They get a notification when your battery drops to 15% or 10%, unless you're charging.",
+                checked = shareLowBattery ?: true,
+                enabled = shareLowBattery != null, // wait until we know the server's setting
+                onChange = onShareLowBatteryChange,
+            )
+            SwitchRow(
+                title = "Notify me when someone's battery is low",
+                detail = "Alerts can take up to one update interval to arrive.",
+                checked = notifyLowBattery,
+                onChange = { notifyLowBattery = it; prefs.notifyLowBattery = it },
+            )
+            if (notifyLowBattery) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
+                    Text("Notify me at", style = MaterialTheme.typography.bodyMedium)
+                    Prefs.LOW_BATTERY_CHOICES.forEach { level ->
+                        Row(
+                            Modifier.selectable(selected = lowBatteryThreshold == level) {
+                                lowBatteryThreshold = level
+                                prefs.lowBatteryThreshold = level
+                            }.padding(start = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = lowBatteryThreshold == level, onClick = null)
+                            Text("$level%", Modifier.padding(start = 4.dp))
+                        }
+                    }
+                }
+            }
+            HorizontalDivider()
+
             Text("Reliability", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
             CheckRow("Location access \"Allow all the time\"", perms.background) {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
             }
             CheckRow("Not restricted by battery saver", perms.batteryUnrestricted) { requestBatteryExemption(context) }
+            CheckRow("Notifications allowed (for alerts)", perms.notifications) {
+                context.startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                )
+            }
             HorizontalDivider()
 
             Text("Server", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
@@ -490,6 +557,20 @@ private fun SettingsScreen(
             confirmButton = { TextButton(onClick = { confirmLeave = false; onLeave() }) { Text("Leave") } },
             dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, detail: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
     }
 }
 

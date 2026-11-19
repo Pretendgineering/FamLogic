@@ -37,7 +37,18 @@ type Member struct {
 	CreatedAt int64     `json:"createdAt"`
 	Paused    bool      `json:"paused"`
 	Loc       *Location `json:"loc,omitempty"`
+
+	// Feature switches this person controls from their phone. Pointers so that a
+	// missing value (older data files) means "on" by default.
+	ShareLowBattery *bool `json:"shareLowBattery,omitempty"`
+
+	// Lowest low-battery level already announced in the current discharge
+	// (0 = none yet). Reset once the battery is back above batteryRearmLevel.
+	BatteryAlertedAt int `json:"batteryAlertedAt,omitempty"`
 }
+
+// SharesLowBattery reports whether others get told when this person's battery is low.
+func (m *Member) SharesLowBattery() bool { return m.ShareLowBattery == nil || *m.ShareLowBattery }
 
 // Invite is a single-use code that lets a phone join.
 type Invite struct {
@@ -51,6 +62,10 @@ type data struct {
 	Secret  string             `json:"secret"` // signs admin session cookies
 	Members map[string]*Member `json:"members"`
 	Invites map[string]*Invite `json:"invites"`
+
+	// Recent alerts for phones to pick up (see events.go).
+	LastEventID int64   `json:"lastEventId"`
+	Events      []Event `json:"events,omitempty"`
 }
 
 // Store keeps everything in memory and writes it to one JSON file.
@@ -222,29 +237,42 @@ func (s *Store) UpdateLocation(id string, loc Location) error {
 		return nil
 	}
 	m.Loc = &loc
+	s.checkBatteryLocked(m, loc)
 	return s.saveLocked()
 }
 
-// UpdateMember changes name and/or paused. Pausing also forgets the
-// last location so nobody can see where you were when you paused.
-func (s *Store) UpdateMember(id string, name *string, paused *bool, color *string) (*Member, error) {
+// MemberPatch lists the fields to change; nil fields are left alone.
+type MemberPatch struct {
+	Name            *string
+	Paused          *bool
+	Color           *string
+	ShareLowBattery *bool
+}
+
+// UpdateMember applies a patch. Pausing also forgets the last location so
+// nobody can see where you were when you paused.
+func (s *Store) UpdateMember(id string, p MemberPatch) (*Member, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, ok := s.d.Members[id]
 	if !ok {
 		return nil, ErrNotFound
 	}
-	if name != nil {
-		m.Name = *name
+	if p.Name != nil {
+		m.Name = *p.Name
 	}
-	if color != nil {
-		m.Color = *color
+	if p.Color != nil {
+		m.Color = *p.Color
 	}
-	if paused != nil {
-		m.Paused = *paused
-		if *paused {
+	if p.Paused != nil {
+		m.Paused = *p.Paused
+		if *p.Paused {
 			m.Loc = nil
 		}
+	}
+	if p.ShareLowBattery != nil {
+		v := *p.ShareLowBattery
+		m.ShareLowBattery = &v
 	}
 	cp := *m
 	return &cp, s.saveLocked()

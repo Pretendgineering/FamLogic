@@ -7,6 +7,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -51,8 +52,23 @@ class LocationService : Service() {
 
     private var lastSentElapsed = 0L // SystemClock.elapsedRealtime() of the last successful upload
     private var lastSent: Location? = null
+    private var lastFix: Location? = null // newest fix seen, sent or not
+    private var lastBattery = -1
 
     private val listener = LocationListenerCompat { onFix(it) }
+
+    // When the battery drops past an alert level, send an update right away so the
+    // family's low-battery alert doesn't wait for the next interval.
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val (pct, charging) = batteryState(intent)
+            val previous = lastBattery
+            lastBattery = pct
+            if (pct < 0 || previous < 0 || charging) return
+            val crossed = Prefs.LOW_BATTERY_CHOICES.any { level -> previous > level && pct <= level }
+            if (crossed) lastFix?.let { upload(it, waitForTurn = true) }
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -61,6 +77,10 @@ class LocationService : Service() {
         prefs = Prefs(this)
         lm = getSystemService(LOCATION_SERVICE) as LocationManager
         isRunning = true
+        Alerts.ensureChannel(this)
+        ContextCompat.registerReceiver(
+            this, batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -87,6 +107,7 @@ class LocationService : Service() {
     @SuppressLint("MissingPermission") // removing updates is harmless; guarded anyway
     override fun onDestroy() {
         runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
+        runCatching { unregisterReceiver(batteryReceiver) }
         scope.cancel()
         isRunning = false
         super.onDestroy()
@@ -129,6 +150,7 @@ class LocationService : Service() {
     }
 
     private fun onFix(loc: Location, force: Boolean = false) {
+        if (lastFix.let { it == null || loc.time >= it.time }) lastFix = loc
         val intervalMs = prefs.intervalMinutes * 60_000L
         val sinceLast = SystemClock.elapsedRealtime() - lastSentElapsed
         val movedFar = lastSent?.let { it.distanceTo(loc) > 250 } ?: true
@@ -137,13 +159,16 @@ class LocationService : Service() {
         upload(loc)
     }
 
-    private fun upload(loc: Location) = scope.launch {
-        if (!uploadLock.tryLock()) return@launch // an upload is already in flight
+    private fun upload(loc: Location, waitForTurn: Boolean = false) = scope.launch {
+        // Routine uploads skip if one is already in flight; important ones wait their turn.
+        if (waitForTurn) uploadLock.lock() else if (!uploadLock.tryLock()) return@launch
         try {
             val (battery, charging) = batteryState()
-            Api(prefs.serverUrl, prefs.token).sendLocation(
+            val alerts = Api(prefs.serverUrl, prefs.token).sendLocation(
                 loc.latitude, loc.longitude, loc.accuracy, loc.speed, loc.time, battery, charging,
+                since = prefs.eventCursor,
             )
+            Alerts.handle(this@LocationService, alerts)
             lastSentElapsed = SystemClock.elapsedRealtime()
             lastSent = loc
         } catch (e: UnauthorizedException) {
@@ -164,12 +189,20 @@ class LocationService : Service() {
     }
 
     private fun batteryState(): Pair<Int, Boolean> {
-        val i = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return -1 to false
+        val i = ContextCompat.registerReceiver(
+            this, null, IntentFilter(Intent.ACTION_BATTERY_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED,
+        ) ?: return -1 to false
+        return batteryState(i)
+    }
+
+    private fun batteryState(i: Intent): Pair<Int, Boolean> {
         val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-        val status = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
         val pct = if (level >= 0 && scale > 0) level * 100 / scale else -1
-        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+        // "On a charger" is what matters (no low-battery alerts while plugged in). The plug
+        // state is more reliable than the charging status, which some phones leave at
+        // "charging"/"full" after unplugging.
+        val charging = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
         return pct to charging
     }
 

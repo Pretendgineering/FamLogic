@@ -57,11 +57,13 @@ The phone already contacts the server every interval to send its location. The r
   - "Notify me about SOS alerts": stored on the phone, and the app warns before you turn it off
 - SOS notifications ignore per-person mutes.
 
-### 5. Low-battery alerts
+### 5. Low-battery alerts ✅ (done in 0.2.0)
 - **Switches:**
-  - "Notify others when my battery is low" (stored on the server)
+  - "Tell my family when my battery is low" (stored on the server)
   - "Notify me when someone's battery is low" (on the phone)
-- Choice of threshold (15% or 10%). One alert per discharge, so no repeats until the phone has charged again.
+- Choice of threshold (15% or 10%). One alert per discharge, so no repeats until the phone has been back above 20%. No alerts while charging.
+- The phone sends an update the moment it crosses a level, so the alert doesn't wait for the next interval.
+- **Known limit:** while your own sharing is paused, the background service is off, so alerts only show when you open the app. UnifiedPush (item 7) would remove this.
 
 ### 6. QR code invites
 - The dashboard shows a QR code next to each invite link. Scanning it with the phone's camera opens the app, the same as tapping the link.
@@ -102,7 +104,7 @@ Make adding someone a single copy-paste. The dashboard's **Copy invite** button 
 
 ## Suggested order
 
-1. **Delivery mechanism plus low-battery alerts.** This is the smallest feature, and it proves out alerts end to end.
+1. ✅ **Delivery mechanism plus low-battery alerts** (0.2.0).
 2. **Check-in and SOS**, which use the same mechanism.
 3. **Circles** (medium priority). This comes before places and trails, which depend on it.
 4. **Places and geofences** with arrive/leave alerts.

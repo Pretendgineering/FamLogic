@@ -214,13 +214,33 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	if m.Name == "" {
 		// Neither the invite nor the phone gave a name.
 		n := "Member"
-		m, _ = s.store.UpdateMember(m.ID, &n, nil, nil)
+		m, _ = s.store.UpdateMember(m.ID, MemberPatch{Name: &n})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "member": toPublic([]Member{*m})[0], "server": s.serverInfo()})
 }
 
+// sinceParam reads the ?since= event cursor; ok is false when the client didn't send one
+// (older apps), in which case no events are included in the reply.
+func sinceParam(r *http.Request) (int64, bool) {
+	v := r.URL.Query().Get("since")
+	if v == "" {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	return n, err == nil
+}
+
 func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Member) {
-	writeJSON(w, http.StatusOK, map[string]any{"me": me.ID, "members": toPublic(s.store.Members()), "server": s.serverInfo()})
+	resp := map[string]any{
+		"me":       me.ID,
+		"members":  toPublic(s.store.Members()),
+		"server":   s.serverInfo(),
+		"settings": map[string]any{"shareLowBattery": me.SharesLowBattery()},
+	}
+	if since, ok := sinceParam(r); ok {
+		resp["events"], resp["cursor"] = s.store.EventsFor(me.ID, since)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleLocation(w http.ResponseWriter, r *http.Request, me *Member) {
@@ -247,14 +267,16 @@ func (s *Server) handleLocation(w http.ResponseWriter, r *http.Request, me *Memb
 		l.Speed = 0
 	}
 	l.Received = now
-	if me.Paused {
-		// A fix that was in flight when the person paused: drop it.
-		// The app un-pauses explicitly with PATCH /api/me.
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
+	// While paused, a fix that was still in flight is dropped (the store ignores it).
+	// The app un-pauses explicitly with PATCH /api/me.
 	if err := s.store.UpdateLocation(me.ID, l); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	// The reply carries any new alerts, so phones get them without a push service.
+	if since, ok := sinceParam(r); ok {
+		events, cursor := s.store.EventsFor(me.ID, since)
+		writeJSON(w, http.StatusOK, map[string]any{"events": events, "cursor": cursor})
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -262,9 +284,10 @@ func (s *Server) handleLocation(w http.ResponseWriter, r *http.Request, me *Memb
 
 func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Member) {
 	var req struct {
-		Name   *string `json:"name"`
-		Paused *bool   `json:"paused"`
-		Color  *string `json:"color"`
+		Name            *string `json:"name"`
+		Paused          *bool   `json:"paused"`
+		Color           *string `json:"color"`
+		ShareLowBattery *bool   `json:"shareLowBattery"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -272,7 +295,7 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 	if !s.validatePatch(w, req.Name, req.Color) {
 		return
 	}
-	m, err := s.store.UpdateMember(me.ID, req.Name, req.Paused, req.Color)
+	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, ShareLowBattery: req.ShareLowBattery})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
@@ -384,7 +407,7 @@ func (s *Server) handleAdminPatchMember(w http.ResponseWriter, r *http.Request) 
 	if !s.validatePatch(w, req.Name, req.Color) {
 		return
 	}
-	m, err := s.store.UpdateMember(r.PathValue("id"), req.Name, nil, req.Color)
+	m, err := s.store.UpdateMember(r.PathValue("id"), MemberPatch{Name: req.Name, Color: req.Color})
 	if errors.Is(err, ErrNotFound) {
 		writeError(w, http.StatusNotFound, "no such member")
 		return

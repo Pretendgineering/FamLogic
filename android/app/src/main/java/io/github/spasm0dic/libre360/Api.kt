@@ -26,7 +26,30 @@ data class Member(
 
 data class ServerInfo(val name: String, val tileUrl: String, val tileAttribution: String)
 
-data class MembersResponse(val me: String, val members: List<Member>, val server: ServerInfo)
+/** An alert from the server, e.g. someone's battery is low. */
+data class AppEvent(
+    val id: Long,
+    val type: String,
+    val memberId: String,
+    val name: String,
+    val battery: Int,
+    val level: Int,
+    val time: Long,
+)
+
+/**
+ * New alerts plus the cursor to send next time. [sentSince] is the cursor we asked with,
+ * so a reply whose cursor is lower than that means the server's data was reset.
+ */
+data class EventBatch(val events: List<AppEvent>, val cursor: Long, val sentSince: Long)
+
+data class MembersResponse(
+    val me: String,
+    val members: List<Member>,
+    val server: ServerInfo,
+    val shareLowBattery: Boolean,
+    val events: EventBatch?,
+)
 
 data class JoinResponse(val token: String, val member: Member, val server: ServerInfo)
 
@@ -50,21 +73,35 @@ class Api(private val baseUrl: String, private val token: String = "") {
         return JoinResponse(o.getString("token"), parseMember(o.getJSONObject("member")), parseServer(o.getJSONObject("server")))
     }
 
-    suspend fun members(): MembersResponse {
-        val o = request("GET", "/api/members")
+    /** Everyone's latest position, plus any alerts newer than [since]. */
+    suspend fun members(since: Long): MembersResponse {
+        val o = request("GET", "/api/members?since=$since")
         val arr = o.getJSONArray("members")
         val list = (0 until arr.length()).map { parseMember(arr.getJSONObject(it)) }
-        return MembersResponse(o.getString("me"), list, parseServer(o.getJSONObject("server")))
+        val settings = o.optJSONObject("settings")
+        return MembersResponse(
+            me = o.getString("me"),
+            members = list,
+            server = parseServer(o.getJSONObject("server")),
+            shareLowBattery = settings?.optBoolean("shareLowBattery", true) ?: true,
+            events = parseEvents(o, since),
+        )
     }
 
+    /** Sends a fix; the reply carries any alerts newer than [since]. */
     suspend fun sendLocation(
         lat: Double, lon: Double, accuracy: Float, speed: Float, time: Long, battery: Int, charging: Boolean,
-    ) {
+        since: Long,
+    ): EventBatch? {
         val body = JSONObject()
             .put("lat", lat).put("lon", lon)
             .put("acc", accuracy.toDouble()).put("speed", speed.toDouble())
             .put("time", time).put("battery", battery).put("charging", charging)
-        request("POST", "/api/location", body)
+        return parseEvents(request("POST", "/api/location?since=$since", body), since)
+    }
+
+    suspend fun setShareLowBattery(on: Boolean) {
+        request("POST", "/api/me", JSONObject().put("shareLowBattery", on))
     }
 
     suspend fun setPaused(paused: Boolean) {
@@ -108,6 +145,25 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 conn.disconnect()
             }
         }
+
+    /** Null when the server is too old to send alerts. */
+    private fun parseEvents(o: JSONObject, since: Long): EventBatch? {
+        if (!o.has("cursor")) return null
+        val arr = o.optJSONArray("events")
+        val events = (0 until (arr?.length() ?: 0)).map {
+            val e = arr!!.getJSONObject(it)
+            AppEvent(
+                id = e.getLong("id"),
+                type = e.optString("type"),
+                memberId = e.optString("memberId"),
+                name = e.optString("name", "Someone"),
+                battery = e.optInt("battery", -1),
+                level = e.optInt("level", 0),
+                time = e.optLong("time", 0),
+            )
+        }
+        return EventBatch(events, o.getLong("cursor"), since)
+    }
 
     private fun parseServer(o: JSONObject) = ServerInfo(
         name = o.optString("name", "Family"),

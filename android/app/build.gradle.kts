@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.spasm0dic.libre360"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo
