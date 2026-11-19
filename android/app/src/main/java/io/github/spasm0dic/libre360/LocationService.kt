@@ -96,8 +96,15 @@ class LocationService : Service() {
     private fun startUpdates() {
         runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
         val intervalMs = prefs.intervalMinutes * 60_000L
+        // "Balanced" lets the phone use Wi-Fi/cell positioning, which is cheap on battery.
+        // But Android's built-in fused provider only turns on GPS for high-accuracy requests,
+        // so on phones with no network location (e.g. GrapheneOS without it enabled) a
+        // balanced request would never produce a fix. Ask for GPS in that case.
+        val hasNetworkLocation = runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
+        val quality = if (hasNetworkLocation) LocationRequestCompat.QUALITY_BALANCED_POWER_ACCURACY
+        else LocationRequestCompat.QUALITY_HIGH_ACCURACY
         val request = LocationRequestCompat.Builder(intervalMs)
-            .setQuality(LocationRequestCompat.QUALITY_BALANCED_POWER_ACCURACY)
+            .setQuality(quality)
             .setMinUpdateIntervalMillis(intervalMs / 2)
             .build()
 

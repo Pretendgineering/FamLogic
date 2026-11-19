@@ -34,6 +34,30 @@ Open `http://<server>:8080` and log in with your admin password.
 
 To build the image yourself instead of pulling it, swap the `image:` line for `build: ./server` in `docker-compose.yml` and run it from a clone of this repo.
 
+### TrueNAS SCALE (24.10 "Electric Eel" or newer)
+
+1. **Datasets → Add Dataset** under your apps pool, e.g. `tank/apps/libre360`, with the **Apps** preset. The preset makes the `apps` user (568) the owner.
+2. **Apps → Discover Apps → ⋮ → Install via YAML**, name it `libre360`, and paste this. Change the password, name and dataset path:
+   ```yaml
+   services:
+     libre360:
+       image: ghcr.io/spasm0dic/libre360:latest
+       restart: unless-stopped
+       user: "568:568"            # TrueNAS "apps" user, which owns the dataset
+       ports:
+         - "8080:8080"            # change the left number if 8080 is taken
+       environment:
+         ADMIN_PASSWORD: "change-me-please"
+         FAMILY_NAME: "Our Family"
+       volumes:
+         - /mnt/tank/apps/libre360:/data
+   ```
+3. Open `http://<truenas-ip>:8080`.
+
+If the app logs say `can't write to /data`, the dataset isn't owned by user 568. Fix it with **Edit Permissions** on the dataset, or change `user:` to match the owner.
+
+Phones also need to reach it from outside your home. Tailscale is available as a TrueNAS app and is the simplest option (see below).
+
 ### Settings (environment variables)
 
 | Variable | Default | What it does |
@@ -63,6 +87,8 @@ Phones need to reach the server from anywhere, not just your Wi-Fi.
 ## 2. Install the app
 
 Download `libre360.apk` from the [Releases](../../releases) page (or from the latest run of the **Android** workflow under the Actions tab) and install it. Android will ask you to allow installing from your browser or file manager.
+
+**GrapheneOS and other phones without Google:** this works as-is, because the app uses Android's own location service. Without a network location provider, the app uses GPS, so indoor fixes can be slower and battery use a little higher. Turning on GrapheneOS's own network location (Settings → Location) lets the app use Wi-Fi positioning instead, which saves battery. Also set Libre360's battery usage to **Unrestricted** when the app asks.
 
 ## 3. Add your family
 

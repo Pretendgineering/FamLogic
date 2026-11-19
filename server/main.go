@@ -77,6 +77,10 @@ func main() {
 	}
 	store, err := OpenStore(filepath.Join(cfg.DataDir, "libre360.json"))
 	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			log.Fatalf("can't write to %s (%v). The container runs as user %d; make sure that user owns the data folder, "+
+				"or run the container as the folder's owner (e.g. user: \"568:568\" on TrueNAS).", cfg.DataDir, err, os.Getuid())
+		}
 		log.Fatalf("opening data file in %s: %v", cfg.DataDir, err)
 	}
 
