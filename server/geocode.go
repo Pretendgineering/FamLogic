@@ -137,4 +137,4 @@ func (s *Server) geocode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGeocode(w http.ResponseWriter, r *http.Request, _ *Member) { s.geocode(w, r) }
-func (s *Server) handleAdminGeocode(w http.ResponseWriter, r *http.Request)      { s.geocode(w, r) }
+func (s *Server) handleAdminGeocode(w http.ResponseWriter, r *http.Request)       { s.geocode(w, r) }
