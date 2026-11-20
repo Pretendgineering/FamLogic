@@ -20,6 +20,8 @@ The phone already contacts the server every interval to send its location. The r
 
 ## Features
 
+> Naming: in the app and dashboard, circles are called **Groups** and places are called **Fences** (since 0.8.0). The server's data and API keep the original names.
+
 ### 1. Places and geofences (arrive/leave alerts)
 - A **place** is a named area on the map: a circle with an adjustable radius, e.g. Home, School, Work. Anyone can add one by long-pressing the map or searching an address. Places belong to a circle (see Circles), so a work circle and a family circle each have their own.
 - **Geofence alerts**: "Sam arrived at School", "Alex left Work".
@@ -107,9 +109,10 @@ Make adding someone a single copy-paste. The dashboard's **Copy invite** button 
 1. ✅ **Delivery mechanism plus low-battery alerts** (0.2.0).
 2. ✅ **Accounts:** sign back in with a username and password (0.4.0).
 3. ✅ **Instant alerts, SOS and check-in** (0.5.0). The app's background service keeps a connection open to your own server, so alerts arrive in seconds without Google services or extra apps. This replaces the "optional UnifiedPush" idea: nobody has to install or host anything extra.
-4. ✅ **Circles** (0.6.0).
+4. ✅ **Circles** (0.6.0), called **Groups** in the app and dashboard from 0.8.0.
 5. ✅ **QR code invites** (0.6.0).
 6. ✅ **Places and geofences** with arrive/leave alerts (0.7.0). Not done yet: per-person mutes and active hours (e.g. only on school days).
 7. ✅ **Trail / history** (opt-in, 0.7.0).
+7a. ✅ **0.8.0:** places renamed **Fences** for users; address search for fences (through the server, to Nominatim); opt-in Wi-Fi positioning through beaconDB; Settings split into pages; purple Material You look; Check in and Show everyone in one row and a **Hold for SOS** bar.
 8. **Profile pictures** (later).
 9. **Shareable invite message** with an app download link (once the app is on F-Droid or IzzyOnDroid).

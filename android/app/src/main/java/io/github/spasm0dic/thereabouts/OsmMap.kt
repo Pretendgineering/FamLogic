@@ -212,7 +212,7 @@ fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, 
     val alpha = if (faded && !sos) 140 else 255
     val p = Paint(Paint.ANTI_ALIAS_FLAG)
     if (sos) {
-        p.color = Color.rgb(211, 47, 47)
+        p.color = Color.rgb(199, 53, 75)
         c.drawCircle(r, r, r, p)
     }
     val inner = r - ring
@@ -238,13 +238,13 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>) {
         map.overlays.remove(label)
     }
     state.places.clear()
-    val blue = Color.rgb(47, 111, 237)
+    val accent = Color.rgb(110, 72, 214) // the theme purple
     places.forEachIndexed { i, p ->
         val center = GeoPoint(p.lat, p.lon)
         val poly = Polygon(map).apply {
             points = Polygon.pointsAsCircle(center, p.radius)
-            fillPaint.color = Color.argb(28, 47, 111, 237)
-            outlinePaint.color = blue
+            fillPaint.color = Color.argb(34, 110, 72, 214)
+            outlinePaint.color = accent
             outlinePaint.strokeWidth = 4f
             title = p.name
             setOnClickListener { _, _, _ -> state.onPlaceClick(p); true }
@@ -252,7 +252,7 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>) {
         val label = Marker(map).apply {
             position = center
             setTextIcon(p.name)
-            textLabelForegroundColor = blue
+            textLabelForegroundColor = accent
             textLabelBackgroundColor = Color.argb(200, 255, 255, 255)
             textLabelFontSize = 34
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)

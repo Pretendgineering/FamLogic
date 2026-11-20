@@ -110,6 +110,15 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("show_trails", true)
         set(v) = sp.edit { putBoolean("show_trails", v) }
 
+    /**
+     * Wi-Fi positioning: when there's no GPS or network fix (a Wi-Fi-only tablet,
+     * say), look up nearby Wi-Fi networks with beaconDB. Off by default because it
+     * sends the networks' hardware addresses to beaconDB.
+     */
+    var wifiPositioning: Boolean
+        get() = sp.getBoolean("wifi_positioning", false)
+        set(v) = sp.edit { putBoolean("wifi_positioning", v) }
+
     /** Which circle the map shows: "" for everyone. */
     var circleFilter: String
         get() = sp.getString("circle_filter", "") ?: ""

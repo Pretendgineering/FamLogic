@@ -93,6 +93,16 @@ import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalAutofillManager
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -355,7 +365,7 @@ fun MapScreen(
         CheckInDialog(prefs, onDone = { showCheckIn = false })
     }
     placeEdit?.let { edit ->
-        PlaceDialog(prefs, edit, circles, defaultCircle = circleFilter, onDone = { changed ->
+        PlaceDialog(prefs, edit, circles, defaultCircle = circleFilter, canSearch = features?.contains("geocode") == true, onDone = { changed ->
             placeEdit = null
             if (changed) scope.launch { refresh() }
         })
@@ -372,6 +382,7 @@ fun MapScreen(
         SettingsScreen(
             prefs = prefs,
             perms = perms,
+            features = features,
             sharing = sharing,
             onSharingChange = ::setSharing,
             shareLowBattery = shareLowBattery,
@@ -391,6 +402,7 @@ fun MapScreen(
             },
             onCirclesChanged = { scope.launch { refresh() } },
             places = places,
+            onEditPlace = { placeEdit = it },
             shareArrivals = shareArrivals,
             serverVersion = serverVersion,
             trailHours = trailHours,
@@ -489,7 +501,7 @@ fun MapScreen(
                 ) { askLocation.launch(PermissionState.foregroundPermissions()) }
                 features != null && !supports("places") && !outdatedDismissed -> Banner(
                     "Your family's Thereabouts server is out of date, so some features (like " +
-                        listOf("sos" to "SOS", "checkin" to "check-ins", "circles" to "circles", "places" to "places")
+                        listOf("sos" to "SOS", "checkin" to "check-ins", "circles" to "groups", "places" to "fences")
                             .filter { !supports(it.first) }.joinToString(", ") { it.second } +
                         ") aren't available. Ask its admin to update it.",
                     "OK",
@@ -540,7 +552,12 @@ fun MapScreen(
                 }
             }
 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            // The map, as a raised card.
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                shadowElevation = 3.dp,
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
+            ) {
                 OsmMap(
                     members = shown,
                     places = if (circleFilter.isEmpty()) places else places.filter { it.circleId == circleFilter },
@@ -557,33 +574,43 @@ fun MapScreen(
                     statusOf = statusOf,
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+
+            // Actions, all in one row under the map.
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (prefs.showCheckInButton && supports("checkin")) {
+                    FilledTonalButton(onClick = { showCheckIn = true }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("Check in", Modifier.padding(start = 8.dp))
+                    }
+                }
                 FilledTonalButton(
                     onClick = {
                         selected = null
                         trail = emptyList()
                         camera = CameraCommand.FitAll(++cameraSeq)
                     },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
-                ) { Text("Show everyone") }
-                Column(
-                    Modifier.align(Alignment.BottomStart).padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
-                    if (prefs.showCheckInButton && supports("checkin")) {
-                        FilledTonalButton(onClick = { showCheckIn = true }) { Text("Check in") }
-                    }
-                    if (prefs.showSosButton && !sosActive && supports("sos")) {
-                        HoldForSosButton(onTriggered = { sendSos(end = false) })
-                    }
+                    Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("Show everyone", Modifier.padding(start = 8.dp))
                 }
             }
 
-            Surface(tonalElevation = 2.dp) {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+            // Everyone, in a card.
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+            ) {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 260.dp)) {
                     if (shown.isEmpty()) {
                         item { Text("Loading…", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
-                    items(shown, key = { it.id }) { m ->
+                    itemsIndexed(shown, key = { _, m -> m.id }) { i, m ->
+                        if (i > 0) HorizontalDivider(Modifier.padding(start = 68.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         MemberRow(
                             m = m,
                             isMe = m.id == prefs.memberId,
@@ -598,9 +625,17 @@ fun MapScreen(
                             },
                             onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
                         )
-                        HorizontalDivider()
                     }
                 }
+            }
+
+            if (prefs.showSosButton && !sosActive && supports("sos")) {
+                HoldForSosBar(
+                    onTriggered = { sendSos(end = false) },
+                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
+                )
+            } else {
+                Spacer(Modifier.height(12.dp))
             }
         }
     }
@@ -686,7 +721,7 @@ private fun openDirections(context: Context, name: String, loc: MemberLocation) 
 }
 
 @SuppressLint("BatteryLife") // Exactly what a family locator needs; allowed outside Google Play.
-private fun requestBatteryExemption(context: Context) {
+internal fun requestBatteryExemption(context: Context) {
     try {
         context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")))
     } catch (e: ActivityNotFoundException) {
@@ -719,464 +754,6 @@ data class PermissionState(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsScreen(
-    prefs: Prefs,
-    perms: PermissionState,
-    sharing: Boolean,
-    onSharingChange: (Boolean) -> Unit,
-    shareLowBattery: Boolean?,
-    onShareLowBatteryChange: (Boolean) -> Unit,
-    username: String,
-    hasPassword: Boolean?,
-    circles: List<CircleInfo>,
-    onCircleSharingChange: (CircleInfo, Boolean) -> Unit,
-    onCirclesChanged: () -> Unit,
-    places: List<Place>,
-    shareArrivals: Boolean?,
-    onShareArrivalsChange: (Boolean) -> Unit,
-    trailHours: Int?,
-    onTrailHoursChange: (Int) -> Unit,
-    serverVersion: String,
-    onPasswordSaved: (String) -> Unit,
-    onBack: () -> Unit,
-    onLeave: () -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var interval by remember { mutableIntStateOf(prefs.intervalMinutes) }
-    var name by remember { mutableStateOf("") }
-    var nameMsg by remember { mutableStateOf<String?>(null) }
-    var confirmLeave by remember { mutableStateOf(false) }
-    var notifyLowBattery by remember { mutableStateOf(prefs.notifyLowBattery) }
-    var lowBatteryThreshold by remember { mutableIntStateOf(prefs.lowBatteryThreshold) }
-    var instantAlerts by remember { mutableStateOf(prefs.instantAlerts) }
-    var showSos by remember { mutableStateOf(prefs.showSosButton) }
-    var notifySos by remember { mutableStateOf(prefs.notifySos) }
-    var confirmSosOff by remember { mutableStateOf(false) }
-    var showCheckIn by remember { mutableStateOf(prefs.showCheckInButton) }
-    var notifyCheckIn by remember { mutableStateOf(prefs.notifyCheckIn) }
-    var notifyArrivals by remember { mutableStateOf(prefs.notifyArrivals) }
-    var notifyDepartures by remember { mutableStateOf(prefs.notifyDepartures) }
-    var mutedPlaces by remember { mutableStateOf(prefs.mutedPlaces) }
-    var showTrails by remember { mutableStateOf(prefs.showTrails) }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Share my location", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (sharing) "Your family can see where you are" else "Paused. Your family sees \"sharing paused\"",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = sharing, onCheckedChange = onSharingChange)
-            }
-            // Per circle: e.g. share with Family but not with Friends.
-            if (circles.size > 1) {
-                Text(
-                    "Share with each circle",
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                circles.forEach { c ->
-                    SwitchRow(
-                        title = c.name,
-                        detail = if (c.sharing && sharing) "Sees where you are" else "Sees you as \"sharing paused\"",
-                        checked = c.sharing,
-                        enabled = sharing,
-                        onChange = { on -> onCircleSharingChange(c, on) },
-                    )
-                }
-            }
-            var joining by remember { mutableStateOf(false) }
-            OutlinedButton(onClick = { joining = true }) { Text("Join another circle…") }
-            if (joining) {
-                JoinCircleDialog(prefs, initialCode = "", onDone = { joined ->
-                    joining = false
-                    if (joined) onCirclesChanged()
-                })
-            }
-            HorizontalDivider()
-
-            Text("Update every", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            Text(
-                "More often is more up to date but uses more battery.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Prefs.INTERVAL_CHOICES.forEach { minutes ->
-                Row(
-                    Modifier.fillMaxWidth().selectable(selected = interval == minutes) {
-                        interval = minutes
-                        prefs.intervalMinutes = minutes
-                        LocationService.start(context) // restarts with the new interval
-                    },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = interval == minutes, onClick = null)
-                    Text(if (minutes == 1) "1 minute" else "$minutes minutes", Modifier.padding(start = 8.dp))
-                }
-            }
-            HorizontalDivider()
-
-            AccountSection(prefs, username, hasPassword, onPasswordSaved)
-            HorizontalDivider()
-
-            Text("Your name", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it.take(40); nameMsg = null },
-                    placeholder = { Text("New name") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                Button(enabled = name.isNotBlank(), onClick = {
-                    scope.launch {
-                        nameMsg = try {
-                            Api(prefs.serverUrl, prefs.token).setName(name.trim())
-                            name = ""
-                            "Saved"
-                        } catch (e: IOException) {
-                            e.message ?: "Couldn't save"
-                        }
-                    }
-                }) { Text("Save") }
-            }
-            nameMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            HorizontalDivider()
-
-            // ---- Features: each one can be switched on or off here. ----
-            Text("Features", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            Text("Low battery alerts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
-            SwitchRow(
-                title = "Tell my family when my battery is low",
-                detail = "They get a notification when your battery drops to 15% or 10%, unless you're charging.",
-                checked = shareLowBattery ?: true,
-                enabled = shareLowBattery != null, // wait until we know the server's setting
-                onChange = onShareLowBatteryChange,
-            )
-            SwitchRow(
-                title = "Notify me when someone's battery is low",
-                detail = "Alerts can take up to one update interval to arrive.",
-                checked = notifyLowBattery,
-                onChange = { notifyLowBattery = it; prefs.notifyLowBattery = it },
-            )
-            if (notifyLowBattery) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
-                    Text("Notify me at", style = MaterialTheme.typography.bodyMedium)
-                    Prefs.LOW_BATTERY_CHOICES.forEach { level ->
-                        Row(
-                            Modifier.selectable(selected = lowBatteryThreshold == level) {
-                                lowBatteryThreshold = level
-                                prefs.lowBatteryThreshold = level
-                            }.padding(start = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = lowBatteryThreshold == level, onClick = null)
-                            Text("$level%", Modifier.padding(start = 4.dp))
-                        }
-                    }
-                }
-            }
-
-            Text("SOS", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            SwitchRow(
-                title = "Show the SOS button",
-                detail = "Hold it for 3 seconds to alert everyone. Your location is then shared every 15 seconds until you say you're OK.",
-                checked = showSos,
-                onChange = { showSos = it; prefs.showSosButton = it },
-            )
-            SwitchRow(
-                title = "Notify me when someone presses SOS",
-                detail = "Rings like an alarm until you look.",
-                checked = notifySos,
-                onChange = { on -> if (on) { notifySos = true; prefs.notifySos = true } else confirmSosOff = true },
-            )
-            if (notifySos) {
-                OutlinedButton(onClick = {
-                    Alerts.ensureChannels(context)
-                    context.startActivity(
-                        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            .putExtra(Settings.EXTRA_CHANNEL_ID, Alerts.CHANNEL_SOS),
-                    )
-                }) { Text("Let SOS ring in Do Not Disturb…") }
-                Text(
-                    "Opens Android's settings for SOS alerts. Turn on \"Override Do Not Disturb\" so an SOS always gets through.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Text("Places", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            Text(
-                "Long-press the map to add a place like Home or School. Tap a place on the map to change or delete it.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SwitchRow(
-                title = "Tell my family when I arrive or leave",
-                detail = "Only for places in circles you share your location with.",
-                checked = shareArrivals ?: true,
-                enabled = shareArrivals != null,
-                onChange = onShareArrivalsChange,
-            )
-            SwitchRow(
-                title = "Notify me when someone arrives",
-                detail = "",
-                checked = notifyArrivals,
-                onChange = { notifyArrivals = it; prefs.notifyArrivals = it },
-            )
-            SwitchRow(
-                title = "Notify me when someone leaves",
-                detail = "",
-                checked = notifyDepartures,
-                onChange = { notifyDepartures = it; prefs.notifyDepartures = it },
-            )
-            if (places.isNotEmpty() && (notifyArrivals || notifyDepartures)) {
-                Text("Alerts for each place", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
-                places.forEach { p ->
-                    SwitchRow(
-                        title = p.name,
-                        detail = "",
-                        checked = p.id !in mutedPlaces,
-                        onChange = { on ->
-                            mutedPlaces = if (on) mutedPlaces - p.id else mutedPlaces + p.id
-                            prefs.mutedPlaces = mutedPlaces
-                        },
-                    )
-                }
-            }
-
-            Text("Trail", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            Text(
-                "Keep my trail for others to see",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                "Where you've been recently, drawn as a line when someone taps you. Only people who can see your location see it. Turning it off deletes it.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                listOf(0 to "Off", 6 to "6 hours", 12 to "12 hours", 24 to "24 hours").forEach { (h, label) ->
-                    FilterChip(
-                        selected = trailHours == h,
-                        enabled = trailHours != null,
-                        onClick = { onTrailHoursChange(h) },
-                        label = { Text(label) },
-                    )
-                }
-            }
-            SwitchRow(
-                title = "Show a person's trail when I tap them",
-                detail = "",
-                checked = showTrails,
-                onChange = { showTrails = it; prefs.showTrails = it },
-            )
-
-            Text("Check-ins", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            SwitchRow(
-                title = "Show the Check in button",
-                detail = "Send \"I'm here\" with your location and an optional note.",
-                checked = showCheckIn,
-                onChange = { showCheckIn = it; prefs.showCheckInButton = it },
-            )
-            SwitchRow(
-                title = "Notify me when someone checks in",
-                detail = "",
-                checked = notifyCheckIn,
-                onChange = { notifyCheckIn = it; prefs.notifyCheckIn = it },
-            )
-
-            Text("Instant alerts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            SwitchRow(
-                title = "Get alerts within seconds",
-                detail = "Keeps a connection open to your family's server so SOS and other alerts arrive right away, even while your own sharing is paused. Uses a little more battery. When off, alerts can take up to one update interval.",
-                checked = instantAlerts,
-                onChange = {
-                    instantAlerts = it
-                    prefs.instantAlerts = it
-                    LocationService.start(context)
-                },
-            )
-            HorizontalDivider()
-
-            Text("Reliability", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            CheckRow("Location access \"Allow all the time\"", perms.background) {
-                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
-            }
-            CheckRow("Not restricted by battery saver", perms.batteryUnrestricted) { requestBatteryExemption(context) }
-            CheckRow("Notifications allowed (for alerts)", perms.notifications) {
-                context.startActivity(
-                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
-                )
-            }
-            HorizontalDivider()
-
-            Text("Server", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            Text(prefs.serverUrl, style = MaterialTheme.typography.bodyMedium)
-            if (serverVersion.isNotEmpty()) {
-                Text("Server version $serverVersion", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            OutlinedButton(onClick = { confirmLeave = true }, modifier = Modifier.padding(vertical = 8.dp)) {
-                Text("Leave family", color = MaterialTheme.colorScheme.error)
-            }
-            Text(
-                "Thereabouts ${BuildConfig.VERSION_NAME} · Free software (GPLv3) · Map data © OpenStreetMap contributors",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 16.dp),
-            )
-        }
-    }
-
-    if (confirmSosOff) {
-        AlertDialog(
-            onDismissRequest = { confirmSosOff = false },
-            title = { Text("Turn off SOS alerts?") },
-            text = { Text("If someone in your family presses SOS, this phone won't notify you. You'll only see it when you open the app.") },
-            confirmButton = {
-                TextButton(onClick = { confirmSosOff = false; notifySos = false; prefs.notifySos = false }) { Text("Turn off") }
-            },
-            dismissButton = { TextButton(onClick = { confirmSosOff = false }) { Text("Keep them on") } },
-        )
-    }
-
-    if (confirmLeave) {
-        AlertDialog(
-            onDismissRequest = { confirmLeave = false },
-            title = { Text("Leave family?") },
-            text = { Text("Your location will be removed from the server and you'll need a new invite to come back.") },
-            confirmButton = { TextButton(onClick = { confirmLeave = false; onLeave() }) { Text("Leave") } },
-            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Cancel") } },
-        )
-    }
-}
-
-/**
- * Username and password, used to sign back in on a new phone or after reinstalling.
- * People who joined before accounts existed set them up here.
- */
-@Composable
-private fun AccountSection(prefs: Prefs, username: String, hasPassword: Boolean?, onSaved: (String) -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val autofill = LocalAutofillManager.current
-    var open by remember { mutableStateOf(false) }
-    var newUsername by remember { mutableStateOf("") }
-    var current by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    Text("Account", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-    when (hasPassword) {
-        null -> Text("Loading…", style = MaterialTheme.typography.bodySmall)
-        true -> Text("Signed in as $username. Use this username and your password to sign in on a new phone.")
-        false -> Text(
-            "You don't have a password yet. Set one so you can sign back in on a new phone or after reinstalling.",
-            color = MaterialTheme.colorScheme.error,
-        )
-    }
-    if (hasPassword == null) return
-    if (!open) {
-        OutlinedButton(onClick = { open = true; error = null }) {
-            Text(if (hasPassword) "Change password" else "Set username and password")
-        }
-        return
-    }
-    if (!hasPassword) {
-        OutlinedTextField(
-            value = newUsername,
-            onValueChange = { v -> newUsername = v.lowercase().filter { it.isLetterOrDigit() || it in "._-" }.take(32); error = null },
-            label = { Text("Username") },
-            supportingText = { Text("Letters, numbers, dots, dashes or underscores") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.NewUsername },
-        )
-    } else {
-        PasswordField(current, { current = it; error = null }, "Current password", ContentType.Password)
-    }
-    val problem = when {
-        password.isEmpty() -> null
-        password.length < MIN_PASSWORD_LENGTH -> "At least $MIN_PASSWORD_LENGTH characters (${password.length} so far)"
-        confirm.isNotEmpty() && confirm != password -> "The passwords don't match"
-        else -> null
-    }
-    NewPasswordFields(password, { password = it; error = null }, confirm, { confirm = it; error = null }, problem, label = "New password")
-    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            enabled = !busy && password.length >= MIN_PASSWORD_LENGTH && confirm == password &&
-                (hasPassword && current.isNotEmpty() || !hasPassword && newUsername.length >= 3),
-            onClick = {
-                busy = true
-                error = null
-                scope.launch {
-                    try {
-                        val u = Api(prefs.serverUrl, prefs.token).setPassword(current, password, newUsername)
-                        autofill?.commit() // lets a password manager offer to save it
-                        onSaved(u)
-                        open = false
-                        current = ""; password = ""; confirm = ""
-                        Toast.makeText(context, "Password saved", Toast.LENGTH_SHORT).show()
-                    } catch (e: IOException) {
-                        error = e.message ?: "Couldn't save"
-                    } finally {
-                        busy = false
-                    }
-                }
-            },
-        ) { Text("Save") }
-        TextButton(onClick = { open = false; error = null }) { Text("Cancel") }
-    }
-}
-
-@Composable
-private fun SwitchRow(title: String, detail: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (detail.isNotEmpty()) {
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
-    }
-}
-
-@Composable
-private fun CheckRow(label: String, ok: Boolean, onFix: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text((if (ok) "✓  " else "✗  ") + label, Modifier.weight(1f), color = if (ok) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error)
-        if (!ok) TextButton(onClick = onFix) { Text("Fix") }
-    }
-}
-
-
-val SOS_RED = Color(0xFFD32F2F)
 
 /** "just now", "5 minutes ago"... */
 fun ago(time: Long): String {
@@ -1203,66 +780,63 @@ private fun SosBanner(text: String, action: String?, onClick: () -> Unit) {
 }
 
 /**
- * The SOS button. It only fires after being held for 3 seconds (a ring fills up),
- * so it can't go off by accident in a pocket. Letting go early cancels.
+ * The SOS bar. It only fires after being held for 3 seconds (a red fill sweeps
+ * across), so it can't go off by accident in a pocket. Letting go early cancels.
  */
 @Composable
-private fun HoldForSosButton(onTriggered: () -> Unit) {
+private fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val progress = remember { Animatable(0f) }
-    var hint by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(
-            Modifier
-                .size(64.dp)
-                .semantics { contentDescription = "SOS. Press and hold for 3 seconds to alert your family." }
-                .pointerInput(Unit) {
-                    detectTapGestures(onPress = {
-                        hint = true
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        // Timed with the real clock, not an animation: animations can be
-                        // sped up (or switched off) in Android's developer options, and the
-                        // 3-second hold must stay 3 seconds.
-                        var triggered = false
-                        val fill = scope.launch {
-                            val start = SystemClock.uptimeMillis()
-                            while (true) {
-                                val p = ((SystemClock.uptimeMillis() - start).toFloat() / SOS_HOLD_MS).coerceAtMost(1f)
-                                progress.snapTo(p)
-                                if (p >= 1f) break
-                                delay(16)
-                            }
-                            triggered = true
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onTriggered()
+    var holding by remember { mutableStateOf(false) }
+    val red = SOS_RED
+    val label = if (holding) "Keep holding…" else "Hold for SOS"
+    Box(
+        modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(red.copy(alpha = 0.14f))
+            .drawBehind { drawRect(red, size = size.copy(width = size.width * progress.value)) }
+            .semantics { contentDescription = "SOS. Press and hold for 3 seconds to alert everyone." }
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    holding = true
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    // Timed with the real clock, not an animation: animations can be
+                    // sped up (or switched off) in Android's developer options, and the
+                    // 3-second hold must stay 3 seconds.
+                    var triggered = false
+                    val fill = scope.launch {
+                        val start = SystemClock.uptimeMillis()
+                        while (true) {
+                            val p = ((SystemClock.uptimeMillis() - start).toFloat() / SOS_HOLD_MS).coerceAtMost(1f)
+                            progress.snapTo(p)
+                            if (p >= 1f) break
+                            delay(16)
                         }
-                        tryAwaitRelease()
-                        if (!triggered) fill.cancel()
-                        scope.launch { progress.snapTo(0f) }
-                        scope.launch { delay(3_000); hint = false }
-                    })
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                Modifier.size(56.dp).clip(CircleShape).background(SOS_RED),
-                contentAlignment = Alignment.Center,
-            ) { Text("SOS", color = Color.White, fontWeight = FontWeight.Bold) }
-            if (progress.value > 0f) {
-                CircularProgressIndicator(
-                    progress = { progress.value },
-                    modifier = Modifier.size(64.dp),
-                    color = SOS_RED,
-                    strokeWidth = 5.dp,
-                )
-            }
-        }
-        if (hint) {
-            Surface(shape = RoundedCornerShape(50), tonalElevation = 4.dp, shadowElevation = 2.dp) {
-                Text("Hold for 3 seconds", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodySmall)
-            }
-        }
+                        triggered = true
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onTriggered()
+                    }
+                    tryAwaitRelease()
+                    if (!triggered) fill.cancel()
+                    holding = false
+                    scope.launch { progress.snapTo(0f) }
+                })
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        // The label is red on the pale bar and white where the fill has reached.
+        Text(label, color = red, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text(
+            label,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().drawWithContent {
+                clipRect(right = size.width * progress.value) { this@drawWithContent.drawContent() }
+            },
+        )
     }
 }
 
@@ -1359,7 +933,7 @@ fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean
         scope.launch {
             try {
                 val info = Api(prefs.serverUrl).inviteInfo(code)
-                if (info.isReset) error = "That's a sign-in reset link, not a circle invite."
+                if (info.isReset) error = "That's a sign-in reset link, not a group invite."
                 else circleName = info.circle.ifEmpty { info.server.name }
             } catch (e: IOException) {
                 error = e.message
@@ -1372,7 +946,7 @@ fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDone(false) },
-        title = { Text(circleName?.let { "Join $it?" } ?: "Join another circle") },
+        title = { Text(circleName?.let { "Join $it?" } ?: "Join another group") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (circleName == null) {
@@ -1386,7 +960,7 @@ fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
-                    Text("You'll see everyone in $circleName, and they'll see you. You can stop sharing your location with any circle in Settings.")
+                    Text("You'll see everyone in $circleName, and they'll see you. You can stop sharing your location with any group in Settings.")
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -1414,106 +988,3 @@ fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean
     )
 }
 
-/** What the place dialog is doing: adding at a point, or editing an existing place. */
-sealed class PlaceEdit {
-    data class Add(val lat: Double, val lon: Double) : PlaceEdit()
-    data class Edit(val place: Place) : PlaceEdit()
-}
-
-private val RADIUS_CHOICES = listOf(75.0, 150.0, 300.0, 600.0, 1200.0)
-
-/** Add or edit a place: name, size and (when adding) which circle it belongs to. */
-@Composable
-private fun PlaceDialog(prefs: Prefs, edit: PlaceEdit, circles: List<CircleInfo>, defaultCircle: String, onDone: (changed: Boolean) -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val existing = (edit as? PlaceEdit.Edit)?.place
-    var name by remember { mutableStateOf(existing?.name ?: "") }
-    var radius by remember { mutableStateOf(existing?.radius ?: 150.0) }
-    var circleId by remember { mutableStateOf(existing?.circleId ?: defaultCircle.ifEmpty { circles.firstOrNull()?.id ?: "" }) }
-    var busy by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
-
-    fun run(block: suspend () -> Unit) {
-        busy = true
-        scope.launch {
-            try {
-                block()
-                onDone(true)
-            } catch (e: IOException) {
-                Toast.makeText(context, e.message ?: "Couldn't save", Toast.LENGTH_LONG).show()
-                busy = false
-            }
-        }
-    }
-
-    if (confirmDelete && existing != null) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete ${existing.name}?") },
-            text = { Text("Nobody will be told about arriving at or leaving it any more.") },
-            confirmButton = { TextButton(onClick = { run { Api(prefs.serverUrl, prefs.token).deletePlace(existing.id) } }) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
-        )
-        return
-    }
-
-    AlertDialog(
-        onDismissRequest = { if (!busy) onDone(false) },
-        title = { Text(if (existing == null) "Add a place" else "Edit ${existing.name}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (existing == null) {
-                    Text("Your circle is told when someone arrives here or leaves.", style = MaterialTheme.typography.bodySmall)
-                }
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it.take(40) },
-                    label = { Text("Name") },
-                    placeholder = { Text("Home, School, Work…") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text("Size", style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    RADIUS_CHOICES.forEach { r ->
-                        FilterChip(
-                            selected = radius == r,
-                            onClick = { radius = r },
-                            label = { Text(if (r < 1000) "${r.toInt()} m" else "${r / 1000} km") },
-                        )
-                    }
-                }
-                if (existing == null && circles.size > 1) {
-                    Text("Circle", style = MaterialTheme.typography.titleSmall)
-                    circles.forEach { c ->
-                        Row(
-                            Modifier.fillMaxWidth().selectable(selected = circleId == c.id) { circleId = c.id },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = circleId == c.id, onClick = null)
-                            Text(c.name, Modifier.padding(start = 8.dp))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = !busy && name.isNotBlank() && circleId.isNotEmpty(), onClick = {
-                run {
-                    val api = Api(prefs.serverUrl, prefs.token)
-                    when (edit) {
-                        is PlaceEdit.Add -> api.createPlace(circleId, name.trim(), edit.lat, edit.lon, radius)
-                        is PlaceEdit.Edit -> api.updatePlace(edit.place.id, name.trim(), radius)
-                    }
-                }
-            }) { Text("Save") }
-        },
-        dismissButton = {
-            Row {
-                if (existing != null) TextButton(enabled = !busy, onClick = { confirmDelete = true }) { Text("Delete") }
-                TextButton(enabled = !busy, onClick = { onDone(false) }) { Text("Cancel") }
-            }
-        },
-    )
-}

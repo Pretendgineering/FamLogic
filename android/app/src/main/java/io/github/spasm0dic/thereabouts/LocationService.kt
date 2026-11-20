@@ -65,6 +65,7 @@ class LocationService : Service() {
     private var locating = false
     private var alertsJob: Job? = null
     private var sosJob: Job? = null
+    private var wifiJob: Job? = null
 
     private val listener = LocationListenerCompat { onFix(it) }
 
@@ -118,6 +119,7 @@ class LocationService : Service() {
             return START_NOT_STICKY
         }
         if (share) startUpdates() else stopUpdates()
+        if (share && prefs.wifiPositioning) startWifiLoop() else wifiJob?.cancel()
         if (prefs.instantAlerts) startAlertsLoop() else alertsJob?.cancel()
         startSosWork()
         return START_STICKY
@@ -127,7 +129,7 @@ class LocationService : Service() {
     override fun onDestroy() {
         stopUpdates()
         runCatching { unregisterReceiver(batteryReceiver) }
-        scope.cancel()
+        scope.cancel() // also stops the alerts, SOS and Wi-Fi loops
         isRunning = false
         super.onDestroy()
     }
@@ -216,6 +218,32 @@ class LocationService : Service() {
             Log.i(TAG, "Upload failed: ${e.message}")
         } finally {
             uploadLock.unlock()
+        }
+    }
+
+    // ---- Wi-Fi positioning (opt-in) ----
+
+    /**
+     * When the phone itself hasn't produced a fix for longer than an update
+     * interval, asks beaconDB where the nearby Wi-Fi networks are.
+     */
+    private fun startWifiLoop() {
+        if (wifiJob?.isActive == true) return
+        wifiJob = scope.launch {
+            delay(20_000) // give GPS and network location a chance first
+            while (isActive) {
+                val interval = intervalMs()
+                val ageMs = lastFix?.let { (SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos) / 1_000_000 }
+                if (ageMs == null || ageMs > interval + 30_000) {
+                    WifiLocator.requestScan(this@LocationService)
+                    delay(5_000)
+                    WifiLocator.locate(this@LocationService)?.let {
+                        Log.i(TAG, "Wi-Fi fix, ±${it.accuracy.toInt()} m")
+                        onFix(it, force = true)
+                    }
+                }
+                delay(interval.coerceAtLeast(60_000))
+            }
         }
     }
 

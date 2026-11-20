@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.spasm0dic.thereabouts"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.7.1"
+        versionCode = 10
+        versionName = "0.8.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo

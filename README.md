@@ -17,14 +17,15 @@ Thereabouts does one thing: each phone reports where it is to **your own server*
 | | |
 |---|---|
 | Map | OpenStreetMap (osmdroid in the app, Leaflet on the web). The tile server can be changed. |
-| Location | Android's own location service, so it works on de-Googled phones (GrapheneOS, LineageOS, /e/). |
+| Location | Android's own location service, so it works on de-Googled phones (GrapheneOS, LineageOS, /e/). Wi-Fi-only tablets can opt in to Wi-Fi positioning through [beaconDB](https://beacondb.net). |
+| Look | Purple Material You style, light or dark following the system, in the app and the dashboard. |
 | Privacy | Only the **latest** position is stored, unless someone chooses to keep a trail (off by default, 6 to 24 hours, deleted when turned off). Pausing wipes your position from the server. Removing a member deletes them. |
 | Battery | Updates every 1/2/5/15 minutes (your choice) using balanced-power location. |
 | Joining | The admin creates a one-time invite link. The person taps it on their phone, and the app opens with everything filled in. They choose a username and password. |
 | New phone? | Sign in with your username and password. You're back as yourself, and your old phone is signed out (the latest sign-in wins). Forgot your password? The admin sends a one-time **Reset sign-in** link. |
-| Circles | Separate groups such as Family, Grandparents or Friends. You see only people you share a circle with, and choose per circle whether to share your location. |
-| Places | Named areas like Home or School. Everyone in the place's circle is told "Sam arrived at School" or "Alex left Work", and people's status shows "At Home". |
-| SOS | Hold the SOS button for 3 seconds. Everyone gets an alarm-style alert within seconds, and your location is shared every 15 seconds until you say you're OK. |
+| Groups | Separate groups such as Family, Grandparents or Friends. You see only people you share a group with, and choose per group whether to share your location. |
+| Fences | Named areas like Home or School. Everyone in the fence's group is told "Sam arrived at School" or "Alex left Work", and people's status shows "At Home". Add them on the map, by address search, or where you're standing. |
+| SOS | Hold the SOS bar for 3 seconds. Everyone gets an alarm-style alert within seconds, and your location is shared every 15 seconds until you say you're OK. |
 | Check-in | One tap sends "I'm here" with your location and an optional note. |
 | Alerts | SOS, check-ins and low battery, each switchable in the app. They arrive **within seconds** over a connection the app keeps to your own server: no Google services, no push service, nothing extra to install. |
 | Reliability | Restarts after reboot. The app walks you through "Allow all the time" and the battery-saver exemption. |
@@ -78,7 +79,7 @@ sudo docker pull ghcr.io/spasm0dic/thereabouts:latest
 
 Then redeploy the app (on TrueNAS: **Apps → thereabouts → Stop**, then **Start**, or edit the app and save). To check which version is running, look under the family name at the top of the dashboard, or in the app under **Settings → Server**.
 
-If the app says the server is out of date (for example SOS or Check in are missing, or adding a place doesn't work), this is the fix.
+If the app says the server is out of date (for example SOS or Check in are missing, or adding a fence doesn't work), this is the fix.
 
 ### Settings (environment variables)
 
@@ -88,6 +89,7 @@ If the app says the server is out of date (for example SOS or Check in are missi
 | `FAMILY_NAME` | `Family` | Shown in the app and dashboard. |
 | `PUBLIC_URL` | worked out from the request | The address phones use, e.g. `https://family.example.com`. Set it if invite links show the wrong address. |
 | `TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles. Any `{z}/{x}/{y}` tile server works. |
+| `GEOCODER_URL` | `https://nominatim.openstreetmap.org/search` | Address search when adding fences. Searches go from your server (never from phones) to OpenStreetMap's Nominatim, at most once a second and cached for a day. Point it at your own Nominatim, or set `off` to turn address search off. |
 | `TILE_ATTRIBUTION` | `© OpenStreetMap contributors` | Credit shown on the map. Keep it matching your tile server. |
 | `INVITE_HOURS` | `72` | How long an invite link works. |
 | `LISTEN` | `:8080` | Address and port inside the container. |
@@ -116,7 +118,7 @@ Download `thereabouts.apk` from the [Releases](../../releases) page (or from the
 
 ## 3. Add your family
 
-1. In the dashboard, click **Invite someone**, type their name, and pick the circle they're joining (if you have more than one).
+1. In the dashboard, click **Invite someone**, type their name, and pick the group they're joining (if you have more than one).
 2. Send them the link (text message, Signal, email...), or let them scan the QR code with their phone.
 3. On their phone they tap the link, then **Open in Thereabouts**. They choose a **username and password** (a password manager is the easy way to keep them), then tap **Join**.
 4. The app asks for location access. Choose **Allow all the time**, and say yes to the battery prompt, so that sharing keeps working when the phone is locked.
@@ -128,7 +130,7 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 ### New phone, reinstalling, or forgot your password
 
 - **New phone or reinstall:** open the app, choose **Sign in**, and enter the server address, your username and your password. You're back as yourself, with the same name, color and settings. Only one phone is signed in per person: the old one is signed out and says so.
-- **Circles** (dashboard): **+ New circle** creates one; **Circles…** next to a person picks the circles they're in. Everyone starts in one circle named after `FAMILY_NAME`.
+- **Groups** (dashboard): **+ New group** creates one; **Groups…** next to a person picks the groups they're in. Everyone starts in one group named after `FAMILY_NAME`.
 - **Forgot your password:** in the dashboard, click **Reset sign-in** next to the person's name and send them the link. It lets them choose a new password and sign in, keeping their place in the family. It works once and expires after a few days.
 - **Joined before version 0.4.0?** The app shows a banner. Tap **Set up** to choose a username and password.
 
@@ -139,14 +141,15 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 - **Map**: everyone's latest position. Faded pins mean the location is more than 30 minutes old.
 - **List**: last seen, battery, how far away. Tap a person to zoom to them. **Directions** opens your maps app (OsmAnd, Organic Maps, Google Maps...).
 - **Pause sharing** (Settings): your pin disappears for everyone, who see "Location sharing paused" instead. Resume any time. You still get SOS and other alerts while paused.
-- **SOS**: press and hold the red **SOS** button for 3 seconds. Everyone else gets an alert that keeps ringing until they look, and a red banner on their map. Your location updates every 15 seconds, and the app keeps retrying until the alert gets through. Tap **I'm OK** when you're safe. Pressing SOS also turns sharing back on if you'd paused it.
-  - So an SOS always rings: in Settings → Features → SOS, tap **Let SOS ring in Do Not Disturb** and turn on "Override Do Not Disturb".
-- **Places**: long-press the map to add a place (name and size), and tap a place to change or delete it. The dashboard can add them too (**+ Add place**, then click the map). Arrivals are announced right away. Departures wait until someone is clearly outside, with a buffer zone, so GPS jitter at the edge doesn't cause false alerts. In Settings → Features → Places you choose whether your own arrivals are announced, which alerts you get, and you can mute single places.
-- **Trail** (opt-in): in Settings → Features → Trail, choose to keep your trail for 6, 12 or 24 hours. When someone taps you in the list, they see where you've been as a line on the map. Only people who can see your location can see it, and choosing **Off** deletes it.
+- **SOS**: press and hold the red **Hold for SOS** bar at the bottom for 3 seconds. Everyone else gets an alert that keeps ringing until they look, and a red banner on their map. Your location updates every 15 seconds, and the app keeps retrying until the alert gets through. Tap **I'm OK** when you're safe. Pressing SOS also turns sharing back on if you'd paused it.
+  - So an SOS always rings: in Settings → Alerts → SOS, tap **Let SOS ring in Do Not Disturb** and turn on "Override Do Not Disturb".
+- **Fences**: long-press the map to add a fence, or use **Add a fence** in Settings → Fences and search for an address or use where you are. Tap a fence on the map or in Settings → Fences to change or delete it. The dashboard can add them too (**+ Add fence**: search for an address or pick a spot on the map). Arrivals are announced right away. Departures wait until someone is clearly outside, with a buffer zone, so GPS jitter at the edge doesn't cause false alerts. In Settings → Fences you choose whether your own arrivals are announced and which alerts you get, and can mute single fences.
+- **Trail** (opt-in): in Settings → Trail, choose to keep your trail for 6, 12 or 24 hours. When someone taps you in the list, they see where you've been as a line on the map. Only people who can see your location can see it, and choosing **Off** deletes it.
 - **Check in**: tap **Check in** to send "I'm here" with your location and an optional note ("Made it home").
-- **Circles**: if you're in more than one circle, chips at the top of the map show one circle at a time. In Settings you choose per circle whether to share your location (for example share with Family but not with Friends). Someone already signed in can tap another circle's invite link (or use **Join another circle…** in Settings) to join it as themselves.
-- **Features** (Settings): each feature has its own on/off switches, for example to hide the SOS or Check in button, or to stop a kind of alert.
-- **Leave family** (Settings): removes you from the server.
+- **Groups**: if you're in more than one group, chips at the top of the map show one group at a time. In Settings → Groups you choose per group whether to share your location (for example share with Family but not with Friends). Someone already signed in can tap another group's invite link (or use **Join another group…** in Settings → Groups) to join it as themselves.
+- **Wi-Fi positioning** (Settings → Sharing, off by default): for tablets and phones that can't find their own location. When there's no fix, the app sends the hardware addresses and signal strengths of nearby Wi-Fi networks to [beaconDB](https://beacondb.net), a free community service, and uses the rough location it answers with. Nothing about you or your account is sent, and networks named `…_nomap` are skipped.
+- **Settings** is split into pages: Sharing, Groups, Fences, Alerts, Trail, Account, Phone setup and About. Each feature has its own on/off switches, for example to hide the SOS bar or Check in button, or to stop a kind of alert.
+- **Leave this server** (Settings → About): removes you from the server.
 
 ## Upgrading from Libre360
 
@@ -191,9 +194,10 @@ Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/there
 | `POST /api/join` `{code, name, username, password}` | invite code | Join, or redeem a reset link. Returns a device token |
 | `POST /api/signin` `{username, password}` | password | Sign this phone in. The previous phone is signed out |
 | `POST /api/me/password` `{currentPassword, newPassword, username?}` | `Bearer <token>` | Set or change your password |
-| `POST /api/me/circles/<id>` `{sharing}` | `Bearer <token>` | Share or stop sharing your location with one circle |
-| `POST /api/me/circles/join` `{code}` | `Bearer <token>` | Join another circle with an invite code |
-| `POST /api/places` `{circleId, name, lat, lon, radius}`, `POST`/`PATCH`/`DELETE /api/places/<id>` | `Bearer <token>` | Add, change or delete a place in one of your circles |
+| `POST /api/me/circles/<id>` `{sharing}` | `Bearer <token>` | Share or stop sharing your location with one group |
+| `POST /api/me/circles/join` `{code}` | `Bearer <token>` | Join another group with an invite code |
+| `POST /api/places` `{circleId, name, lat, lon, radius}`, `POST`/`PATCH`/`DELETE /api/places/<id>` | `Bearer <token>` | Add, change or delete a fence in one of your groups |
+| `GET /api/geocode?q=<address>` | `Bearer <token>` | Address search for fences (results: `[{name, lat, lon}]`) |
 | `GET /api/members/<id>/trail` | `Bearer <token>` | Someone's trail, if they keep one and you can see their location |
 | `GET /api/events/wait?since=<cursor>&wait=50` | `Bearer <token>` | Waits until there's a new alert (or `wait` seconds), then returns `{events, cursor}`. The app keeps one open for instant alerts |
 | `POST /api/sos` `{loc?}`, `POST /api/sos/end` | `Bearer <token>` | Raise or end an SOS |
@@ -210,4 +214,4 @@ The common-password list in `server/commonpasswords.txt` comes from [SecLists](h
 
 ## Roadmap
 
-Planned: places and geofences with arrive/leave alerts, circles (share with different groups), trail history, check-in and SOS buttons, low-battery alerts, QR code invites, and profile pictures on map pins. Each one can be switched on or off in the app. See [ROADMAP.md](ROADMAP.md) for the design.
+Done so far: fences with arrive/leave alerts, groups, trail history, check-in and SOS, low-battery alerts, QR code invites, address search and Wi-Fi positioning. Still planned: profile pictures on map pins, an F-Droid release, and more. See [ROADMAP.md](ROADMAP.md) for the design.

@@ -161,7 +161,7 @@ object Alerts {
             b.setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setColor(0xFFD32F2F.toInt())
+                .setColor(0xFFC7354B.toInt())
         } else {
             b.setCategory(NotificationCompat.CATEGORY_STATUS)
         }

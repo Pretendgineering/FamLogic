@@ -32,6 +32,9 @@ data class Member(
     val trail: Boolean = false,
 )
 
+/** An address search result. */
+data class GeoResult(val name: String, val lat: Double, val lon: Double)
+
 /** One spot on someone's trail. */
 data class TrailPoint(val lat: Double, val lon: Double, val time: Long)
 
@@ -237,8 +240,22 @@ class Api(private val baseUrl: String, private val token: String = "") {
             ),
         )
 
-    suspend fun updatePlace(id: String, name: String, radius: Double): Place =
-        parsePlace(request("POST", "/api/places/" + enc(id), JSONObject().put("name", name).put("radius", radius)))
+    suspend fun updatePlace(id: String, name: String, radius: Double, lat: Double, lon: Double): Place =
+        parsePlace(
+            request(
+                "POST", "/api/places/" + enc(id),
+                JSONObject().put("name", name).put("radius", radius).put("lat", lat).put("lon", lon),
+            ),
+        )
+
+    /** Address search (if the server offers it): "123 Main St" -> places to choose from. */
+    suspend fun geocode(query: String): List<GeoResult> {
+        val arr = requestArray("GET", "/api/geocode?q=" + enc(query))
+        return (0 until arr.length()).map {
+            val o = arr.getJSONObject(it)
+            GeoResult(o.optString("name"), o.getDouble("lat"), o.getDouble("lon"))
+        }
+    }
 
     suspend fun deletePlace(id: String) {
         request("DELETE", "/api/places/" + enc(id))
@@ -329,11 +346,18 @@ class Api(private val baseUrl: String, private val token: String = "") {
     private fun locationJson(l: android.location.Location) = JSONObject()
         .put("lat", l.latitude).put("lon", l.longitude).put("acc", l.accuracy.toDouble()).put("time", l.time)
 
+    /** Like [request], for endpoints that answer with a JSON list. */
+    private suspend fun requestArray(method: String, path: String): org.json.JSONArray {
+        val wrapped = request(method, path, wrapArray = true)
+        return wrapped.getJSONArray("items")
+    }
+
     private suspend fun request(
         method: String,
         path: String,
         body: JSONObject? = null,
         readTimeoutMs: Int = 20_000,
+        wrapArray: Boolean = false,
     ): JSONObject =
         withContext(Dispatchers.IO) {
             val conn = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
@@ -361,7 +385,11 @@ class Api(private val baseUrl: String, private val token: String = "") {
                         ?: if (code == 404 || code == 405) OUTDATED_SERVER else "Server error ($code)"
                     throw ApiException(code, msg)
                 }
-                if (text.isBlank()) JSONObject() else JSONObject(text)
+                when {
+                    wrapArray -> JSONObject().put("items", org.json.JSONArray(text.ifBlank { "[]" }))
+                    text.isBlank() -> JSONObject()
+                    else -> JSONObject(text)
+                }
             } finally {
                 conn.disconnect()
             }
