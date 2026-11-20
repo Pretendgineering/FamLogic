@@ -38,6 +38,15 @@ type Member struct {
 	Paused    bool      `json:"paused"`
 	Loc       *Location `json:"loc,omitempty"`
 
+	// Sign-in (see accounts.go). Members who joined before accounts existed have
+	// neither until they set a password in the app.
+	Username     string `json:"username,omitempty"`
+	PasswordHash string `json:"passwordHash,omitempty"`
+	LastSignIn   int64  `json:"lastSignIn,omitempty"`
+	// Tokens of phones that were signed out by a newer sign-in, so they can be
+	// told why instead of just "unknown device". Newest last, a few kept.
+	OldTokenHashes []string `json:"oldTokenHashes,omitempty"`
+
 	// Feature switches this person controls from their phone. Pointers so that a
 	// missing value (older data files) means "on" by default.
 	ShareLowBattery *bool `json:"shareLowBattery,omitempty"`
@@ -50,10 +59,12 @@ type Member struct {
 // SharesLowBattery reports whether others get told when this person's battery is low.
 func (m *Member) SharesLowBattery() bool { return m.ShareLowBattery == nil || *m.ShareLowBattery }
 
-// Invite is a single-use code that lets a phone join.
+// Invite is a single-use code that lets a phone join. A "reset" invite
+// (MemberID set) instead lets an existing member choose a new password.
 type Invite struct {
 	Code      string `json:"code"`
 	Name      string `json:"name,omitempty"`
+	MemberID  string `json:"memberId,omitempty"`
 	CreatedAt int64  `json:"createdAt"`
 	ExpiresAt int64  `json:"expiresAt"`
 }
@@ -164,26 +175,36 @@ func (s *Store) DeleteInvite(code string) error {
 	return s.saveLocked()
 }
 
-// Join consumes an invite and creates a member. It returns the member
-// and the device token (only ever shown this once; we store a hash).
-func (s *Store) Join(code, name string) (*Member, string, error) {
+// Join consumes a (non-reset) invite and creates a member. username and
+// passwordHash may be empty for apps from before accounts existed. It returns the
+// member and the device token (only ever shown this once; we store a hash).
+func (s *Store) Join(code, name, username, passwordHash string) (*Member, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	code = normalizeCode(code)
 	inv, ok := s.d.Invites[code]
-	if !ok || inv.ExpiresAt < time.Now().UnixMilli() {
+	if !ok || inv.ExpiresAt < time.Now().UnixMilli() || inv.MemberID != "" {
 		return nil, "", ErrNotFound
+	}
+	if username != "" && s.usernameTakenLocked(username, "") {
+		return nil, "", ErrUsernameTaken
 	}
 	if name == "" {
 		name = inv.Name
 	}
 	token := randomString(32)
+	now := time.Now().UnixMilli()
 	m := &Member{
-		ID:        randomString(9),
-		Name:      name,
-		Color:     palette[len(s.d.Members)%len(palette)],
-		TokenHash: hashToken(token),
-		CreatedAt: time.Now().UnixMilli(),
+		ID:           randomString(9),
+		Name:         name,
+		Color:        palette[len(s.d.Members)%len(palette)],
+		TokenHash:    hashToken(token),
+		CreatedAt:    now,
+		Username:     username,
+		PasswordHash: passwordHash,
+	}
+	if username != "" {
+		m.LastSignIn = now
 	}
 	s.d.Members[m.ID] = m
 	delete(s.d.Invites, code)
@@ -192,19 +213,31 @@ func (s *Store) Join(code, name string) (*Member, string, error) {
 }
 
 func (s *Store) MemberByToken(token string) (*Member, bool) {
+	m, _ := s.lookupToken(token)
+	return m, m != nil
+}
+
+// lookupToken finds the member a device token belongs to. If it's an old token
+// that a newer sign-in replaced, it returns signedOutBy = true instead.
+func (s *Store) lookupToken(token string) (m *Member, signedOut bool) {
 	if token == "" {
 		return nil, false
 	}
 	h := hashToken(token)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, m := range s.d.Members {
-		if m.TokenHash == h {
-			cp := *m
-			return &cp, true
+	for _, mm := range s.d.Members {
+		if mm.TokenHash == h {
+			cp := *mm
+			return &cp, false
+		}
+		for _, old := range mm.OldTokenHashes {
+			if old == h {
+				signedOut = true
+			}
 		}
 	}
-	return nil, false
+	return nil, signedOut
 }
 
 // Members returns copies sorted by name.
@@ -285,6 +318,11 @@ func (s *Store) DeleteMember(id string) error {
 		return ErrNotFound
 	}
 	delete(s.d.Members, id)
+	for code, inv := range s.d.Invites {
+		if inv.MemberID == id {
+			delete(s.d.Invites, code) // their reset links die with them
+		}
+	}
 	return s.saveLocked()
 }
 

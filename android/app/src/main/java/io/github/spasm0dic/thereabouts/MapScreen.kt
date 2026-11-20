@@ -70,6 +70,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.platform.LocalAutofillManager
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -99,6 +103,8 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
     var fittedOnce by remember { mutableStateOf(false) }
     var perms by remember { mutableStateOf(PermissionState.read(context)) }
     var shareLowBattery by remember { mutableStateOf<Boolean?>(null) } // null until the server tells us
+    var hasPassword by remember { mutableStateOf<Boolean?>(null) } // null until the server tells us
+    var username by remember { mutableStateOf(prefs.username) }
     // Bumped every minute so "5 min ago" labels stay current.
     var tick by remember { mutableIntStateOf(0) }
 
@@ -114,6 +120,9 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
             // Alerts also come in here, so they show while the app is open even if sharing is paused.
             Alerts.handle(context, res.events)
             shareLowBattery = res.shareLowBattery
+            hasPassword = res.hasPassword
+            username = res.username
+            prefs.username = res.username
             members = res.members
             familyName = res.server.name
             tileUrl = res.server.tileUrl
@@ -131,8 +140,9 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
                 camera = CameraCommand.FitAll(++cameraSeq)
             }
         } catch (e: UnauthorizedException) {
-            prefs.removedNotice = true
-            leave()
+            LocationService.stop(context)
+            prefs.signedOut(e)
+            onLeft()
         } catch (e: IOException) {
             error = "Can't reach the server right now"
         }
@@ -194,6 +204,13 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
             sharing = sharing,
             onSharingChange = ::setSharing,
             shareLowBattery = shareLowBattery,
+            username = username,
+            hasPassword = hasPassword,
+            onPasswordSaved = { u ->
+                username = u
+                prefs.username = u
+                hasPassword = true
+            },
             onShareLowBatteryChange = { on ->
                 val before = shareLowBattery
                 shareLowBattery = on
@@ -237,6 +254,10 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
                     "Allow",
                 ) { askLocation.launch(PermissionState.foregroundPermissions()) }
                 !sharing -> Banner("You're not sharing your location right now.", "Resume") { setSharing(true) }
+                hasPassword == false -> Banner(
+                    "Set a password so you can sign back in on a new phone.",
+                    "Set up",
+                ) { showSettings = true }
                 !perms.background -> Banner(
                     "Choose \"Allow all the time\" so sharing keeps working after a restart.",
                     "Fix",
@@ -404,6 +425,9 @@ private fun SettingsScreen(
     onSharingChange: (Boolean) -> Unit,
     shareLowBattery: Boolean?,
     onShareLowBatteryChange: (Boolean) -> Unit,
+    username: String,
+    hasPassword: Boolean?,
+    onPasswordSaved: (String) -> Unit,
     onBack: () -> Unit,
     onLeave: () -> Unit,
 ) {
@@ -462,6 +486,9 @@ private fun SettingsScreen(
                     Text(if (minutes == 1) "1 minute" else "$minutes minutes", Modifier.padding(start = 8.dp))
                 }
             }
+            HorizontalDivider()
+
+            AccountSection(prefs, username, hasPassword, onPasswordSaved)
             HorizontalDivider()
 
             Text("Your name", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
@@ -557,6 +584,86 @@ private fun SettingsScreen(
             confirmButton = { TextButton(onClick = { confirmLeave = false; onLeave() }) { Text("Leave") } },
             dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Cancel") } },
         )
+    }
+}
+
+/**
+ * Username and password, used to sign back in on a new phone or after reinstalling.
+ * People who joined before accounts existed set them up here.
+ */
+@Composable
+private fun AccountSection(prefs: Prefs, username: String, hasPassword: Boolean?, onSaved: (String) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val autofill = LocalAutofillManager.current
+    var open by remember { mutableStateOf(false) }
+    var newUsername by remember { mutableStateOf("") }
+    var current by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Text("Account", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+    when (hasPassword) {
+        null -> Text("Loading…", style = MaterialTheme.typography.bodySmall)
+        true -> Text("Signed in as $username. Use this username and your password to sign in on a new phone.")
+        false -> Text(
+            "You don't have a password yet. Set one so you can sign back in on a new phone or after reinstalling.",
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    if (hasPassword == null) return
+    if (!open) {
+        OutlinedButton(onClick = { open = true; error = null }) {
+            Text(if (hasPassword) "Change password" else "Set username and password")
+        }
+        return
+    }
+    if (!hasPassword) {
+        OutlinedTextField(
+            value = newUsername,
+            onValueChange = { v -> newUsername = v.lowercase().filter { it.isLetterOrDigit() || it in "._-" }.take(32); error = null },
+            label = { Text("Username") },
+            supportingText = { Text("Letters, numbers, dots, dashes or underscores") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.NewUsername },
+        )
+    } else {
+        PasswordField(current, { current = it; error = null }, "Current password", ContentType.Password)
+    }
+    val problem = when {
+        password.isEmpty() -> null
+        password.length < MIN_PASSWORD_LENGTH -> "At least $MIN_PASSWORD_LENGTH characters (${password.length} so far)"
+        confirm.isNotEmpty() && confirm != password -> "The passwords don't match"
+        else -> null
+    }
+    NewPasswordFields(password, { password = it; error = null }, confirm, { confirm = it; error = null }, problem, label = "New password")
+    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            enabled = !busy && password.length >= MIN_PASSWORD_LENGTH && confirm == password &&
+                (hasPassword && current.isNotEmpty() || !hasPassword && newUsername.length >= 3),
+            onClick = {
+                busy = true
+                error = null
+                scope.launch {
+                    try {
+                        val u = Api(prefs.serverUrl, prefs.token).setPassword(current, password, newUsername)
+                        autofill?.commit() // lets a password manager offer to save it
+                        onSaved(u)
+                        open = false
+                        current = ""; password = ""; confirm = ""
+                        Toast.makeText(context, "Password saved", Toast.LENGTH_SHORT).show()
+                    } catch (e: IOException) {
+                        error = e.message ?: "Couldn't save"
+                    } finally {
+                        busy = false
+                    }
+                }
+            },
+        ) { Text("Save") }
+        TextButton(onClick = { open = false; error = null }) { Text("Cancel") }
     }
 }
 

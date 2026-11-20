@@ -49,12 +49,25 @@ data class MembersResponse(
     val server: ServerInfo,
     val shareLowBattery: Boolean,
     val events: EventBatch?,
+    /** This person's username; empty if they joined before accounts existed. */
+    val username: String,
+    val hasPassword: Boolean,
 )
 
-data class JoinResponse(val token: String, val member: Member, val server: ServerInfo)
+/** What join, sign-in and password resets return: this phone is now signed in as [member]. */
+data class JoinResponse(val token: String, val member: Member, val server: ServerInfo, val username: String)
+
+/** What an invite code is for: joining as someone new, or resetting an existing person's sign-in. */
+data class InviteInfo(val isReset: Boolean, val name: String, val username: String, val server: ServerInfo)
 
 /** The server rejected our token: this phone was removed from the family. */
-class UnauthorizedException : IOException("This phone is no longer part of the family")
+/**
+ * The server no longer accepts this phone. [signedInElsewhere] is true when that's because
+ * the same person signed in on another phone (the latest sign-in wins), false when an admin
+ * removed them.
+ */
+class UnauthorizedException(val signedInElsewhere: Boolean) :
+    IOException(if (signedInElsewhere) "You signed in on another device" else "This phone is no longer part of the family")
 
 /** The server answered with an error message meant for people. */
 class ApiException(val status: Int, message: String) : IOException(message)
@@ -67,11 +80,49 @@ class Api(private val baseUrl: String, private val token: String = "") {
 
     suspend fun info(): ServerInfo = parseServer(request("GET", "/api/info"))
 
-    suspend fun join(code: String, name: String): JoinResponse {
-        val body = JSONObject().put("code", code).put("name", name)
-        val o = request("POST", "/api/join", body)
-        return JoinResponse(o.getString("token"), parseMember(o.getJSONObject("member")), parseServer(o.getJSONObject("server")))
+    /** Looks up what an invite code is for, without using it up. */
+    suspend fun inviteInfo(code: String): InviteInfo {
+        val o = request("GET", "/api/invites/" + java.net.URLEncoder.encode(code.trim(), "UTF-8"))
+        return InviteInfo(
+            isReset = o.optString("kind") == "reset",
+            name = o.optString("name"),
+            username = o.optString("username"),
+            server = parseServer(o.getJSONObject("server")),
+        )
     }
+
+    /**
+     * Uses an invite code. For a normal invite this creates the person (with [name], [username]
+     * and [password]); for a reset link it sets a new [password] for the existing person.
+     */
+    suspend fun join(code: String, name: String, username: String, password: String): JoinResponse {
+        val body = JSONObject().put("code", code).put("name", name)
+            .put("username", username).put("password", password)
+        return parseSignedIn(request("POST", "/api/join", body))
+    }
+
+    /** Signs this phone in as an existing person. Any other phone they were using is signed out. */
+    suspend fun signIn(username: String, password: String): JoinResponse {
+        val body = JSONObject().put("username", username).put("password", password)
+        return parseSignedIn(request("POST", "/api/signin", body))
+    }
+
+    /**
+     * Sets a password (people who joined before accounts existed, who also pick a [username])
+     * or changes it (needs [currentPassword]). Returns the username.
+     */
+    suspend fun setPassword(currentPassword: String, newPassword: String, username: String): String {
+        val body = JSONObject().put("currentPassword", currentPassword)
+            .put("newPassword", newPassword).put("username", username)
+        return request("POST", "/api/me/password", body).optString("username")
+    }
+
+    private fun parseSignedIn(o: JSONObject) = JoinResponse(
+        token = o.getString("token"),
+        member = parseMember(o.getJSONObject("member")),
+        server = parseServer(o.getJSONObject("server")),
+        username = o.optString("username"),
+    )
 
     /** Everyone's latest position, plus any alerts newer than [since]. */
     suspend fun members(since: Long): MembersResponse {
@@ -84,6 +135,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
             members = list,
             server = parseServer(o.getJSONObject("server")),
             shareLowBattery = settings?.optBoolean("shareLowBattery", true) ?: true,
+            username = settings?.optString("username", "").orEmpty(),
+            hasPassword = settings?.optBoolean("hasPassword", false) ?: false,
             events = parseEvents(o, since),
         )
     }
@@ -134,7 +187,10 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 val code = conn.responseCode
                 val text = (if (code >= 400) conn.errorStream else conn.inputStream)
                     ?.bufferedReader()?.use { it.readText() }.orEmpty()
-                if (code == 401 && token.isNotEmpty()) throw UnauthorizedException()
+                if (code == 401 && token.isNotEmpty()) {
+                    val reason = runCatching { JSONObject(text).optString("reason") }.getOrNull()
+                    throw UnauthorizedException(signedInElsewhere = reason == "signed_in_elsewhere")
+                }
                 if (code >= 400) {
                     val msg = runCatching { JSONObject(text).getString("error") }.getOrNull()
                         ?: "Server error ($code)"

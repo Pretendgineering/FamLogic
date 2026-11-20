@@ -53,6 +53,12 @@ function ago(ms) {
   return `${Math.round(h / 24)} d ago`;
 }
 
+// "@taylor · signed in 2 h ago", or a hint when they haven't set a password yet.
+function account(m) {
+  if (!m.hasPassword) return "No password yet (they can set one in the app)";
+  return `@${m.username}` + (m.lastSignIn ? ` · signed in ${ago(m.lastSignIn)}` : "");
+}
+
 function describe(m) {
   if (m.paused) return "Sharing paused";
   if (!m.loc) return "No location yet";
@@ -112,9 +118,14 @@ function renderMembers(members) {
     const avatar = el("div", { class: "avatar" + (stale ? " stale" : ""), style: `background:${m.color}` }, initial(m.name));
     const li = el("li", { class: m.loc ? "clickable" : "" },
       avatar,
-      el("div", { class: "grow" }, el("div", { class: "title" }, m.name), el("div", { class: "sub" }, describe(m))),
-      el("button", { class: "link", title: "Rename", onclick: (e) => { e.stopPropagation(); rename(m); } }, "Rename"),
-      el("button", { class: "link danger", title: "Remove", onclick: (e) => { e.stopPropagation(); removeMember(m); } }, "Remove"),
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, m.name),
+        el("div", { class: "sub" }, describe(m)),
+        el("div", { class: "sub" }, account(m)),
+        el("div", { class: "row-actions" },
+          el("button", { class: "link", title: "Rename", onclick: (e) => { e.stopPropagation(); rename(m); } }, "Rename"),
+          el("button", { class: "link", title: "Let them choose a new password and sign in on a phone", onclick: (e) => { e.stopPropagation(); resetSignIn(m); } }, "Reset sign-in"),
+          el("button", { class: "link danger", title: "Remove", onclick: (e) => { e.stopPropagation(); removeMember(m); } }, "Remove"))),
     );
     if (m.loc) li.addEventListener("click", () => map.setView([m.loc.lat, m.loc.lon], Math.max(map.getZoom(), 15)));
     list.append(li);
@@ -165,7 +176,7 @@ function renderInvites(invites) {
   for (const inv of invites) {
     list.append(el("li", {},
       el("div", { class: "grow" },
-        el("div", { class: "title" }, inv.name || "Anyone"),
+        el("div", { class: "title" }, inv.memberId ? `Reset sign-in for ${inv.name}` : (inv.name || "Anyone")),
         el("div", { class: "sub" }, `${inv.code} · expires ${new Date(inv.expiresAt).toLocaleDateString()}`)),
       el("button", { class: "link", onclick: () => copy(inv.link) }, "Copy link"),
       el("button", { class: "link danger", onclick: () => cancelInvite(inv) }, "Cancel"),
@@ -193,6 +204,16 @@ async function rename(m) {
   if (!name || name === m.name) return;
   try { await api("PATCH", `/api/admin/members/${encodeURIComponent(m.id)}`, { name }); refresh(); }
   catch (err) { alert(err.message); }
+}
+
+async function resetSignIn(m) {
+  if (!confirm(`Make a one-time link that lets ${m.name} choose a new password and sign in on a phone? Any older reset link for them stops working.`)) return;
+  try {
+    const inv = await api("POST", `/api/admin/members/${encodeURIComponent(m.id)}/reset`);
+    showLink(inv, `Sign-in reset for ${m.name}`,
+      `Send this link to ${m.name}. It lets them choose a new password and sign in on their phone, keeping their place in the family. It works once and expires in a few days.`);
+    refresh();
+  } catch (err) { alert(err.message); }
 }
 
 async function removeMember(m) {
@@ -223,16 +244,24 @@ $("#invite-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
     const inv = await api("POST", "/api/admin/invites", { name: $("#invite-name").value });
-    $("#invite-link").value = inv.link;
-    $("#invite-code").textContent = inv.code;
-    $("#invite-server").textContent = new URL(inv.link).origin;
-    $("#invite-form").hidden = true;
-    $("#invite-result").hidden = false;
+    showLink(inv, "Invite ready", "Send this link to their phone. It works once and expires in a few days.");
     refresh();
   } catch (err) {
     alert(err.message);
   }
 });
+// Shows a freshly made invite or reset link in the dialog.
+function showLink(inv, title, text) {
+  $("#result-title").textContent = title;
+  $("#result-text").textContent = text;
+  $("#invite-link").value = inv.link;
+  $("#invite-code").textContent = inv.code;
+  $("#invite-server").textContent = new URL(inv.link).origin;
+  $("#invite-form").hidden = true;
+  $("#invite-result").hidden = false;
+  if (!dialog.open) dialog.showModal();
+}
+
 $("#copy-link").addEventListener("click", async () => {
   await copy($("#invite-link").value);
   $("#copy-link").textContent = "Copied";

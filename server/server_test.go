@@ -158,7 +158,7 @@ func TestStorePersists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "thereabouts.json")
 	s, _ := OpenStore(path)
 	inv, _ := s.CreateInvite("Carol", time.Hour)
-	m, token, err := s.Join(inv.Code, "")
+	m, token, err := s.Join(inv.Code, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestMigrateOldDataFile(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := OpenStore(filepath.Join(dir, "libre360.json"))
 	inv, _ := old.CreateInvite("Alex", time.Hour)
-	_, token, _ := old.Join(inv.Code, "")
+	_, token, _ := old.Join(inv.Code, "", "", "")
 
 	newPath := filepath.Join(dir, "thereabouts.json")
 	if err := migrateOldDataFile(dir, newPath); err != nil {

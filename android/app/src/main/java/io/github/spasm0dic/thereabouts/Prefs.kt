@@ -58,15 +58,30 @@ class Prefs(context: Context) {
         get() = sp.getInt("low_battery_threshold", 15)
         set(v) = sp.edit { putInt("low_battery_threshold", v) }
 
-    /** Set when the server says this phone was removed, so the UI can explain. */
-    var removedNotice: Boolean
-        get() = sp.getBoolean("removed", false)
-        set(v) = sp.edit { putBoolean("removed", v) }
+    /** This person's username, kept after signing out so the sign-in form can be pre-filled. */
+    var username: String
+        get() = sp.getString("username", "") ?: ""
+        set(v) = sp.edit { putString("username", v) }
+
+    /**
+     * Why this phone was signed out, shown on the sign-in screen: "" (it wasn't),
+     * [SIGNED_OUT_REMOVED] or [SIGNED_OUT_ELSEWHERE].
+     */
+    var signedOutReason: String
+        get() = sp.getString("signed_out", "") ?: ""
+        set(v) = sp.edit { putString("signed_out", v) }
 
     val joined: Boolean get() = serverUrl.isNotEmpty() && token.isNotEmpty()
 
+    /** Forgets this phone's sign-in. The server address and username stay, for signing in again. */
     fun clearMembership() = sp.edit {
         remove("token"); remove("member_id"); remove("family"); remove("event_cursor"); putBoolean("sharing", true)
+    }
+
+    /** The server stopped accepting this phone; remember why so the sign-in screen can explain. */
+    fun signedOut(e: UnauthorizedException) {
+        clearMembership()
+        signedOutReason = if (e.signedInElsewhere) SIGNED_OUT_ELSEWHERE else SIGNED_OUT_REMOVED
     }
 
     companion object {
@@ -74,5 +89,7 @@ class Prefs(context: Context) {
         const val DEFAULT_ATTRIBUTION = "© OpenStreetMap contributors"
         val INTERVAL_CHOICES = listOf(1, 2, 5, 15)
         val LOW_BATTERY_CHOICES = listOf(15, 10)
+        const val SIGNED_OUT_REMOVED = "removed"
+        const val SIGNED_OUT_ELSEWHERE = "elsewhere"
     }
 }

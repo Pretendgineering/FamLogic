@@ -31,11 +31,12 @@ type Server struct {
 	store  *Store
 	static fs.FS
 
-	loginMu sync.Mutex // serialises failed logins so guessing is slow
+	loginMu sync.Mutex    // serialises failed logins so guessing is slow
+	limiter *loginLimiter // locks a username after repeated wrong passwords
 }
 
 func NewServer(cfg Config, store *Store, static fs.FS) *Server {
-	return &Server{cfg: cfg, store: store, static: static}
+	return &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter()}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -46,6 +47,9 @@ func (s *Server) Routes() http.Handler {
 
 	// Phone app API (authenticated with the device token).
 	mux.HandleFunc("POST /api/join", s.handleJoin)
+	mux.HandleFunc("GET /api/invites/{code}", s.handleInviteInfo)
+	mux.HandleFunc("POST /api/signin", s.handleSignIn)
+	mux.HandleFunc("POST /api/me/password", s.device(s.handleSetPassword))
 	mux.HandleFunc("GET /api/members", s.device(s.handleMembers))
 	mux.HandleFunc("POST /api/location", s.device(s.handleLocation))
 	mux.HandleFunc("PATCH /api/me", s.device(s.handlePatchMe))
@@ -58,6 +62,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/members", s.admin(s.handleAdminMembers))
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
+	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
 	mux.HandleFunc("GET /api/admin/invites", s.admin(s.handleListInvites))
 	mux.HandleFunc("POST /api/admin/invites", s.admin(s.handleCreateInvite))
 	mux.HandleFunc("DELETE /api/admin/invites/{code}", s.admin(s.handleDeleteInvite))
@@ -171,10 +176,16 @@ func (s *Server) device(h deviceHandler) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, "missing token")
 			return
 		}
-		me, ok := s.store.MemberByToken(strings.TrimSpace(token))
-		if !ok {
-			// 401 tells the app it was removed from the family.
-			writeError(w, http.StatusUnauthorized, "unknown device; it may have been removed")
+		me, signedOut := s.store.lookupToken(strings.TrimSpace(token))
+		if me == nil {
+			// 401 tells the app this phone is no longer signed in, and why.
+			if signedOut {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{
+					"error": "you signed in on another device", "reason": "signed_in_elsewhere"})
+			} else {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{
+					"error": "unknown device; it may have been removed", "reason": "removed"})
+			}
 			return
 		}
 		h(w, r, me)
@@ -185,14 +196,81 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.serverInfo())
 }
 
+// capitalize makes "use at least..." into "Use at least..." for messages shown to people.
+func capitalize(msg string) string {
+	if msg == "" {
+		return msg
+	}
+	return strings.ToUpper(msg[:1]) + msg[1:]
+}
+
+// signedInResponse is what join, sign-in and password resets return to the phone.
+func (s *Server) signedInResponse(w http.ResponseWriter, m *Member, token string) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token": token, "member": toPublic([]Member{*m})[0], "server": s.serverInfo(),
+		"username": m.Username,
+	})
+}
+
+// handleInviteInfo lets the app see what a code is for before asking for details:
+// joining as someone new, or resetting an existing member's sign-in.
+func (s *Server) handleInviteInfo(w http.ResponseWriter, r *http.Request) {
+	inv, m, ok := s.store.InviteInfo(r.PathValue("code"))
+	if !ok {
+		time.Sleep(500 * time.Millisecond) // slow down code guessing
+		writeError(w, http.StatusNotFound, "that invite code is not valid or has expired")
+		return
+	}
+	resp := map[string]any{"kind": "join", "name": inv.Name, "server": s.serverInfo()}
+	if m != nil {
+		resp["kind"] = "reset"
+		resp["name"] = m.Name
+		resp["username"] = m.Username
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Code string `json:"code"`
-		Name string `json:"name"`
+		Code     string `json:"code"`
+		Name     string `json:"name"`
+		Username string `json:"username"`
+		Password string `json:"password"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
+	inv, resetFor, ok := s.store.InviteInfo(req.Code)
+	if !ok {
+		time.Sleep(500 * time.Millisecond) // slow down code guessing
+		writeError(w, http.StatusNotFound, "that invite code is not valid or has expired")
+		return
+	}
+
+	// A reset link: keep who they are, set a new password, sign this phone in.
+	if resetFor != nil {
+		username := resetFor.Username
+		if username == "" {
+			var err error
+			if username, err = NormalizeUsername(req.Username); err != nil {
+				writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+				return
+			}
+		}
+		if err := CheckPassword(req.Password, username, resetFor.Name); err != nil {
+			writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+			return
+		}
+		hash, err := HashPassword(req.Password)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not save")
+			return
+		}
+		m, token, err := s.store.RedeemReset(req.Code, username, hash)
+		s.writeAccountResult(w, m, token, err)
+		return
+	}
+
 	name := ""
 	if strings.TrimSpace(req.Name) != "" {
 		var ok bool
@@ -201,22 +279,149 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	m, token, err := s.store.Join(req.Code, name)
-	if errors.Is(err, ErrNotFound) {
-		time.Sleep(500 * time.Millisecond) // slow down code guessing
-		writeError(w, http.StatusNotFound, "that invite code is not valid or has expired")
-		return
+	// Apps from before accounts existed send neither username nor password.
+	username, hash := "", ""
+	if req.Username != "" || req.Password != "" {
+		var err error
+		if username, err = NormalizeUsername(req.Username); err != nil {
+			writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+			return
+		}
+		if _, taken := s.store.MemberByUsername(username); taken {
+			writeError(w, http.StatusConflict, capitalize(ErrUsernameTaken.Error()))
+			return
+		}
+		shownName := name
+		if shownName == "" {
+			shownName = inv.Name
+		}
+		if err := CheckPassword(req.Password, username, shownName); err != nil {
+			writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+			return
+		}
+		if hash, err = HashPassword(req.Password); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not save")
+			return
+		}
 	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "could not save")
-		return
-	}
-	if m.Name == "" {
+	m, token, err := s.store.Join(req.Code, name, username, hash)
+	if err == nil && m.Name == "" {
 		// Neither the invite nor the phone gave a name.
 		n := "Member"
 		m, _ = s.store.UpdateMember(m.ID, MemberPatch{Name: &n})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "member": toPublic([]Member{*m})[0], "server": s.serverInfo()})
+	s.writeAccountResult(w, m, token, err)
+}
+
+func (s *Server) writeAccountResult(w http.ResponseWriter, m *Member, token string, err error) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		writeError(w, http.StatusNotFound, "that invite code is not valid or has expired")
+	case errors.Is(err, ErrUsernameTaken):
+		writeError(w, http.StatusConflict, capitalize(err.Error()))
+	case err != nil:
+		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+	default:
+		s.signedInResponse(w, m, token)
+	}
+}
+
+var wrongPasswordDelay = time.Second // shortened in tests
+
+// wrongPassword records a failed attempt and waits a moment. Failures are
+// handled one at a time, so guessing is limited to about one try per second.
+func (s *Server) wrongPassword(username string) {
+	s.limiter.Fail(username)
+	s.loginMu.Lock()
+	time.Sleep(wrongPasswordDelay)
+	s.loginMu.Unlock()
+}
+
+// handleSignIn signs a phone in with a username and password. The latest sign-in
+// wins: the phone that was signed in before is signed out.
+func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	username := strings.ToLower(strings.TrimSpace(req.Username))
+	if d := s.limiter.Locked(username); d > 0 {
+		writeError(w, http.StatusTooManyRequests, "Too many wrong passwords. Try again in "+minutesText(d)+", or ask your family's admin to reset your sign-in.")
+		return
+	}
+	m, found := s.store.MemberByUsername(username)
+	hash := ""
+	if found {
+		hash = m.PasswordHash
+	}
+	// Always check a hash (a dummy one for unknown usernames) so timing gives nothing away.
+	if !VerifyPassword(req.Password, hash) || !found || hash == "" {
+		s.wrongPassword(username)
+		writeError(w, http.StatusUnauthorized, "Wrong username or password")
+		return
+	}
+	s.limiter.Succeed(username)
+	m, token, err := s.store.SignIn(m.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	s.signedInResponse(w, m, token)
+}
+
+// handleSetPassword lets a signed-in phone set a password (members from before
+// accounts existed, who also choose a username) or change it (needs the current one).
+func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request, me *Member) {
+	var req struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+		Username        string `json:"username"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if me.PasswordHash != "" {
+		if d := s.limiter.Locked(me.Username); d > 0 {
+			writeError(w, http.StatusTooManyRequests, "Too many wrong passwords. Try again in "+minutesText(d)+".")
+			return
+		}
+		if !VerifyPassword(req.CurrentPassword, me.PasswordHash) {
+			s.wrongPassword(me.Username)
+			writeError(w, http.StatusForbidden, "Your current password is wrong")
+			return
+		}
+		s.limiter.Succeed(me.Username)
+	}
+	username, newUsername := me.Username, ""
+	if username == "" {
+		var err error
+		if username, err = NormalizeUsername(req.Username); err != nil {
+			writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+			return
+		}
+		newUsername = username
+	}
+	if err := CheckPassword(req.NewPassword, username, me.Name); err != nil {
+		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+		return
+	}
+	hash, err := HashPassword(req.NewPassword)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	m, err := s.store.SetCredentials(me.ID, newUsername, hash)
+	switch {
+	case errors.Is(err, ErrUsernameTaken):
+		writeError(w, http.StatusConflict, capitalize(err.Error()))
+	case err != nil:
+		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"username": m.Username, "hasPassword": true})
+	}
 }
 
 // sinceParam reads the ?since= event cursor; ok is false when the client didn't send one
@@ -232,10 +437,14 @@ func sinceParam(r *http.Request) (int64, bool) {
 
 func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Member) {
 	resp := map[string]any{
-		"me":       me.ID,
-		"members":  toPublic(s.store.Members()),
-		"server":   s.serverInfo(),
-		"settings": map[string]any{"shareLowBattery": me.SharesLowBattery()},
+		"me":      me.ID,
+		"members": toPublic(s.store.Members()),
+		"server":  s.serverInfo(),
+		"settings": map[string]any{
+			"shareLowBattery": me.SharesLowBattery(),
+			"username":        me.Username,
+			"hasPassword":     me.PasswordHash != "",
+		},
 	}
 	if since, ok := sinceParam(r); ok {
 		resp["events"], resp["cursor"] = s.store.EventsFor(me.ID, since)
@@ -392,8 +601,37 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// adminMember adds sign-in details that only the dashboard sees.
+type adminMember struct {
+	publicMember
+	Username    string `json:"username"`
+	HasPassword bool   `json:"hasPassword"`
+	LastSignIn  int64  `json:"lastSignIn,omitempty"`
+}
+
 func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"members": toPublic(s.store.Members()), "server": s.serverInfo()})
+	ms := s.store.Members()
+	pub := toPublic(ms)
+	out := make([]adminMember, len(ms))
+	for i, m := range ms {
+		out[i] = adminMember{pub[i], m.Username, m.PasswordHash != "", m.LastSignIn}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"members": out, "server": s.serverInfo()})
+}
+
+// handleAdminResetSignIn makes a one-time link that lets a member who forgot
+// their password choose a new one, keeping their place in the family.
+func (s *Server) handleAdminResetSignIn(w http.ResponseWriter, r *http.Request) {
+	inv, err := s.store.CreateResetInvite(r.PathValue("id"), s.cfg.InviteTTL)
+	if errors.Is(err, ErrNotFound) {
+		writeError(w, http.StatusNotFound, "no such member")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	writeJSON(w, http.StatusOK, inviteResponse{*inv, s.inviteLink(r, inv.Code)})
 }
 
 func (s *Server) handleAdminPatchMember(w http.ResponseWriter, r *http.Request) {
@@ -480,10 +718,19 @@ func (s *Server) handleDeleteInvite(w http.ResponseWriter, r *http.Request) {
 
 var joinTmpl = template.Must(template.New("join").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Join {{.Family}} on Thereabouts</title><link rel="stylesheet" href="/style.css"></head>
+<title>{{if .Reset}}Sign back in to{{else}}Join{{end}} {{.Family}} on Thereabouts</title><link rel="stylesheet" href="/style.css"></head>
 <body class="join"><main class="card">
+{{if .Invalid}}
+<h1>This link has expired</h1>
+<p>It was already used, or it's more than a few days old. Ask your family's admin for a new one.</p>
+{{else}}
+{{if .Reset}}
+<h1>Sign back in, {{.Name}}</h1>
+<p>Use this link to choose a new password for <strong>{{.Name}}</strong> in <strong>{{.Family}}</strong> and sign in on this phone. It works once.</p>
+{{else}}
 <h1>Join {{.Family}}</h1>
 <p>You've been invited to share your location with <strong>{{.Family}}</strong> using Thereabouts.</p>
+{{end}}
 <ol>
 <li>Install the Thereabouts app on your Android phone.</li>
 <li>Tap the button below to open it with everything filled in.</li>
@@ -491,17 +738,26 @@ var joinTmpl = template.Must(template.New("join").Parse(`<!doctype html>
 <p><a class="button" href="{{.AppLink}}">Open in Thereabouts</a></p>
 <p class="muted">Button not working? Open the app and enter these by hand:</p>
 <dl><dt>Server</dt><dd><code>{{.Server}}</code></dd><dt>Invite code</dt><dd><code>{{.Code}}</code></dd></dl>
+{{end}}
 </main></body></html>`))
 
 func (s *Server) handleJoinPage(w http.ResponseWriter, r *http.Request) {
 	code := normalizeCode(r.PathValue("code"))
 	base := s.baseURL(r)
 	q := url.Values{"server": {base}, "code": {code}}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = joinTmpl.Execute(w, map[string]any{
+	inv, member, ok := s.store.InviteInfo(code)
+	data := map[string]any{
 		"Family":  s.cfg.FamilyName,
 		"Server":  base,
 		"Code":    code,
 		"AppLink": template.URL("thereabouts://join?" + q.Encode()),
-	})
+		"Invalid": !ok,
+		"Reset":   ok && member != nil,
+		"Name":    "",
+	}
+	if ok {
+		data["Name"] = inv.Name
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = joinTmpl.Execute(w, data)
 }

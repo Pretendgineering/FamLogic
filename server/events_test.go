@@ -16,7 +16,7 @@ func newStoreWithMembers(t *testing.T, names ...string) (*Store, []*Member) {
 	var ms []*Member
 	for _, n := range names {
 		inv, _ := s.CreateInvite(n, time.Hour)
-		m, _, err := s.Join(inv.Code, "")
+		m, _, err := s.Join(inv.Code, "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -118,7 +118,7 @@ func TestEventsSurviveRestartAndResetCursor(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "thereabouts.json")
 	s, _ := OpenStore(path)
 	inv, _ := s.CreateInvite("Alex", time.Hour)
-	alex, _, _ := s.Join(inv.Code, "")
+	alex, _, _ := s.Join(inv.Code, "", "", "")
 	report(t, s, alex.ID, 50, false)
 	report(t, s, alex.ID, 12, false)
 

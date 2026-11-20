@@ -20,7 +20,8 @@ Thereabouts does one thing: each phone reports where it is to **your own server*
 | Location | Android's own location service, so it works on de-Googled phones (GrapheneOS, LineageOS, /e/). |
 | Privacy | Only the **latest** position is stored. Pausing wipes it from the server. Removing a member deletes them. |
 | Battery | Updates every 1/2/5/15 minutes (your choice) using balanced-power location. |
-| Joining | The admin creates a one-time invite link. The person taps it on their phone and the app opens with everything filled in. |
+| Joining | The admin creates a one-time invite link. The person taps it on their phone, and the app opens with everything filled in. They choose a username and password. |
+| New phone? | Sign in with your username and password. You're back as yourself, and your old phone is signed out (the latest sign-in wins). Forgot your password? The admin sends a one-time **Reset sign-in** link. |
 | Alerts | Low-battery alerts for family members, each switchable in the app. They arrive with normal location updates, so no push service is needed. |
 | Reliability | Restarts after reboot. The app walks you through "Allow all the time" and the battery-saver exemption. |
 | License | GPLv3. All dependencies are open source. |
@@ -99,12 +100,20 @@ Download `thereabouts.apk` from the [Releases](../../releases) page (or from the
 
 1. In the dashboard, click **Invite someone** and type their name.
 2. Send them the link (text message, Signal, email...).
-3. On their phone they tap the link, then **Open in Thereabouts**, then **Join**.
+3. On their phone they tap the link, then **Open in Thereabouts**. They choose a **username and password** (a password manager is the easy way to keep them), then tap **Join**.
 4. The app asks for location access. Choose **Allow all the time**, and say yes to the battery prompt, so that sharing keeps working when the phone is locked.
 
 Do the same for your own phone.
 
 If tapping the link doesn't open the app, they can open the app and type the server address and the code shown on the invite page.
+
+### New phone, reinstalling, or forgot your password
+
+- **New phone or reinstall:** open the app, choose **Sign in**, and enter the server address, your username and your password. You're back as yourself, with the same name, color and settings. Only one phone is signed in per person: the old one is signed out and says so.
+- **Forgot your password:** in the dashboard, click **Reset sign-in** next to the person's name and send them the link. It lets them choose a new password and sign in, keeping their place in the family. It works once and expires after a few days.
+- **Joined before version 0.4.0?** The app shows a banner. Tap **Set up** to choose a username and password.
+
+**Password rules:** at least 12 characters, and not a common or easy-to-guess password (for example `password1234` or `P@ssw0rd2024!`), and not containing your username or name. There are no "must include a symbol" rules: a few random words, like `blue canoe at midnight`, make a great password. Passwords are stored as slow, salted hashes (PBKDF2-SHA256, 600,000 rounds). After 5 wrong tries, that username is locked for 15 minutes.
 
 ## Using it
 
@@ -152,14 +161,19 @@ Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/there
 
 | Endpoint | Auth | Purpose |
 |---|---|---|
-| `POST /api/join` `{code, name}` | invite code | Returns a device token |
+| `GET /api/invites/<code>` | invite code | What a code is for: `join`, or `reset` for an existing person |
+| `POST /api/join` `{code, name, username, password}` | invite code | Join, or redeem a reset link. Returns a device token |
+| `POST /api/signin` `{username, password}` | password | Sign this phone in. The previous phone is signed out |
+| `POST /api/me/password` `{currentPassword, newPassword, username?}` | `Bearer <token>` | Set or change your password |
 | `POST /api/location?since=<cursor>` `{lat, lon, acc, speed, battery, charging, time}` | `Bearer <token>` | Report a fix; the reply carries new alerts `{events, cursor}` |
 | `GET /api/members?since=<cursor>` | `Bearer <token>` | Everyone's latest position, map settings, your feature settings, and new alerts |
 | `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?}` | `Bearer <token>` | Rename yourself / pause / feature switches |
 | `DELETE /api/me` | `Bearer <token>` | Leave |
 | `/api/admin/*` | dashboard login cookie | Invites and members |
 
-Device tokens are stored only as SHA-256 hashes. The dashboard cookie is HMAC-signed, `HttpOnly` and `SameSite=Strict`, and wrong passwords are slowed down to stop guessing.
+Device tokens are stored only as SHA-256 hashes, and member passwords as PBKDF2-SHA256 hashes. The dashboard cookie is HMAC-signed, `HttpOnly` and `SameSite=Strict`. Wrong passwords (dashboard and members) are slowed down to stop guessing, and a member's username locks for 15 minutes after 5 wrong tries.
+
+The common-password list in `server/commonpasswords.txt` comes from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, © 2018 Daniel Miessler).
 
 ## Roadmap
 

@@ -172,7 +172,7 @@ class LocationService : Service() {
             lastSentElapsed = SystemClock.elapsedRealtime()
             lastSent = loc
         } catch (e: UnauthorizedException) {
-            onRemoved()
+            onSignedOut(e)
         } catch (e: IOException) {
             // Offline or server down: the next fix will try again.
             Log.i(TAG, "Upload failed: ${e.message}")
@@ -181,10 +181,9 @@ class LocationService : Service() {
         }
     }
 
-    /** The server no longer knows this phone (an admin removed it). */
-    private fun onRemoved() {
-        prefs.clearMembership()
-        prefs.removedNotice = true
+    /** The server no longer accepts this phone: removed by an admin, or signed in elsewhere. */
+    private fun onSignedOut(e: UnauthorizedException) {
+        prefs.signedOut(e)
         stopSelf()
     }
 
