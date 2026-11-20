@@ -5,31 +5,31 @@ plugins {
 }
 
 android {
-    namespace = "io.github.spasm0dic.libre360"
+    namespace = "io.github.spasm0dic.thereabouts"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "io.github.spasm0dic.libre360"
+        applicationId = "io.github.spasm0dic.thereabouts"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.3.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo
     // (see docs/RELEASING.md). Without them, release builds are signed with the local
     // debug key: fine for trying things out, but such APKs can't update a real install.
-    val keystorePath = System.getenv("LIBRE360_KEYSTORE")
+    val keystorePath = System.getenv("THEREABOUTS_KEYSTORE")
     signingConfigs {
         if (!keystorePath.isNullOrBlank()) {
             create("release") {
-                val password = System.getenv("LIBRE360_KEYSTORE_PASSWORD")
-                    ?: error("LIBRE360_KEYSTORE is set but LIBRE360_KEYSTORE_PASSWORD is not")
+                val password = System.getenv("THEREABOUTS_KEYSTORE_PASSWORD")
+                    ?: error("THEREABOUTS_KEYSTORE is set but THEREABOUTS_KEYSTORE_PASSWORD is not")
                 storeFile = file(keystorePath)
                 storePassword = password
-                keyAlias = System.getenv("LIBRE360_KEY_ALIAS")?.ifBlank { null } ?: "libre360"
+                keyAlias = System.getenv("THEREABOUTS_KEY_ALIAS")?.ifBlank { null } ?: "thereabouts"
                 // PKCS12 keystores use the same password for the key; allow a separate one anyway.
-                keyPassword = System.getenv("LIBRE360_KEY_PASSWORD")?.ifBlank { null } ?: password
+                keyPassword = System.getenv("THEREABOUTS_KEY_PASSWORD")?.ifBlank { null } ?: password
             }
         }
     }

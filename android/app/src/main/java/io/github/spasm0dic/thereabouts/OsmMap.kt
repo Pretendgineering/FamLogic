@@ -1,4 +1,4 @@
-package io.github.spasm0dic.libre360
+package io.github.spasm0dic.thereabouts
 
 import android.content.Context
 import android.graphics.Bitmap

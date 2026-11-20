@@ -1,4 +1,4 @@
-package io.github.spasm0dic.libre360
+package io.github.spasm0dic.thereabouts
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -231,7 +231,7 @@ class LocationService : Service() {
     }
 
     companion object {
-        private const val TAG = "Libre360"
+        private const val TAG = "Thereabouts"
         private const val CHANNEL_ID = "sharing"
         private const val NOTIFICATION_ID = 1
 

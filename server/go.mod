@@ -1,3 +1,3 @@
-module github.com/spasm0dic/libre360/server
+module github.com/spasm0dic/thereabouts/server
 
 go 1.24

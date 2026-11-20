@@ -1,4 +1,4 @@
-package io.github.spasm0dic.libre360
+package io.github.spasm0dic.thereabouts
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -7,7 +7,7 @@ import androidx.core.content.edit
 /** Everything the app remembers, in plain SharedPreferences. */
 class Prefs(context: Context) {
     private val sp: SharedPreferences =
-        context.applicationContext.getSharedPreferences("libre360", Context.MODE_PRIVATE)
+        context.applicationContext.getSharedPreferences("thereabouts", Context.MODE_PRIVATE)
 
     var serverUrl: String
         get() = sp.getString("server", "") ?: ""

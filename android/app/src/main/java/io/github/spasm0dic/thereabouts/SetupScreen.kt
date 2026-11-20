@@ -1,4 +1,4 @@
-package io.github.spasm0dic.libre360
+package io.github.spasm0dic.thereabouts
 
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -57,7 +57,7 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Spacer(Modifier.height(24.dp))
-            Text("Libre360", style = MaterialTheme.typography.headlineLarge)
+            Text("Thereabouts", style = MaterialTheme.typography.headlineLarge)
             Text(
                 "Private location sharing for your family, on your own server.",
                 style = MaterialTheme.typography.bodyLarge,
@@ -131,7 +131,7 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
                         } catch (e: IOException) {
                             error = "Couldn't reach the server. Check the address and your connection. (${e.message})"
                         } catch (e: Exception) {
-                            error = "That doesn't look like a Libre360 server."
+                            error = "That doesn't look like a Thereabouts server."
                         } finally {
                             busy = false
                         }

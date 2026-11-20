@@ -1,9 +1,9 @@
 services:
-  libre360:
+  thereabouts:
     # Use the published image, or comment this out and uncomment "build" to build it yourself.
-    image: ghcr.io/spasm0dic/libre360:latest
+    image: ghcr.io/spasm0dic/thereabouts:latest
     # build: ./server
-    container_name: libre360
+    container_name: thereabouts
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -21,7 +21,7 @@ services:
       # How long an invite link works, in hours.
       # INVITE_HOURS: "72"
     volumes:
-      - libre360-data:/data
+      - thereabouts-data:/data
 
 volumes:
-  libre360-data:
+  thereabouts-data:

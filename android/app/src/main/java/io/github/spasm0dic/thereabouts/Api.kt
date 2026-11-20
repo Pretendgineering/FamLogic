@@ -1,4 +1,4 @@
-package io.github.spasm0dic.libre360
+package io.github.spasm0dic.thereabouts
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,7 +60,7 @@ class UnauthorizedException : IOException("This phone is no longer part of the f
 class ApiException(val status: Int, message: String) : IOException(message)
 
 /**
- * Tiny client for the Libre360 server API. Uses only what ships with Android
+ * Tiny client for the Thereabouts server API. Uses only what ships with Android
  * (HttpURLConnection + org.json) so there are no extra dependencies.
  */
 class Api(private val baseUrl: String, private val token: String = "") {
@@ -124,7 +124,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 conn.connectTimeout = 15_000
                 conn.readTimeout = 20_000
                 conn.setRequestProperty("Accept", "application/json")
-                conn.setRequestProperty("User-Agent", "Libre360-Android/${BuildConfig.VERSION_NAME}")
+                conn.setRequestProperty("User-Agent", "Thereabouts-Android/${BuildConfig.VERSION_NAME}")
                 if (token.isNotEmpty()) conn.setRequestProperty("Authorization", "Bearer $token")
                 if (body != null) {
                     conn.doOutput = true

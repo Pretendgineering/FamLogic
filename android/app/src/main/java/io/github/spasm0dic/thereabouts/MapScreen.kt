@@ -1,4 +1,4 @@
-package io.github.spasm0dic.libre360
+package io.github.spasm0dic.thereabouts
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -223,7 +223,7 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(familyName.ifEmpty { "Libre360" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(familyName.ifEmpty { "Thereabouts" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
                     IconButton(onClick = { showSettings = true }) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
                 },
@@ -233,7 +233,7 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
         Column(Modifier.padding(padding).fillMaxSize()) {
             when {
                 !perms.location -> Banner(
-                    "Libre360 needs your location to share it with your family.",
+                    "Thereabouts needs your location to share it with your family.",
                     "Allow",
                 ) { askLocation.launch(PermissionState.foregroundPermissions()) }
                 !sharing -> Banner("You're not sharing your location right now.", "Resume") { setSharing(true) }
@@ -244,7 +244,7 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
                     if (Build.VERSION.SDK_INT >= 29) askBackground.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                 }
                 !perms.batteryUnrestricted -> Banner(
-                    "Let Libre360 run in the background so your phone doesn't stop it.",
+                    "Let Thereabouts run in the background so your phone doesn't stop it.",
                     "Fix",
                 ) { requestBatteryExemption(context) }
             }
@@ -541,7 +541,7 @@ private fun SettingsScreen(
                 Text("Leave family", color = MaterialTheme.colorScheme.error)
             }
             Text(
-                "Libre360 ${BuildConfig.VERSION_NAME} · Free software (GPLv3) · Map data © OpenStreetMap contributors",
+                "Thereabouts ${BuildConfig.VERSION_NAME} · Free software (GPLv3) · Map data © OpenStreetMap contributors",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 16.dp),

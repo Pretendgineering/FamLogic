@@ -1,5 +1,5 @@
 server/data/
-server/libre360
+server/thereabouts
 
 # Signing keys: never commit these (see docs/RELEASING.md)
 *.p12

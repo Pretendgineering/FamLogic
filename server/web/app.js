@@ -1,4 +1,4 @@
-// Libre360 web dashboard. Plain JS, no build step.
+// Thereabouts web dashboard. Plain JS, no build step.
 "use strict";
 
 const $ = (sel) => document.querySelector(sel);
@@ -177,7 +177,7 @@ async function refresh() {
   try {
     const [data, invites] = await Promise.all([api("GET", "/api/admin/members"), api("GET", "/api/admin/invites")]);
     $("#family-name").textContent = data.server.name;
-    document.title = `${data.server.name} · Libre360`;
+    document.title = `${data.server.name} · Thereabouts`;
     ensureMap(data.server);
     renderMembers(data.members);
     renderInvites(invites);

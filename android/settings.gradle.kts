@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "Libre360"
+rootProject.name = "Thereabouts"
 include(":app")

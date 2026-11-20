@@ -1,4 +1,4 @@
-// Libre360 server: a tiny, private family location sharing server.
+// Thereabouts server: a tiny, private family location sharing server.
 package main
 
 import (
@@ -75,7 +75,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
-	store, err := OpenStore(filepath.Join(cfg.DataDir, "libre360.json"))
+	dataFile := filepath.Join(cfg.DataDir, "thereabouts.json")
+	if err := migrateOldDataFile(cfg.DataDir, dataFile); err != nil {
+		log.Fatalf("moving old data file: %v", err)
+	}
+	store, err := OpenStore(dataFile)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			log.Fatalf("can't write to %s (%v). The container runs as user %d; make sure that user owns the data folder, "+
@@ -95,7 +99,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Libre360 %s listening on %s (data in %s)", version, cfg.Listen, cfg.DataDir)
+		log.Printf("Thereabouts %s listening on %s (data in %s)", version, cfg.Listen, cfg.DataDir)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
@@ -107,6 +111,20 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+}
+
+// migrateOldDataFile renames the data file from before the project was called
+// Thereabouts (libre360.json), so upgrading keeps everyone's family and settings.
+func migrateOldDataFile(dir, newPath string) error {
+	oldPath := filepath.Join(dir, "libre360.json")
+	if _, err := os.Stat(newPath); err == nil {
+		return nil // already migrated (or a fresh install)
+	}
+	if _, err := os.Stat(oldPath); err != nil {
+		return nil // nothing to migrate
+	}
+	log.Printf("Renaming %s to %s (the project is now called Thereabouts)", oldPath, newPath)
+	return os.Rename(oldPath, newPath)
 }
 
 func runHealthcheck(listen string) int {

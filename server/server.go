@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	adminCookie     = "libre360_admin"
+	adminCookie     = "thereabouts_admin"
 	adminSessionTTL = 30 * 24 * time.Hour
 	maxBody         = 64 << 10
 )
@@ -480,15 +480,15 @@ func (s *Server) handleDeleteInvite(w http.ResponseWriter, r *http.Request) {
 
 var joinTmpl = template.Must(template.New("join").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Join {{.Family}} on Libre360</title><link rel="stylesheet" href="/style.css"></head>
+<title>Join {{.Family}} on Thereabouts</title><link rel="stylesheet" href="/style.css"></head>
 <body class="join"><main class="card">
 <h1>Join {{.Family}}</h1>
-<p>You've been invited to share your location with <strong>{{.Family}}</strong> using Libre360.</p>
+<p>You've been invited to share your location with <strong>{{.Family}}</strong> using Thereabouts.</p>
 <ol>
-<li>Install the Libre360 app on your Android phone.</li>
+<li>Install the Thereabouts app on your Android phone.</li>
 <li>Tap the button below to open it with everything filled in.</li>
 </ol>
-<p><a class="button" href="{{.AppLink}}">Open in Libre360</a></p>
+<p><a class="button" href="{{.AppLink}}">Open in Thereabouts</a></p>
 <p class="muted">Button not working? Open the app and enter these by hand:</p>
 <dl><dt>Server</dt><dd><code>{{.Server}}</code></dd><dt>Invite code</dt><dd><code>{{.Code}}</code></dd></dl>
 </main></body></html>`))
@@ -502,6 +502,6 @@ func (s *Server) handleJoinPage(w http.ResponseWriter, r *http.Request) {
 		"Family":  s.cfg.FamilyName,
 		"Server":  base,
 		"Code":    code,
-		"AppLink": template.URL("libre360://join?" + q.Encode()),
+		"AppLink": template.URL("thereabouts://join?" + q.Encode()),
 	})
 }

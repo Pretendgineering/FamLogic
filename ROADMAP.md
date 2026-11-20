@@ -83,7 +83,7 @@ Like Life360's circles: separate groups such as Family, Grandparents or Friends,
 ### 8. Profile pictures on map pins
 Friendlier pins: your photo in the map bubble instead of an initial.
 - **Choosing a photo:** pick one in the app (Settings → Your photo) with a simple square crop. The phone shrinks it to about 256 px before uploading, so files stay tiny.
-- **Storage:** the server keeps it next to `libre360.json` in the data folder, so the one-folder backup still holds.
+- **Storage:** the server keeps it next to `thereabouts.json` in the data folder, so the one-folder backup still holds.
 - **Who sees it:** only people who share a circle with you.
 - **Where it shows:** map pins, the people list and the web dashboard. Pins fall back to the coloured initial when there's no photo.
 - **Switches:**
@@ -94,11 +94,11 @@ Friendlier pins: your photo in the map bubble instead of an initial.
 ### 9. One-tap shareable invite message
 Make adding someone a single copy-paste. The dashboard's **Copy invite** button (and later an "Invite someone" button in the app) copies a complete, friendly message, for example:
 
-> Join our family on Libre360!
-> 1. Get the app: https://f-droid.org/packages/io.github.spasm0dic.libre360/
+> Join our family on Thereabouts!
+> 1. Get the app: https://f-droid.org/packages/io.github.spasm0dic.thereabouts/
 > 2. Then tap this link to join: https://family.example.com/join/ABCD-EFGH
 
-- The app-store link points at F-Droid or IzzyOnDroid once Libre360 is listed there, with the GitHub release or Obtainium as the fallback before that.
+- The app-store link points at F-Droid or IzzyOnDroid once Thereabouts is listed there, with the GitHub release or Obtainium as the fallback before that.
 - The invite page (`/join/<code>`) shows the same download link, so a link opened on a phone without the app installed still makes sense.
 - Wait until the app is in a store, so the message doesn't send people to sideload an APK.
 

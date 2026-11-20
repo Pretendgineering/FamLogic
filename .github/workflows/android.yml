@@ -31,41 +31,49 @@ jobs:
       - name: Set up signing key
         id: signing
         env:
-          KEYSTORE_B64: ${{ secrets.LIBRE360_KEYSTORE_B64 }}
+          # The LIBRE360_* names are from before the project was renamed; either works.
+          KEYSTORE_B64: ${{ secrets.THEREABOUTS_KEYSTORE_B64 || secrets.LIBRE360_KEYSTORE_B64 }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
-            echo "::warning::LIBRE360_KEYSTORE_B64 secret not set: building with a throwaway debug key. This APK will not be published as a release."
+            echo "::warning::THEREABOUTS_KEYSTORE_B64 secret not set: building with a throwaway debug key. This APK will not be published as a release."
             echo "signed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # Lengths are printed (never contents) so a truncated copy-paste is easy to spot.
-          echo "LIBRE360_KEYSTORE_B64 is ${#KEYSTORE_B64} characters long (a 4096-bit key is usually about 5,600)."
+          echo "THEREABOUTS_KEYSTORE_B64 is ${#KEYSTORE_B64} characters long (a 4096-bit key is usually about 5,600)."
           if ! printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/release.p12" 2>/dev/null; then
-            echo "::error::LIBRE360_KEYSTORE_B64 is not valid base64. Re-copy the whole contents of libre360-release.b64 into the secret."
+            echo "::error::THEREABOUTS_KEYSTORE_B64 is not valid base64. Re-copy the whole contents of thereabouts-release.b64 into the secret."
             exit 1
           fi
-          echo "LIBRE360_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+          echo "THEREABOUTS_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Check signing key
         if: steps.signing.outputs.signed == 'true'
         env:
-          STORE_PASSWORD: ${{ secrets.LIBRE360_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.LIBRE360_KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.THEREABOUTS_KEY_ALIAS || secrets.LIBRE360_KEY_ALIAS }}
         run: |
           if [ -z "$STORE_PASSWORD" ]; then
-            echo "::error::The LIBRE360_KEYSTORE_PASSWORD secret is missing or empty (check its exact name)."
+            echo "::error::The THEREABOUTS_KEYSTORE_PASSWORD secret is missing or empty (check its exact name)."
             exit 1
           fi
-          alias="${KEY_ALIAS:-libre360}"
-          if ! out=$(keytool -list -keystore "$LIBRE360_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD -alias "$alias" 2>&1); then
+          # No alias secret needed: use the first key in the file (whatever -alias it was made with).
+          alias="$KEY_ALIAS"
+          if [ -z "$alias" ]; then
+            alias=$(keytool -list -v -keystore "$THEREABOUTS_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD 2>/dev/null \
+              | sed -n 's/^Alias name: //p' | head -1)
+            alias="${alias:-thereabouts}"
+          fi
+          echo "THEREABOUTS_KEY_ALIAS=$alias" >> "$GITHUB_ENV"
+          if ! out=$(keytool -list -keystore "$THEREABOUTS_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD -alias "$alias" 2>&1); then
             case "$out" in
               *"password was incorrect"*)
-                echo "::error::The key file is fine but LIBRE360_KEYSTORE_PASSWORD doesn't match it. Re-enter the password from when you created the key." ;;
+                echo "::error::The key file is fine but THEREABOUTS_KEYSTORE_PASSWORD doesn't match it. Re-enter the password from when you created the key." ;;
               *"does not exist"*)
-                echo "::error::The key file has no key named '$alias'. Set LIBRE360_KEY_ALIAS to the -alias you used." ;;
+                echo "::error::The key file has no key named '$alias'. Set the THEREABOUTS_KEY_ALIAS secret to the -alias you used, or delete it to auto-detect." ;;
               *)
-                echo "::error::Couldn't read the key file: it looks incomplete or damaged ($(stat -c %s "$LIBRE360_KEYSTORE") bytes after decoding). The LIBRE360_KEYSTORE_B64 secret is probably cut off; re-copy the WHOLE contents of libre360-release.b64 into it." ;;
+                echo "::error::Couldn't read the key file: it looks incomplete or damaged ($(stat -c %s "$THEREABOUTS_KEYSTORE") bytes after decoding). The THEREABOUTS_KEYSTORE_B64 secret is probably cut off; re-copy the WHOLE contents of thereabouts-release.b64 into it." ;;
             esac
             exit 1
           fi
@@ -73,25 +81,25 @@ jobs:
 
       - name: Build
         env:
-          LIBRE360_KEYSTORE_PASSWORD: ${{ secrets.LIBRE360_KEYSTORE_PASSWORD }}
-          LIBRE360_KEY_ALIAS: ${{ secrets.LIBRE360_KEY_ALIAS }}
-          LIBRE360_KEY_PASSWORD: ${{ secrets.LIBRE360_KEY_PASSWORD }}
+          THEREABOUTS_KEYSTORE_PASSWORD: ${{ secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
+          THEREABOUTS_KEY_PASSWORD: ${{ secrets.THEREABOUTS_KEY_PASSWORD || secrets.LIBRE360_KEY_PASSWORD }}
+          # THEREABOUTS_KEY_ALIAS comes from the "Check signing key" step.
         run: ./gradlew --no-daemon assembleRelease lintDebug
 
       - name: Show signing certificate
         id: cert
         run: |
-          mv app/build/outputs/apk/release/app-release.apk libre360.apk
+          mv app/build/outputs/apk/release/app-release.apk thereabouts.apk
           apksigner="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
-          "$apksigner" verify --print-certs libre360.apk | tee certs.txt
+          "$apksigner" verify --print-certs thereabouts.apk | tee certs.txt
           sha=$(sed -n 's/.*certificate SHA-256 digest: //p' certs.txt | head -1)
           echo "sha256=$sha" >> "$GITHUB_OUTPUT"
           echo "Signing certificate SHA-256: \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: libre360-apk
-          path: android/libre360.apk
+          name: thereabouts-apk
+          path: android/thereabouts.apk
 
       # Every build on main whose versionName has no release yet becomes a GitHub release
       # (e.g. v0.1.1) with the APK attached, but only when signed with the release key.
@@ -109,9 +117,9 @@ jobs:
             exit 0
           fi
           cat > notes.md <<NOTES
-          Install \`libre360.apk\` on your Android phone. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/libre360:latest\`. See the README for setup.
+          Install \`thereabouts.apk\` on your Android phone. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/thereabouts:latest\`. See the README for setup.
 
-          Signing certificate SHA-256 (every official Libre360 APK has this same fingerprint):
+          Signing certificate SHA-256 (every official Thereabouts APK has this same fingerprint):
           \`$CERT_SHA256\`
           NOTES
-          gh release create "$tag" libre360.apk --target "$GITHUB_SHA" --title "Libre360 $version" --notes-file notes.md
+          gh release create "$tag" thereabouts.apk --target "$GITHUB_SHA" --title "Thereabouts $version" --notes-file notes.md

@@ -1,4 +1,4 @@
-package io.github.spasm0dic.libre360
+package io.github.spasm0dic.thereabouts
 
 import android.content.Intent
 import android.net.Uri
@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
 
         setContent {
-            Libre360Theme {
+            ThereaboutsTheme {
                 if (joined) {
                     MapScreen(
                         prefs = prefs,
@@ -70,7 +70,8 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         val data: Uri = intent?.data ?: return
-        if (data.scheme != "libre360" || data.host != "join") return
+        // libre360:// is from before the project was renamed; old invite links still work.
+        if (data.scheme !in setOf("thereabouts", "libre360") || data.host != "join") return
         val server = data.getQueryParameter("server").orEmpty()
         val code = data.getQueryParameter("code").orEmpty()
         if (server.isEmpty() && code.isEmpty()) return
@@ -82,7 +83,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun Libre360Theme(content: @Composable () -> Unit) {
+fun ThereaboutsTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val ctx = LocalContext.current
     val scheme = when {

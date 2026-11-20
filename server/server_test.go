@@ -21,7 +21,7 @@ type testEnv struct {
 
 func newEnv(t *testing.T) *testEnv {
 	t.Helper()
-	store, err := OpenStore(filepath.Join(t.TempDir(), "data", "libre360.json"))
+	store, err := OpenStore(filepath.Join(t.TempDir(), "data", "thereabouts.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestFullFlow(t *testing.T) {
 }
 
 func TestStorePersists(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "libre360.json")
+	path := filepath.Join(t.TempDir(), "thereabouts.json")
 	s, _ := OpenStore(path)
 	inv, _ := s.CreateInvite("Carol", time.Hour)
 	m, token, err := s.Join(inv.Code, "")
@@ -223,5 +223,28 @@ func TestAlertsOverHTTP(t *testing.T) {
 	_, list = e.do("GET", "/api/members?since=-1", alex, nil)
 	if list["settings"].(map[string]any)["shareLowBattery"] != false {
 		t.Fatalf("switch not saved: %v", list["settings"])
+	}
+}
+
+func TestMigrateOldDataFile(t *testing.T) {
+	dir := t.TempDir()
+	old, _ := OpenStore(filepath.Join(dir, "libre360.json"))
+	inv, _ := old.CreateInvite("Alex", time.Hour)
+	_, token, _ := old.Join(inv.Code, "")
+
+	newPath := filepath.Join(dir, "thereabouts.json")
+	if err := migrateOldDataFile(dir, newPath); err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenStore(newPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := s.MemberByToken(token); !ok || m.Name != "Alex" {
+		t.Fatal("member lost in migration")
+	}
+	// Running again is harmless.
+	if err := migrateOldDataFile(dir, newPath); err != nil {
+		t.Fatal(err)
 	}
 }

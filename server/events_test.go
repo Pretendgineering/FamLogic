@@ -9,7 +9,7 @@ import (
 
 func newStoreWithMembers(t *testing.T, names ...string) (*Store, []*Member) {
 	t.Helper()
-	s, err := OpenStore(filepath.Join(t.TempDir(), "libre360.json"))
+	s, err := OpenStore(filepath.Join(t.TempDir(), "thereabouts.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestLowBatteryRespectsSwitchAndPause(t *testing.T) {
 }
 
 func TestEventsSurviveRestartAndResetCursor(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "libre360.json")
+	path := filepath.Join(t.TempDir(), "thereabouts.json")
 	s, _ := OpenStore(path)
 	inv, _ := s.CreateInvite("Alex", time.Hour)
 	alex, _, _ := s.Join(inv.Code, "")

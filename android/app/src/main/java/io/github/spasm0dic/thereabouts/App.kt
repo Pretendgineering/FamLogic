@@ -1,4 +1,4 @@
-package io.github.spasm0dic.libre360
+package io.github.spasm0dic.thereabouts
 
 import android.app.Application
 import org.osmdroid.config.Configuration
@@ -10,7 +10,7 @@ class App : Application() {
         // osmdroid: identify ourselves to tile servers (required by the OSM tile policy)
         // and keep the tile cache inside the app's own cache folder.
         Configuration.getInstance().apply {
-            userAgentValue = "Libre360-Android/${BuildConfig.VERSION_NAME}"
+            userAgentValue = "Thereabouts-Android/${BuildConfig.VERSION_NAME}"
             osmdroidBasePath = File(cacheDir, "osmdroid")
             osmdroidTileCache = File(cacheDir, "osmdroid/tiles")
         }
