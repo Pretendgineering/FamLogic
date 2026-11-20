@@ -1,8 +1,8 @@
 # Thereabouts
 
-*(formerly Libre360)*
+Simple alternative family tracker, mostly made for myself as a vibe coding project. I perpetually do not know what I'm doing.
 
-Self-host friendly alternative family tracker, mostly made for myself as a vibe coding project. I perpetually do not know what I'm doing.
+____________________
 
 Thereabouts does one thing: each phone reports where it is to **your own server**, and everyone in the family sees everyone else on an OpenStreetMap map. There are no accounts, no cloud, no ads, no Google Play Services, and no location history.
 
