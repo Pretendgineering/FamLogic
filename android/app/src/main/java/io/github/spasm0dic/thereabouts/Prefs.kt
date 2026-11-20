@@ -72,6 +72,10 @@ class Prefs(context: Context) {
     var sosPending: Boolean
         get() = sp.getBoolean("sos_pending", false)
         set(v) = sp.edit { putBoolean("sos_pending", v) }
+    /** The last SOS couldn't be sent at all (server too old); shown until dismissed. */
+    var sosFailed: Boolean
+        get() = sp.getBoolean("sos_failed", false)
+        set(v) = sp.edit { putBoolean("sos_failed", v) }
     var sosEndPending: Boolean
         get() = sp.getBoolean("sos_end_pending", false)
         set(v) = sp.edit { putBoolean("sos_end_pending", v) }

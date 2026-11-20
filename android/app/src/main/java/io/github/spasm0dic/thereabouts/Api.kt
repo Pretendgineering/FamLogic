@@ -48,7 +48,14 @@ data class Place(
 /** A circle you're in, and whether you share your location with it. */
 data class CircleInfo(val id: String, val name: String, val sharing: Boolean)
 
-data class ServerInfo(val name: String, val tileUrl: String, val tileAttribution: String)
+/** [features] lists what the server can do; null for servers too old to say (see [Api.inferFeatures]). */
+data class ServerInfo(
+    val name: String,
+    val tileUrl: String,
+    val tileAttribution: String,
+    val features: Set<String>? = null,
+    val version: String = "",
+)
 
 /** An alert from the server, e.g. someone's battery is low. */
 data class AppEvent(
@@ -87,6 +94,8 @@ data class MembersResponse(
     val circles: List<CircleInfo> = emptyList(),
     val places: List<Place> = emptyList(),
     val shareArrivals: Boolean = true,
+    /** What the server can do (e.g. "sos", "places"). */
+    val features: Set<String> = emptySet(),
     /** How many hours of trail you keep for others (0 = off). */
     val trailHours: Int = 0,
 )
@@ -107,7 +116,12 @@ class UnauthorizedException(val signedInElsewhere: Boolean) :
     IOException(if (signedInElsewhere) "You signed in on another device" else "This phone is no longer part of the family")
 
 /** The server answered with an error message meant for people. */
-class ApiException(val status: Int, message: String) : IOException(message)
+class ApiException(val status: Int, message: String) : IOException(message) {
+    /** The server doesn't have this endpoint at all: it's older than this app. */
+    val serverTooOld get() = message == OUTDATED_SERVER
+}
+
+const val OUTDATED_SERVER = "This needs a newer Thereabouts server. Ask your family's admin to update it."
 
 /**
  * Tiny client for the Thereabouts server API. Uses only what ships with Android
@@ -185,8 +199,25 @@ class Api(private val baseUrl: String, private val token: String = "") {
             places = o.optJSONArray("places")?.let { arr -> (0 until arr.length()).map { parsePlace(arr.getJSONObject(it)) } }
                 ?: emptyList(),
             shareArrivals = settings?.optBoolean("shareArrivals", true) ?: true,
+            features = inferFeatures(o),
             trailHours = settings?.optInt("trailHours", 0) ?: 0,
         )
+    }
+
+    /**
+     * What the server supports. Newer servers say so; for older ones it's worked out
+     * from what their replies contain.
+     */
+    private fun inferFeatures(o: JSONObject): Set<String> {
+        o.optJSONObject("server")?.optJSONArray("features")?.let { arr ->
+            return (0 until arr.length()).map { arr.getString(it) }.toSet()
+        }
+        return when {
+            o.has("places") -> setOf("accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails")
+            o.has("circles") -> setOf("accounts", "instant-alerts", "sos", "checkin", "circles")
+            o.optJSONObject("settings")?.has("hasPassword") == true -> setOf("accounts")
+            else -> emptySet()
+        }
     }
 
     private fun parsePlace(p: JSONObject) = Place(
@@ -327,7 +358,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 }
                 if (code >= 400) {
                     val msg = runCatching { JSONObject(text).getString("error") }.getOrNull()
-                        ?: "Server error ($code)"
+                        ?: if (code == 404 || code == 405) OUTDATED_SERVER else "Server error ($code)"
                     throw ApiException(code, msg)
                 }
                 if (text.isBlank()) JSONObject() else JSONObject(text)
@@ -364,6 +395,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
         name = o.optString("name", "Family"),
         tileUrl = o.optString("tileUrl", Prefs.DEFAULT_TILES),
         tileAttribution = o.optString("tileAttribution", Prefs.DEFAULT_ATTRIBUTION),
+        features = o.optJSONArray("features")?.let { arr -> (0 until arr.length()).map { arr.getString(it) }.toSet() },
+        version = o.optString("version"),
     )
 
     private fun parseMember(o: JSONObject): Member {

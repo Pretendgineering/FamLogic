@@ -12,8 +12,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.FilterChip
 import android.location.LocationManager
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,6 +27,7 @@ import kotlin.coroutines.resume
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.text.format.DateUtils
 import android.widget.Toast
@@ -134,6 +133,12 @@ fun MapScreen(
     var username by remember { mutableStateOf(prefs.username) }
     var sosActive by remember { mutableStateOf(prefs.sosActive) }
     var sosPending by remember { mutableStateOf(prefs.sosPending) }
+    var sosFailed by remember { mutableStateOf(prefs.sosFailed) }
+    // What the server can do; null until we've heard from it (show everything meanwhile).
+    var features by remember { mutableStateOf<Set<String>?>(null) }
+    var serverVersion by remember { mutableStateOf("") }
+    var outdatedDismissed by remember { mutableStateOf(false) }
+    fun supports(f: String) = features?.contains(f) ?: true
     var confirmOk by remember { mutableStateOf(false) }
     var showCheckIn by remember { mutableStateOf(false) }
     var circles by remember { mutableStateOf<List<CircleInfo>>(emptyList()) }
@@ -162,6 +167,8 @@ fun MapScreen(
             shareLowBattery = res.shareLowBattery
             places = res.places
             shareArrivals = res.shareArrivals
+            features = res.features
+            serverVersion = res.server.version
             trailHours = res.trailHours
             // Keep the selected person's trail up to date.
             val sel = res.members.find { it.id == selected }
@@ -234,6 +241,8 @@ fun MapScreen(
             while (true) {
                 delay(1_000)
                 sosPending = prefs.sosPending
+                sosFailed = prefs.sosFailed
+                sosActive = prefs.sosActive
                 if (Alerts.lastArrival != seenAlerts || LocationService.sosStateChanged != seenSos) {
                     seenAlerts = Alerts.lastArrival
                     seenSos = LocationService.sosStateChanged
@@ -317,6 +326,16 @@ fun MapScreen(
                 if (prefs.sosEndPending) api.sosEnd().also { prefs.sosEndPending = false }
                 sosPending = prefs.sosPending
                 refresh()
+            } catch (e: ApiException) {
+                if (e.serverTooOld) {
+                    prefs.sosPending = false
+                    prefs.sosEndPending = false
+                    prefs.sosActive = false
+                    prefs.sosFailed = true
+                    sosActive = false
+                    sosFailed = true
+                    Alerts.notifySosFailed(context)
+                }
             } catch (e: IOException) {
                 Toast.makeText(context, "Couldn't reach the server. Thereabouts will keep trying.", Toast.LENGTH_LONG).show()
             }
@@ -373,6 +392,7 @@ fun MapScreen(
             onCirclesChanged = { scope.launch { refresh() } },
             places = places,
             shareArrivals = shareArrivals,
+            serverVersion = serverVersion,
             trailHours = trailHours,
             onTrailHoursChange = { h ->
                 val before = trailHours
@@ -444,6 +464,12 @@ fun MapScreen(
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             // SOS banners come first: yours, then anyone else's.
+            if (sosFailed) {
+                SosBanner("SOS was NOT sent: your family's server is too old for SOS. Call or message someone directly.", "OK") {
+                    prefs.sosFailed = false
+                    sosFailed = false
+                }
+            }
             if (sosActive) {
                 SosBanner(
                     if (sosPending) "Sending SOS… Thereabouts keeps trying until it gets through."
@@ -461,6 +487,13 @@ fun MapScreen(
                     "Thereabouts needs your location to share it with your family.",
                     "Allow",
                 ) { askLocation.launch(PermissionState.foregroundPermissions()) }
+                features != null && !supports("places") && !outdatedDismissed -> Banner(
+                    "Your family's Thereabouts server is out of date, so some features (like " +
+                        listOf("sos" to "SOS", "checkin" to "check-ins", "circles" to "circles", "places" to "places")
+                            .filter { !supports(it.first) }.joinToString(", ") { it.second } +
+                        ") aren't available. Ask its admin to update it.",
+                    "OK",
+                ) { outdatedDismissed = true }
                 !sharing -> Banner("You're not sharing your location right now.", "Resume") { setSharing(true) }
                 hasPassword == false -> Banner(
                     "Set a password so you can sign back in on a new phone.",
@@ -511,7 +544,10 @@ fun MapScreen(
                 OsmMap(
                     members = shown,
                     places = if (circleFilter.isEmpty()) places else places.filter { it.circleId == circleFilter },
-                    onLongPress = { lat, lon -> placeEdit = PlaceEdit.Add(lat, lon) },
+                    onLongPress = { lat, lon ->
+                        if (supports("places")) placeEdit = PlaceEdit.Add(lat, lon)
+                        else Toast.makeText(context, OUTDATED_SERVER, Toast.LENGTH_LONG).show()
+                    },
                     onPlaceClick = { p -> placeEdit = PlaceEdit.Edit(p) },
                     trail = trail,
                     trailColor = members.find { it.id == selected }?.color ?: "#4363d8",
@@ -533,10 +569,10 @@ fun MapScreen(
                     Modifier.align(Alignment.BottomStart).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    if (prefs.showCheckInButton) {
+                    if (prefs.showCheckInButton && supports("checkin")) {
                         FilledTonalButton(onClick = { showCheckIn = true }) { Text("Check in") }
                     }
-                    if (prefs.showSosButton && !sosActive) {
+                    if (prefs.showSosButton && !sosActive && supports("sos")) {
                         HoldForSosButton(onTriggered = { sendSos(end = false) })
                     }
                 }
@@ -702,6 +738,7 @@ private fun SettingsScreen(
     onShareArrivalsChange: (Boolean) -> Unit,
     trailHours: Int?,
     onTrailHoursChange: (Int) -> Unit,
+    serverVersion: String,
     onPasswordSaved: (String) -> Unit,
     onBack: () -> Unit,
     onLeave: () -> Unit,
@@ -996,6 +1033,9 @@ private fun SettingsScreen(
 
             Text("Server", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
             Text(prefs.serverUrl, style = MaterialTheme.typography.bodyMedium)
+            if (serverVersion.isNotEmpty()) {
+                Text("Server version $serverVersion", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             OutlinedButton(onClick = { confirmLeave = true }, modifier = Modifier.padding(vertical = 8.dp)) {
                 Text("Leave family", color = MaterialTheme.colorScheme.error)
             }
@@ -1181,13 +1221,24 @@ private fun HoldForSosButton(onTriggered: () -> Unit) {
                     detectTapGestures(onPress = {
                         hint = true
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        // Timed with the real clock, not an animation: animations can be
+                        // sped up (or switched off) in Android's developer options, and the
+                        // 3-second hold must stay 3 seconds.
+                        var triggered = false
                         val fill = scope.launch {
-                            progress.animateTo(1f, tween(SOS_HOLD_MS, easing = LinearEasing))
+                            val start = SystemClock.uptimeMillis()
+                            while (true) {
+                                val p = ((SystemClock.uptimeMillis() - start).toFloat() / SOS_HOLD_MS).coerceAtMost(1f)
+                                progress.snapTo(p)
+                                if (p >= 1f) break
+                                delay(16)
+                            }
+                            triggered = true
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onTriggered()
                         }
                         tryAwaitRelease()
-                        if (progress.value < 1f) fill.cancel()
+                        if (!triggered) fill.cancel()
                         scope.launch { progress.snapTo(0f) }
                         scope.launch { delay(3_000); hint = false }
                     })

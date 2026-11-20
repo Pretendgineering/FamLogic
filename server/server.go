@@ -175,12 +175,17 @@ func toPublic(ms []Member) []publicMember {
 	return out
 }
 
+// serverFeatures tells apps what this server can do, so a newer app talking to
+// an older server can hide what won't work instead of failing.
+var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails"}
+
 func (s *Server) serverInfo() map[string]any {
 	return map[string]any{
 		"name":            s.cfg.FamilyName,
 		"version":         version,
 		"tileUrl":         s.cfg.TileURL,
 		"tileAttribution": s.cfg.TileAttribution,
+		"features":        serverFeatures,
 	}
 }
 

@@ -68,6 +68,18 @@ If the app logs say `can't write to /data`, the dataset isn't owned by user 568.
 
 Phones also need to reach it from outside your home. Tailscale is available as a TrueNAS app and is the simplest option (see below).
 
+### Updating the server
+
+New versions are published as `ghcr.io/spasm0dic/thereabouts:latest`. **Restarting the app does not download a newer `latest`**, so pull it first:
+
+```sh
+sudo docker pull ghcr.io/spasm0dic/thereabouts:latest
+```
+
+Then redeploy the app (on TrueNAS: **Apps → thereabouts → Stop**, then **Start**, or edit the app and save). To check which version is running, look under the family name at the top of the dashboard, or in the app under **Settings → Server**.
+
+If the app says the server is out of date (for example SOS or Check in are missing, or adding a place doesn't work), this is the fix.
+
 ### Settings (environment variables)
 
 | Variable | Default | What it does |

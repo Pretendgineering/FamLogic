@@ -221,6 +221,7 @@ async function refresh() {
   try {
     const [data, invites] = await Promise.all([api("GET", "/api/admin/members"), api("GET", "/api/admin/invites")]);
     $("#family-name").textContent = data.server.name;
+    $("#server-version").textContent = `Thereabouts server ${data.server.version}`;
     const sos = data.members.filter((m) => m.sosSince);
     document.title = (sos.length ? "🆘 SOS · " : "") + `${data.server.name} · Thereabouts`;
     renderSOS(sos);

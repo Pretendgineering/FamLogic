@@ -46,6 +46,12 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+      - name: Version label
+        id: ver
+        # e.g. "main-1a2b3c4" or "v0.8.0": shown in the dashboard and the app.
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then echo "v=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else echo "v=${GITHUB_REF_NAME}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"; fi
       - uses: docker/build-push-action@v6
         with:
           context: server
@@ -53,4 +59,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: VERSION=${{ steps.ver.outputs.v }}

@@ -249,3 +249,14 @@ func TestMigrateOldDataFile(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestServerAnnouncesFeatures(t *testing.T) {
+	e := newEnv(t)
+	_, info := e.do("GET", "/api/info", "", nil)
+	got := fmt.Sprint(info["features"])
+	for _, f := range []string{"sos", "checkin", "circles", "places", "trails"} {
+		if !strings.Contains(got, f) {
+			t.Fatalf("features %s missing %q", got, f)
+		}
+	}
+}

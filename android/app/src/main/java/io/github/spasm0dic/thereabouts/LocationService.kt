@@ -290,6 +290,21 @@ class LocationService : Service() {
                 } catch (e: UnauthorizedException) {
                     onSignedOut(e)
                     break
+                } catch (e: ApiException) {
+                    if (e.serverTooOld) {
+                        // Retrying can't help: say clearly that the SOS did NOT go out.
+                        prefs.sosPending = false
+                        prefs.sosEndPending = false
+                        prefs.sosActive = false
+                        prefs.sosFailed = true
+                        Alerts.notifySosFailed(this@LocationService)
+                        refreshNotification()
+                        sosStateChanged = SystemClock.elapsedRealtime()
+                        break
+                    }
+                    Log.i(TAG, "SOS not sent yet: ${e.message}")
+                    delay(backoff)
+                    backoff = (backoff * 2).coerceAtMost(30_000)
                 } catch (e: IOException) {
                     Log.i(TAG, "SOS not sent yet: ${e.message}")
                     delay(backoff)

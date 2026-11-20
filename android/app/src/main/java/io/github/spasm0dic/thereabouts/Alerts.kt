@@ -87,6 +87,14 @@ object Alerts {
         }
     }
 
+    /** Your own SOS couldn't be sent: say so loudly, so you try another way. */
+    fun notifySosFailed(context: Context) {
+        notify(
+            context, CHANNEL_SOS, 2_100_000, "SOS was NOT sent",
+            "Your family's Thereabouts server is too old for SOS. Call or message someone directly.", "", sos = true,
+        )
+    }
+
     private fun eventId(e: AppEvent) = (e.id % 1_000_000).toInt() + 1000
 
     /** One notification slot per person for SOS, so "is OK" replaces their SOS. */
