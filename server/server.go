@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -52,6 +53,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/me/password", s.device(s.handleSetPassword))
 	mux.HandleFunc("GET /api/members", s.device(s.handleMembers))
 	mux.HandleFunc("POST /api/location", s.device(s.handleLocation))
+	mux.HandleFunc("GET /api/events/wait", s.device(s.handleWaitEvents))
+	mux.HandleFunc("POST /api/sos", s.device(s.handleSOS))
+	mux.HandleFunc("POST /api/sos/end", s.device(s.handleSOSEnd))
+	mux.HandleFunc("POST /api/checkin", s.device(s.handleCheckIn))
 	mux.HandleFunc("PATCH /api/me", s.device(s.handlePatchMe))
 	mux.HandleFunc("POST /api/me", s.device(s.handlePatchMe)) // for clients that can't send PATCH
 	mux.HandleFunc("DELETE /api/me", s.device(s.handleLeave))
@@ -130,12 +135,14 @@ type publicMember struct {
 	Color  string    `json:"color"`
 	Paused bool      `json:"paused"`
 	Loc    *Location `json:"loc"`
+	// When this person's active SOS started (unix ms); absent if no SOS.
+	SOSSince int64 `json:"sosSince,omitempty"`
 }
 
 func toPublic(ms []Member) []publicMember {
 	out := make([]publicMember, len(ms))
 	for i, m := range ms {
-		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Paused: m.Paused, Loc: m.Loc}
+		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince}
 	}
 	return out
 }
@@ -452,14 +459,11 @@ func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Membe
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) handleLocation(w http.ResponseWriter, r *http.Request, me *Member) {
-	var l Location
-	if !readJSON(w, r, &l) {
-		return
-	}
+// cleanLocation checks a location from a phone and tidies odd values.
+// It returns false if the coordinates are impossible.
+func cleanLocation(l *Location) bool {
 	if math.IsNaN(l.Lat) || math.IsNaN(l.Lon) || l.Lat < -90 || l.Lat > 90 || l.Lon < -180 || l.Lon > 180 {
-		writeError(w, http.StatusBadRequest, "lat/lon out of range")
-		return
+		return false
 	}
 	now := time.Now().UnixMilli()
 	// Phones with a wrong clock shouldn't make a fix look like it's from the future.
@@ -476,6 +480,91 @@ func (s *Server) handleLocation(w http.ResponseWriter, r *http.Request, me *Memb
 		l.Speed = 0
 	}
 	l.Received = now
+	return true
+}
+
+// optionalLocation reads {"loc": {...}} from an SOS or check-in; nil if absent or invalid.
+func optionalLocation(l *Location) *Location {
+	if l == nil || (l.Lat == 0 && l.Lon == 0) || !cleanLocation(l) {
+		return nil
+	}
+	return l
+}
+
+func (s *Server) handleSOS(w http.ResponseWriter, r *http.Request, me *Member) {
+	var req struct {
+		Loc *Location `json:"loc"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	m, err := s.store.StartSOS(me.ID, optionalLocation(req.Loc))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	writeJSON(w, http.StatusOK, toPublic([]Member{*m})[0])
+}
+
+func (s *Server) handleSOSEnd(w http.ResponseWriter, r *http.Request, me *Member) {
+	m, err := s.store.EndSOS(me.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	writeJSON(w, http.StatusOK, toPublic([]Member{*m})[0])
+}
+
+func (s *Server) handleCheckIn(w http.ResponseWriter, r *http.Request, me *Member) {
+	var req struct {
+		Note string    `json:"note"`
+		Loc  *Location `json:"loc"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.store.CheckIn(me.ID, cleanNote(req.Note), optionalLocation(req.Loc)); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+const (
+	defaultWait = 50 * time.Second // under the 60s idle timeout of common reverse proxies
+	maxWait     = 5 * time.Minute
+)
+
+// handleWaitEvents answers as soon as there's a new alert for this phone, or
+// after ?wait= seconds (default 50) with nothing. Phones keep one of these open
+// in the background so alerts arrive within seconds without a push service.
+func (s *Server) handleWaitEvents(w http.ResponseWriter, r *http.Request, me *Member) {
+	since, ok := sinceParam(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "since is required")
+		return
+	}
+	wait := defaultWait
+	if v, err := strconv.Atoi(r.URL.Query().Get("wait")); err == nil && v >= 0 {
+		wait = min(time.Duration(v)*time.Second, maxWait)
+	}
+	// The server's normal write timeout is shorter than a long wait.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(wait + 15*time.Second))
+	ctx, cancel := context.WithTimeout(r.Context(), wait)
+	defer cancel()
+	events, cursor := s.store.WaitForEvents(ctx, me.ID, since)
+	writeJSON(w, http.StatusOK, map[string]any{"events": events, "cursor": cursor})
+}
+
+func (s *Server) handleLocation(w http.ResponseWriter, r *http.Request, me *Member) {
+	var l Location
+	if !readJSON(w, r, &l) {
+		return
+	}
+	if !cleanLocation(&l) {
+		writeError(w, http.StatusBadRequest, "lat/lon out of range")
+		return
+	}
 	// While paused, a fix that was still in flight is dropped (the store ignores it).
 	// The app un-pauses explicitly with PATCH /api/me.
 	if err := s.store.UpdateLocation(me.ID, l); err != nil {

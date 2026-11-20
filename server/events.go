@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Alerts ("events") are kept briefly on the server and picked up by phones the
 // next time they talk to it, either when sending their location or when the map
@@ -8,6 +11,9 @@ import "time"
 
 const (
 	EventBatteryLow = "battery_low"
+	EventSOS        = "sos"     // someone pressed SOS
+	EventSOSEnd     = "sos_end" // ...and later said they're OK
+	EventCheckIn    = "checkin" // "I'm here", with an optional note
 
 	maxEvents = 500
 	eventTTL  = 48 * time.Hour
@@ -29,6 +35,11 @@ type Event struct {
 	Name     string `json:"name"`
 	Battery  int    `json:"battery,omitempty"` // battery_low: the level when it happened
 	Level    int    `json:"level,omitempty"`   // battery_low: which alert level was crossed
+	Note     string `json:"note,omitempty"`    // checkin: optional message
+	// Where it happened (sos, checkin), when the phone knew.
+	Lat float64 `json:"lat,omitempty"`
+	Lon float64 `json:"lon,omitempty"`
+	Acc float64 `json:"acc,omitempty"`
 }
 
 // addEventLocked records an event. Caller must hold the write lock and save.
@@ -46,6 +57,35 @@ func (s *Store) addEventLocked(e Event) {
 		drop++
 	}
 	s.d.Events = s.d.Events[drop:]
+
+	// Wake everyone waiting in WaitForEvents.
+	close(s.changed)
+	s.changed = make(chan struct{})
+}
+
+// eventsChanged returns a channel that is closed when the next event is added.
+func (s *Store) eventsChanged() <-chan struct{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.changed
+}
+
+// WaitForEvents is EventsFor, but if there's nothing new it waits (up to the
+// context's deadline) for something to happen. Phones keep one of these open
+// so alerts such as SOS arrive within seconds, with no push service needed.
+func (s *Store) WaitForEvents(ctx context.Context, memberID string, since int64) ([]Event, int64) {
+	for {
+		changed := s.eventsChanged() // grab before checking, so nothing slips between
+		events, cursor := s.EventsFor(memberID, since)
+		if len(events) > 0 || since < 0 || since > cursor {
+			return events, cursor
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return events, cursor
+		}
+	}
 }
 
 // checkBatteryLocked raises low-battery alerts: once per level per discharge,

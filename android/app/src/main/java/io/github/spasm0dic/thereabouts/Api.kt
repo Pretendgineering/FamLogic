@@ -22,6 +22,8 @@ data class Member(
     val color: String,
     val paused: Boolean,
     val loc: MemberLocation?,
+    /** When this person's active SOS started (unix ms), or 0 if none. */
+    val sosSince: Long = 0,
 )
 
 data class ServerInfo(val name: String, val tileUrl: String, val tileAttribution: String)
@@ -35,6 +37,11 @@ data class AppEvent(
     val battery: Int,
     val level: Int,
     val time: Long,
+    /** Check-in note. */
+    val note: String = "",
+    /** Where it happened (SOS, check-in), or 0/0 if unknown. */
+    val lat: Double = 0.0,
+    val lon: Double = 0.0,
 )
 
 /**
@@ -169,13 +176,46 @@ class Api(private val baseUrl: String, private val token: String = "") {
         request("DELETE", "/api/me")
     }
 
-    private suspend fun request(method: String, path: String, body: JSONObject? = null): JSONObject =
+    /**
+     * Waits (up to [waitSeconds]) for new alerts. The server answers the moment something
+     * happens, so keeping one of these open gets alerts within seconds without a push service.
+     */
+    suspend fun waitEvents(since: Long, waitSeconds: Int): EventBatch? =
+        parseEvents(
+            request("GET", "/api/events/wait?since=$since&wait=$waitSeconds", readTimeoutMs = (waitSeconds + 25) * 1000),
+            since,
+        )
+
+    /** Raises (or re-sends) an SOS, with where the phone is if known. */
+    suspend fun sos(loc: android.location.Location?) {
+        request("POST", "/api/sos", JSONObject().put("loc", loc?.let { locationJson(it) }))
+    }
+
+    /** Ends this person's SOS and tells everyone they're OK. */
+    suspend fun sosEnd() {
+        request("POST", "/api/sos/end", JSONObject())
+    }
+
+    /** "I'm here", with an optional note. */
+    suspend fun checkIn(note: String, loc: android.location.Location?) {
+        request("POST", "/api/checkin", JSONObject().put("note", note).put("loc", loc?.let { locationJson(it) }))
+    }
+
+    private fun locationJson(l: android.location.Location) = JSONObject()
+        .put("lat", l.latitude).put("lon", l.longitude).put("acc", l.accuracy.toDouble()).put("time", l.time)
+
+    private suspend fun request(
+        method: String,
+        path: String,
+        body: JSONObject? = null,
+        readTimeoutMs: Int = 20_000,
+    ): JSONObject =
         withContext(Dispatchers.IO) {
             val conn = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = method
                 conn.connectTimeout = 15_000
-                conn.readTimeout = 20_000
+                conn.readTimeout = readTimeoutMs
                 conn.setRequestProperty("Accept", "application/json")
                 conn.setRequestProperty("User-Agent", "Thereabouts-Android/${BuildConfig.VERSION_NAME}")
                 if (token.isNotEmpty()) conn.setRequestProperty("Authorization", "Bearer $token")
@@ -216,6 +256,9 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 battery = e.optInt("battery", -1),
                 level = e.optInt("level", 0),
                 time = e.optLong("time", 0),
+                note = e.optString("note"),
+                lat = e.optDouble("lat", 0.0),
+                lon = e.optDouble("lon", 0.0),
             )
         }
         return EventBatch(events, o.getLong("cursor"), since)
@@ -234,6 +277,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             name = o.optString("name", "?"),
             color = o.optString("color", "#4363d8"),
             paused = o.optBoolean("paused", false),
+            sosSince = o.optLong("sosSince", 0),
             loc = l?.let {
                 MemberLocation(
                     lat = it.getDouble("lat"),

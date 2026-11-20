@@ -18,6 +18,7 @@ import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -28,20 +29,27 @@ import androidx.core.location.LocationManagerCompat
 import androidx.core.location.LocationRequestCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.IOException
 
 /**
- * Foreground service that listens for location fixes and sends them to the server.
+ * The app's background service. While you're signed in it:
  *
- * It uses Android's own LocationManager (not Google Play Services), so it also works
- * on de-Googled phones. Where the phone offers a "fused" provider (Android 12+) we use
- * that, because it picks GPS/Wi-Fi/cell for good battery life. Otherwise we listen to
- * the network and GPS providers and send at most one fix per interval.
+ *  - shares your location (unless you paused sharing), using Android's own
+ *    LocationManager rather than Google Play Services, so it also works on
+ *    de-Googled phones;
+ *  - keeps a connection open to your server so alerts (SOS above all) arrive
+ *    within seconds, even with the app closed and even while your own sharing is
+ *    paused. No push service or extra app is involved;
+ *  - sends your SOS / "I'm OK" and keeps retrying until the server has it, and
+ *    while an SOS is active shares your location every 15 seconds.
  */
 class LocationService : Service() {
 
@@ -54,6 +62,9 @@ class LocationService : Service() {
     private var lastSent: Location? = null
     private var lastFix: Location? = null // newest fix seen, sent or not
     private var lastBattery = -1
+    private var locating = false
+    private var alertsJob: Job? = null
+    private var sosJob: Job? = null
 
     private val listener = LocationListenerCompat { onFix(it) }
 
@@ -77,22 +88,28 @@ class LocationService : Service() {
         prefs = Prefs(this)
         lm = getSystemService(LOCATION_SERVICE) as LocationManager
         isRunning = true
-        Alerts.ensureChannel(this)
+        Alerts.ensureChannels(this)
         ContextCompat.registerReceiver(
             this, batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED,
         )
     }
 
+    @SuppressLint("InlinedApi") // the type constants are plain ints; ServiceCompat ignores them where unsupported
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!prefs.joined || !prefs.sharing || !hasLocationPermission(this)) {
+        val fromBackground = intent?.getBooleanExtra(EXTRA_FROM_BACKGROUND, false) ?: false
+        val share = prefs.joined && prefs.sharing && hasLocationPermission(this) &&
+            (!fromBackground || hasBackgroundPermission(this))
+        if (!needed(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Android 14+ wants to know why we run: location sharing and/or staying
+        // connected for incoming alerts ("remote messaging").
+        var types = 0
+        if (share) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION // ignored before Android 10
+        if (Build.VERSION.SDK_INT >= 34) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
         try {
-            ServiceCompat.startForeground(
-                this, NOTIFICATION_ID, buildNotification(),
-                if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0,
-            )
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), types)
         } catch (e: Exception) {
             // E.g. Android refused because we were started from the background without
             // "Allow all the time". The app will start us again when it's opened.
@@ -100,29 +117,37 @@ class LocationService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        startUpdates()
+        if (share) startUpdates() else stopUpdates()
+        if (prefs.instantAlerts) startAlertsLoop() else alertsJob?.cancel()
+        startSosWork()
         return START_STICKY
     }
 
     @SuppressLint("MissingPermission") // removing updates is harmless; guarded anyway
     override fun onDestroy() {
-        runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
+        stopUpdates()
         runCatching { unregisterReceiver(batteryReceiver) }
         scope.cancel()
         isRunning = false
         super.onDestroy()
     }
 
+    // ---- location sharing ----
+
+    private fun intervalMs() = if (prefs.sosActive) SOS_INTERVAL_MS else prefs.intervalMinutes * 60_000L
+
     @SuppressLint("MissingPermission") // checked in onStartCommand
     private fun startUpdates() {
         runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
-        val intervalMs = prefs.intervalMinutes * 60_000L
+        locating = true
+        val intervalMs = intervalMs()
         // "Balanced" lets the phone use Wi-Fi/cell positioning, which is cheap on battery.
         // But Android's built-in fused provider only turns on GPS for high-accuracy requests,
         // so on phones with no network location (e.g. GrapheneOS without it enabled) a
-        // balanced request would never produce a fix. Ask for GPS in that case.
+        // balanced request would never produce a fix. Ask for GPS in that case, and always
+        // during an SOS, when being findable matters more than battery.
         val hasNetworkLocation = runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
-        val quality = if (hasNetworkLocation) LocationRequestCompat.QUALITY_BALANCED_POWER_ACCURACY
+        val quality = if (hasNetworkLocation && !prefs.sosActive) LocationRequestCompat.QUALITY_BALANCED_POWER_ACCURACY
         else LocationRequestCompat.QUALITY_HIGH_ACCURACY
         val request = LocationRequestCompat.Builder(intervalMs)
             .setQuality(quality)
@@ -144,18 +169,31 @@ class LocationService : Service() {
         }
 
         // Send something right away so others see us without waiting a whole interval.
-        providers.mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
+        newestLastKnown()?.let { onFix(it, force = true) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun stopUpdates() {
+        if (!locating) return
+        locating = false
+        runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun newestLastKnown(): Location? {
+        if (!hasLocationPermission(this)) return null
+        return lm.allProviders.mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
             .maxByOrNull { it.time }
-            ?.let { onFix(it, force = true) }
     }
 
     private fun onFix(loc: Location, force: Boolean = false) {
         if (lastFix.let { it == null || loc.time >= it.time }) lastFix = loc
-        val intervalMs = prefs.intervalMinutes * 60_000L
+        val intervalMs = intervalMs()
         val sinceLast = SystemClock.elapsedRealtime() - lastSentElapsed
         val movedFar = lastSent?.let { it.distanceTo(loc) > 250 } ?: true
         // Several providers may report; send at most once per interval unless we moved a lot.
-        if (!force && lastSentElapsed != 0L && sinceLast < intervalMs - 15_000 && !movedFar) return
+        val slack = if (prefs.sosActive) 3_000 else 15_000
+        if (!force && lastSentElapsed != 0L && sinceLast < intervalMs - slack && !movedFar) return
         upload(loc)
     }
 
@@ -181,11 +219,93 @@ class LocationService : Service() {
         }
     }
 
+    // ---- instant alerts ----
+
+    /**
+     * Keeps a "tell me when something happens" request open to the server. It answers
+     * the moment there's an alert (or after ~50 s with nothing), and we ask again.
+     */
+    private fun startAlertsLoop() {
+        if (alertsJob?.isActive == true) return
+        alertsJob = scope.launch(Dispatchers.IO) {
+            var backoff = MIN_BACKOFF_MS
+            while (isActive) {
+                try {
+                    val batch = Api(prefs.serverUrl, prefs.token).waitEvents(prefs.eventCursor, WAIT_SECONDS)
+                    // Make sure the phone stays awake long enough to show the alert.
+                    withWakeLock { Alerts.handle(this@LocationService, batch) }
+                    backoff = MIN_BACKOFF_MS
+                } catch (e: UnauthorizedException) {
+                    withContext(Dispatchers.Main) { onSignedOut(e) }
+                    break
+                } catch (e: ApiException) {
+                    if (e.status == 404) {
+                        // A server from before instant alerts: alerts still come with location replies.
+                        Log.i(TAG, "Server doesn't support instant alerts")
+                        break
+                    }
+                    delay(backoff)
+                    backoff = (backoff * 2).coerceAtMost(MAX_BACKOFF_MS)
+                } catch (e: IOException) {
+                    // Offline, server restarting, network switching: try again soon.
+                    delay(backoff)
+                    backoff = (backoff * 2).coerceAtMost(MAX_BACKOFF_MS)
+                }
+            }
+        }
+    }
+
+    private inline fun withWakeLock(block: () -> Unit) {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Thereabouts:alert")
+        wl.acquire(10_000)
+        try {
+            block()
+        } finally {
+            if (wl.isHeld) wl.release()
+        }
+    }
+
+    // ---- SOS ----
+
+    /** Sends a pending SOS / "I'm OK", retrying until the server confirms. */
+    private fun startSosWork() {
+        if (sosJob?.isActive == true) return
+        if (!prefs.sosPending && !prefs.sosEndPending) return
+        sosJob = scope.launch {
+            var backoff = 2_000L
+            while (isActive && (prefs.sosPending || prefs.sosEndPending)) {
+                try {
+                    val api = Api(prefs.serverUrl, prefs.token)
+                    if (prefs.sosPending) {
+                        api.sos(lastFix ?: newestLastKnown())
+                        prefs.sosPending = false
+                    }
+                    if (prefs.sosEndPending) {
+                        api.sosEnd()
+                        prefs.sosEndPending = false
+                    }
+                    refreshNotification()
+                    sosStateChanged = SystemClock.elapsedRealtime()
+                } catch (e: UnauthorizedException) {
+                    onSignedOut(e)
+                    break
+                } catch (e: IOException) {
+                    Log.i(TAG, "SOS not sent yet: ${e.message}")
+                    delay(backoff)
+                    backoff = (backoff * 2).coerceAtMost(30_000)
+                }
+            }
+        }
+    }
+
     /** The server no longer accepts this phone: removed by an admin, or signed in elsewhere. */
     private fun onSignedOut(e: UnauthorizedException) {
         prefs.signedOut(e)
         stopSelf()
     }
+
+    // ---- battery ----
 
     private fun batteryState(): Pair<Int, Boolean> {
         val i = ContextCompat.registerReceiver(
@@ -205,11 +325,17 @@ class LocationService : Service() {
         return pct to charging
     }
 
+    // ---- the ongoing notification ----
+
+    private fun refreshNotification() {
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
+    }
+
     private fun buildNotification(): Notification {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Location sharing", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Shown while your location is being shared"
+                description = "Shown while Thereabouts is running"
                 setShowBadge(false)
             },
         )
@@ -218,10 +344,16 @@ class LocationService : Service() {
             PendingIntent.FLAG_IMMUTABLE,
         )
         val family = prefs.familyName.ifEmpty { "your family" }
+        val (title, text) = when {
+            prefs.sosActive && prefs.sosPending -> "Sending SOS…" to "Keeps trying until your family's server gets it"
+            prefs.sosActive -> "SOS active" to "Sharing your location every 15 seconds. Open the app to say you're OK."
+            prefs.sharing -> "Sharing location with $family" to "Tap to open the map or pause sharing"
+            else -> "Location sharing paused" to "You'll still get SOS and other alerts"
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Sharing location with $family")
-            .setContentText("Tap to open the map or pause sharing")
+            .setContentTitle(title)
+            .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -233,10 +365,19 @@ class LocationService : Service() {
         private const val TAG = "Thereabouts"
         private const val CHANNEL_ID = "sharing"
         private const val NOTIFICATION_ID = 1
+        private const val EXTRA_FROM_BACKGROUND = "from_background"
+        private const val SOS_INTERVAL_MS = 15_000L
+        private const val WAIT_SECONDS = 50 // under the 60 s idle timeout of common reverse proxies
+        private const val MIN_BACKOFF_MS = 5_000L
+        private const val MAX_BACKOFF_MS = 60_000L
 
         @Volatile
         var isRunning = false
             private set
+
+        /** Bumped when an SOS / "I'm OK" reaches the server, so the open map can update. */
+        @Volatile
+        var sosStateChanged = 0L
 
         fun hasLocationPermission(ctx: Context) =
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -246,14 +387,29 @@ class LocationService : Service() {
             Build.VERSION.SDK_INT < 29 ||
                 ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-        /** Start (or restart, e.g. after the interval changed) if the person wants to share. */
-        fun start(ctx: Context) {
+        /** Whether the service has anything to do: share location, listen for alerts or send an SOS. */
+        fun needed(ctx: Context): Boolean {
             val prefs = Prefs(ctx)
-            if (!prefs.joined || !prefs.sharing || !hasLocationPermission(ctx)) return
+            if (!prefs.joined) return false
+            return (prefs.sharing && hasLocationPermission(ctx)) || prefs.instantAlerts ||
+                prefs.sosPending || prefs.sosEndPending
+        }
+
+        /**
+         * Starts the service, or tells a running one to pick up changed settings (interval,
+         * pause, SOS). Stops it if there's nothing to do.
+         */
+        fun start(ctx: Context, fromBackground: Boolean = false) {
+            if (!needed(ctx)) {
+                stop(ctx)
+                return
+            }
             try {
-                ContextCompat.startForegroundService(ctx, Intent(ctx, LocationService::class.java))
+                ContextCompat.startForegroundService(
+                    ctx, Intent(ctx, LocationService::class.java).putExtra(EXTRA_FROM_BACKGROUND, fromBackground),
+                )
             } catch (e: Exception) {
-                Log.w(TAG, "Could not start location service", e)
+                Log.w(TAG, "Could not start the background service", e)
             }
         }
 

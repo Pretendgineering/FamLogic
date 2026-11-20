@@ -40,6 +40,9 @@ type Member struct {
 
 	// Sign-in (see accounts.go). Members who joined before accounts existed have
 	// neither until they set a password in the app.
+	// SOS: set while this person has an SOS active, until they say they're OK.
+	SOSSince int64 `json:"sosSince,omitempty"`
+
 	Username     string `json:"username,omitempty"`
 	PasswordHash string `json:"passwordHash,omitempty"`
 	LastSignIn   int64  `json:"lastSignIn,omitempty"`
@@ -83,9 +86,10 @@ type data struct {
 // A family has a handful of members, so this is plenty and means
 // there is no database to set up, back up or migrate.
 type Store struct {
-	mu   sync.RWMutex
-	path string
-	d    data
+	mu      sync.RWMutex
+	path    string
+	d       data
+	changed chan struct{} // closed and replaced whenever an event is added
 }
 
 var palette = []string{"#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6", "#9a6324", "#469990", "#808000"}
@@ -93,7 +97,7 @@ var palette = []string{"#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#
 var ErrNotFound = errors.New("not found")
 
 func OpenStore(path string) (*Store, error) {
-	s := &Store{path: path}
+	s := &Store{path: path, changed: make(chan struct{})}
 	b, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):

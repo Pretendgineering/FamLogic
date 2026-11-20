@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
     // Which screen is showing. Kept here so a deep link can switch to setup.
     private var joined by mutableStateOf(false)
     private var invite by mutableStateOf<Pair<String, String>?>(null) // server, code from an invite link
+    private var focusMember by mutableStateOf<String?>(null) // from tapping an alert about someone
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +42,8 @@ class MainActivity : ComponentActivity() {
                     MapScreen(
                         prefs = prefs,
                         onLeft = { joined = false },
+                        focusMember = focusMember,
+                        onFocusHandled = { focusMember = null },
                     )
                 } else {
                     SetupScreen(
@@ -69,6 +72,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        intent?.getStringExtra(Alerts.EXTRA_FOCUS_MEMBER)?.let { focusMember = it }
         val data: Uri = intent?.data ?: return
         // libre360:// is from before the project was renamed; old invite links still work.
         if (data.scheme !in setOf("thereabouts", "libre360") || data.host != "join") return

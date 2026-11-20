@@ -8,7 +8,8 @@ import android.content.Intent
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
-        // Starting a location service from the background needs "Allow all the time".
-        if (LocationService.hasBackgroundPermission(context)) LocationService.start(context)
+        // The service decides what it may do from the background: sharing location needs
+        // "Allow all the time"; listening for alerts doesn't.
+        LocationService.start(context, fromBackground = true)
     }
 }

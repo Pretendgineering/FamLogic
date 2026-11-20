@@ -58,6 +58,38 @@ class Prefs(context: Context) {
         get() = sp.getInt("low_battery_threshold", 15)
         set(v) = sp.edit { putInt("low_battery_threshold", v) }
 
+    /** Feature: keep a connection to the server so alerts (SOS above all) arrive in seconds. */
+    var instantAlerts: Boolean
+        get() = sp.getBoolean("instant_alerts", true)
+        set(v) = sp.edit { putBoolean("instant_alerts", v) }
+
+    /** This person has an SOS active (until they say they're OK). */
+    var sosActive: Boolean
+        get() = sp.getBoolean("sos_active", false)
+        set(v) = sp.edit { putBoolean("sos_active", v) }
+
+    /** An SOS / "I'm OK" that still has to reach the server (the service keeps retrying). */
+    var sosPending: Boolean
+        get() = sp.getBoolean("sos_pending", false)
+        set(v) = sp.edit { putBoolean("sos_pending", v) }
+    var sosEndPending: Boolean
+        get() = sp.getBoolean("sos_end_pending", false)
+        set(v) = sp.edit { putBoolean("sos_end_pending", v) }
+
+    /** Features: buttons on the map and which alerts to get. */
+    var showSosButton: Boolean
+        get() = sp.getBoolean("show_sos", true)
+        set(v) = sp.edit { putBoolean("show_sos", v) }
+    var notifySos: Boolean
+        get() = sp.getBoolean("notify_sos", true)
+        set(v) = sp.edit { putBoolean("notify_sos", v) }
+    var showCheckInButton: Boolean
+        get() = sp.getBoolean("show_checkin", true)
+        set(v) = sp.edit { putBoolean("show_checkin", v) }
+    var notifyCheckIn: Boolean
+        get() = sp.getBoolean("notify_checkin", true)
+        set(v) = sp.edit { putBoolean("notify_checkin", v) }
+
     /** This person's username, kept after signing out so the sign-in form can be pre-filled. */
     var username: String
         get() = sp.getString("username", "") ?: ""
@@ -76,6 +108,7 @@ class Prefs(context: Context) {
     /** Forgets this phone's sign-in. The server address and username stay, for signing in again. */
     fun clearMembership() = sp.edit {
         remove("token"); remove("member_id"); remove("family"); remove("event_cursor"); putBoolean("sharing", true)
+        remove("sos_active"); remove("sos_pending"); remove("sos_end_pending")
     }
 
     /** The server stopped accepting this phone; remember why so the sign-in screen can explain. */

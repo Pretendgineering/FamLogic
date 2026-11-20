@@ -16,7 +16,7 @@ The phone already contacts the server every interval to send its location. The r
 
 - **Works on every phone** with no Google services and no push server.
 - **Latency** is up to one interval. That's fine for arrivals and battery, but not ideal for SOS.
-- **Optional instant delivery:** add [UnifiedPush](https://unifiedpush.org) support (for example with a self-hosted ntfy) for people who want SOS to arrive within seconds. When it isn't set up, the normal mechanism is used.
+- **Instant delivery (0.5.0):** the app's background service also keeps a connection open to the server ("long polling"), which answers the moment there's a new alert. Alerts arrive within seconds, with no Google services and no extra app or server to set up. Location replies still carry alerts too, as a fallback.
 
 ## Features
 
@@ -63,7 +63,7 @@ The phone already contacts the server every interval to send its location. The r
   - "Notify me when someone's battery is low" (on the phone)
 - Choice of threshold (15% or 10%). One alert per discharge, so no repeats until the phone has been back above 20%. No alerts while charging.
 - The phone sends an update the moment it crosses a level, so the alert doesn't wait for the next interval.
-- **Known limit:** while your own sharing is paused, the background service is off, so alerts only show when you open the app. UnifiedPush (item 7) would remove this.
+- Since 0.5.0, alerts also reach you while your own sharing is paused: the background service stays connected for alerts only.
 
 ### 6. QR code invites
 - The dashboard shows a QR code next to each invite link. Scanning it with the phone's camera opens the app, the same as tapping the link.
@@ -102,14 +102,14 @@ Make adding someone a single copy-paste. The dashboard's **Copy invite** button 
 - The invite page (`/join/<code>`) shows the same download link, so a link opened on a phone without the app installed still makes sense.
 - Wait until the app is in a store, so the message doesn't send people to sideload an APK.
 
-## Suggested order
+## Build order
 
 1. ✅ **Delivery mechanism plus low-battery alerts** (0.2.0).
-2. **Check-in and SOS**, which use the same mechanism.
-3. **Circles** (medium priority). This comes before places and trails, which depend on it.
-4. **Places and geofences** with arrive/leave alerts.
-5. **Trail / history.**
-6. **QR code invites.** Small and independent, so it can slot in anywhere.
-7. **Optional UnifiedPush** for instant SOS.
+2. ✅ **Accounts:** sign back in with a username and password (0.4.0).
+3. **Instant alerts, SOS and check-in.** The app's background service keeps a connection open to your own server, so alerts arrive in seconds without Google services or extra apps. This replaces the "optional UnifiedPush" idea: nobody has to install or host anything extra.
+4. **Circles.** These change who sees whom, so they come before places and trails, which belong to a circle.
+5. **QR code invites.** Small; done alongside the circle invite changes.
+6. **Places and geofences** with arrive/leave alerts.
+7. **Trail / history** (opt-in).
 8. **Profile pictures** (later).
 9. **Shareable invite message** with an app download link (once the app is on F-Droid or IzzyOnDroid).

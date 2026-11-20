@@ -22,7 +22,9 @@ Thereabouts does one thing: each phone reports where it is to **your own server*
 | Battery | Updates every 1/2/5/15 minutes (your choice) using balanced-power location. |
 | Joining | The admin creates a one-time invite link. The person taps it on their phone, and the app opens with everything filled in. They choose a username and password. |
 | New phone? | Sign in with your username and password. You're back as yourself, and your old phone is signed out (the latest sign-in wins). Forgot your password? The admin sends a one-time **Reset sign-in** link. |
-| Alerts | Low-battery alerts for family members, each switchable in the app. They arrive with normal location updates, so no push service is needed. |
+| SOS | Hold the SOS button for 3 seconds. Everyone gets an alarm-style alert within seconds, and your location is shared every 15 seconds until you say you're OK. |
+| Check-in | One tap sends "I'm here" with your location and an optional note. |
+| Alerts | SOS, check-ins and low battery, each switchable in the app. They arrive **within seconds** over a connection the app keeps to your own server: no Google services, no push service, nothing extra to install. |
 | Reliability | Restarts after reboot. The app walks you through "Allow all the time" and the battery-saver exemption. |
 | License | GPLv3. All dependencies are open source. |
 
@@ -90,6 +92,8 @@ Phones need to reach the server from anywhere, not just your Wi-Fi.
   ```
   Don't put plain `http://` on the public internet: the app will warn you if you try.
 
+  Instant alerts keep a request open for up to 50 seconds. That fits the common 60-second default of Nginx, Nginx Proxy Manager, Traefik and Cloudflare. If you've set your proxy's read/idle timeout below 60 seconds, raise it for this site (for example `proxy_read_timeout 90s;` in Nginx).
+
 ## 2. Install the app
 
 Download `thereabouts.apk` from the [Releases](../../releases) page (or from the latest run of the **Android** workflow under the Actions tab) and install it. Android will ask you to allow installing from your browser or file manager.
@@ -119,7 +123,11 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 
 - **Map**: everyone's latest position. Faded pins mean the location is more than 30 minutes old.
 - **List**: last seen, battery, how far away. Tap a person to zoom to them. **Directions** opens your maps app (OsmAnd, Organic Maps, Google Maps...).
-- **Pause sharing** (Settings): your pin disappears for everyone, who see "Location sharing paused" instead. Resume any time.
+- **Pause sharing** (Settings): your pin disappears for everyone, who see "Location sharing paused" instead. Resume any time. You still get SOS and other alerts while paused.
+- **SOS**: press and hold the red **SOS** button for 3 seconds. Everyone else gets an alert that keeps ringing until they look, and a red banner on their map. Your location updates every 15 seconds, and the app keeps retrying until the alert gets through. Tap **I'm OK** when you're safe. Pressing SOS also turns sharing back on if you'd paused it.
+  - So an SOS always rings: in Settings → Features → SOS, tap **Let SOS ring in Do Not Disturb** and turn on "Override Do Not Disturb".
+- **Check in**: tap **Check in** to send "I'm here" with your location and an optional note ("Made it home").
+- **Features** (Settings): each feature has its own on/off switches, for example to hide the SOS or Check in button, or to stop a kind of alert.
 - **Leave family** (Settings): removes you from the server.
 
 ## Upgrading from Libre360
@@ -165,6 +173,9 @@ Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/there
 | `POST /api/join` `{code, name, username, password}` | invite code | Join, or redeem a reset link. Returns a device token |
 | `POST /api/signin` `{username, password}` | password | Sign this phone in. The previous phone is signed out |
 | `POST /api/me/password` `{currentPassword, newPassword, username?}` | `Bearer <token>` | Set or change your password |
+| `GET /api/events/wait?since=<cursor>&wait=50` | `Bearer <token>` | Waits until there's a new alert (or `wait` seconds), then returns `{events, cursor}`. The app keeps one open for instant alerts |
+| `POST /api/sos` `{loc?}`, `POST /api/sos/end` | `Bearer <token>` | Raise or end an SOS |
+| `POST /api/checkin` `{note, loc?}` | `Bearer <token>` | Check in |
 | `POST /api/location?since=<cursor>` `{lat, lon, acc, speed, battery, charging, time}` | `Bearer <token>` | Report a fix; the reply carries new alerts `{events, cursor}` |
 | `GET /api/members?since=<cursor>` | `Bearer <token>` | Everyone's latest position, map settings, your feature settings, and new alerts |
 | `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?}` | `Bearer <token>` | Rename yourself / pause / feature switches |

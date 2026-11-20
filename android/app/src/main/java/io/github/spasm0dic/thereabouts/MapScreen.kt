@@ -6,6 +6,22 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.location.Location
+import android.location.LocationManager
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -86,7 +102,7 @@ private const val REFRESH_MS = 15_000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
+fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onFocusHandled: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -105,6 +121,10 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
     var shareLowBattery by remember { mutableStateOf<Boolean?>(null) } // null until the server tells us
     var hasPassword by remember { mutableStateOf<Boolean?>(null) } // null until the server tells us
     var username by remember { mutableStateOf(prefs.username) }
+    var sosActive by remember { mutableStateOf(prefs.sosActive) }
+    var sosPending by remember { mutableStateOf(prefs.sosPending) }
+    var confirmOk by remember { mutableStateOf(false) }
+    var showCheckIn by remember { mutableStateOf(false) }
     // Bumped every minute so "5 min ago" labels stay current.
     var tick by remember { mutableIntStateOf(0) }
 
@@ -133,8 +153,20 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
             error = null
             // Keep the server in step with the pause switch (e.g. if pausing happened offline).
             res.members.find { it.id == res.me }?.let { me ->
+                // SOS un-pauses sharing on the server; follow it here.
+                if (me.sosSince > 0 && !prefs.sharing) {
+                    prefs.sharing = true
+                    sharing = true
+                }
                 if (me.paused == prefs.sharing) Api(prefs.serverUrl, prefs.token).setPaused(!prefs.sharing)
+                // Once nothing is waiting to be sent, the server knows best whether our SOS is active.
+                if (!prefs.sosPending && !prefs.sosEndPending && prefs.sosActive != (me.sosSince > 0)) {
+                    prefs.sosActive = me.sosSince > 0
+                    LocationService.start(context) // switch between 15-second and normal updates
+                }
             }
+            sosActive = prefs.sosActive
+            sosPending = prefs.sosPending
             if (!fittedOnce && members.any { it.loc != null }) {
                 fittedOnce = true
                 camera = CameraCommand.FitAll(++cameraSeq)
@@ -158,11 +190,35 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
             }
         }
     }
+    // Refresh straight away when an alert arrives or an SOS gets through, instead of
+    // waiting for the next poll.
+    LaunchedEffect(Unit) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var seenAlerts = Alerts.lastArrival
+            var seenSos = LocationService.sosStateChanged
+            while (true) {
+                delay(1_000)
+                sosPending = prefs.sosPending
+                if (Alerts.lastArrival != seenAlerts || LocationService.sosStateChanged != seenSos) {
+                    seenAlerts = Alerts.lastArrival
+                    seenSos = LocationService.sosStateChanged
+                    refresh()
+                }
+            }
+        }
+    }
+    // Opened from a notification about someone: show them.
+    LaunchedEffect(focusMember, members) {
+        val target = members.find { it.id == focusMember }?.loc ?: return@LaunchedEffect
+        fittedOnce = true
+        camera = CameraCommand.Center(target.lat, target.lon, ++cameraSeq)
+        onFocusHandled()
+    }
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_RESUME) {
                 perms = PermissionState.read(context)
-                if (prefs.sharing && perms.location) LocationService.start(context)
+                LocationService.start(context) // it decides what's needed (sharing, alerts, SOS)
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -171,7 +227,7 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
 
     val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         perms = PermissionState.read(context)
-        if (perms.location && prefs.sharing) LocationService.start(context)
+        LocationService.start(context)
     }
     val askBackground = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         perms = PermissionState.read(context)
@@ -189,11 +245,60 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
                 runCatching { Api(prefs.serverUrl, prefs.token).setPaused(false) }
                 LocationService.start(context)
             } else {
-                LocationService.stop(context)
+                LocationService.start(context) // keeps running for alerts, without location
                 runCatching { Api(prefs.serverUrl, prefs.token).setPaused(true) }
             }
             refresh()
         }
+    }
+
+    /**
+     * SOS: the background service sends it and keeps retrying until the server has it.
+     * If the service can't run (e.g. no permissions), send it from here instead.
+     */
+    fun sendSos(end: Boolean) {
+        if (end) {
+            prefs.sosActive = false
+            prefs.sosPending = false
+            prefs.sosEndPending = true
+        } else {
+            prefs.sosActive = true
+            prefs.sosPending = true
+            prefs.sosEndPending = false
+            if (!prefs.sharing) {
+                prefs.sharing = true // the server un-pauses too: someone asking for help wants to be found
+                sharing = true
+            }
+        }
+        sosActive = prefs.sosActive
+        sosPending = prefs.sosPending
+        LocationService.start(context)
+        scope.launch {
+            delay(4_000)
+            if (LocationService.isRunning || !(prefs.sosPending || prefs.sosEndPending)) return@launch
+            try {
+                val api = Api(prefs.serverUrl, prefs.token)
+                if (prefs.sosPending) api.sos(null).also { prefs.sosPending = false }
+                if (prefs.sosEndPending) api.sosEnd().also { prefs.sosEndPending = false }
+                sosPending = prefs.sosPending
+                refresh()
+            } catch (e: IOException) {
+                Toast.makeText(context, "Couldn't reach the server. Thereabouts will keep trying.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    if (confirmOk) {
+        AlertDialog(
+            onDismissRequest = { confirmOk = false },
+            title = { Text("End your SOS?") },
+            text = { Text("Your family will be told you're OK, and your location goes back to normal updates.") },
+            confirmButton = { TextButton(onClick = { confirmOk = false; sendSos(end = true) }) { Text("I'm OK") } },
+            dismissButton = { TextButton(onClick = { confirmOk = false }) { Text("Keep SOS on") } },
+        )
+    }
+    if (showCheckIn) {
+        CheckInDialog(prefs, onDone = { showCheckIn = false })
     }
 
     if (showSettings) {
@@ -248,6 +353,19 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            // SOS banners come first: yours, then anyone else's.
+            if (sosActive) {
+                SosBanner(
+                    if (sosPending) "Sending SOS… Thereabouts keeps trying until it gets through."
+                    else "SOS sent. Your family has been alerted and sees your location every 15 seconds.",
+                    "I'm OK",
+                ) { confirmOk = true }
+            }
+            members.filter { it.sosSince > 0 && it.id != prefs.memberId }.forEach { m ->
+                SosBanner("🆘 SOS from ${m.name}" + (m.loc?.let { " · ${ago(it.time)}" } ?: ""), if (m.loc != null) "Show" else null) {
+                    m.loc?.let { camera = CameraCommand.Center(it.lat, it.lon, ++cameraSeq) }
+                }
+            }
             when {
                 !perms.location -> Banner(
                     "Thereabouts needs your location to share it with your family.",
@@ -291,6 +409,17 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit) {
                     onClick = { camera = CameraCommand.FitAll(++cameraSeq) },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                 ) { Text("Show everyone") }
+                Column(
+                    Modifier.align(Alignment.BottomStart).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (prefs.showCheckInButton) {
+                        FilledTonalButton(onClick = { showCheckIn = true }) { Text("Check in") }
+                    }
+                    if (prefs.showSosButton && !sosActive) {
+                        HoldForSosButton(onTriggered = { sendSos(end = false) })
+                    }
+                }
             }
 
             Surface(tonalElevation = 2.dp) {
@@ -327,6 +456,7 @@ private fun Banner(text: String, action: String, onClick: () -> Unit) {
 
 @Composable
 private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> Unit, onDirections: () -> Unit) {
+    val sos = m.sosSince > 0
     val stale = m.loc == null || m.paused || System.currentTimeMillis() - m.loc.time > STALE_MS
     Row(
         Modifier.fillMaxWidth().clickable(enabled = m.loc != null, onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
@@ -339,7 +469,12 @@ private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> U
         ) { Text(initialOf(m.name), color = Color.White, fontWeight = FontWeight.Bold) }
         Column(Modifier.weight(1f)) {
             Text(if (isMe) "${m.name} (you)" else m.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                status,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (sos) SOS_RED else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (sos) FontWeight.Bold else null,
+            )
         }
         if (!isMe && m.loc != null && !m.paused) {
             TextButton(onClick = onDirections) { Text("Directions") }
@@ -350,6 +485,10 @@ private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> U
 /** "4 min ago · 82% · 1.3 km away" */
 @Suppress("UNUSED_PARAMETER") // tick only forces recomposition
 private fun statusLine(m: Member, me: Member?, tick: Int): String {
+    if (m.sosSince > 0) {
+        val since = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(m.sosSince))
+        return "🆘 SOS since $since" + (m.loc?.let { " · ${ago(it.time)}" } ?: "")
+    }
     if (m.paused) return "Location sharing paused"
     val loc = m.loc ?: return "No location yet"
     val parts = mutableListOf<String>()
@@ -439,6 +578,12 @@ private fun SettingsScreen(
     var confirmLeave by remember { mutableStateOf(false) }
     var notifyLowBattery by remember { mutableStateOf(prefs.notifyLowBattery) }
     var lowBatteryThreshold by remember { mutableIntStateOf(prefs.lowBatteryThreshold) }
+    var instantAlerts by remember { mutableStateOf(prefs.instantAlerts) }
+    var showSos by remember { mutableStateOf(prefs.showSosButton) }
+    var notifySos by remember { mutableStateOf(prefs.notifySos) }
+    var confirmSosOff by remember { mutableStateOf(false) }
+    var showCheckIn by remember { mutableStateOf(prefs.showCheckInButton) }
+    var notifyCheckIn by remember { mutableStateOf(prefs.notifyCheckIn) }
 
     Scaffold(
         topBar = {
@@ -548,6 +693,61 @@ private fun SettingsScreen(
                     }
                 }
             }
+
+            Text("SOS", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            SwitchRow(
+                title = "Show the SOS button",
+                detail = "Hold it for 3 seconds to alert everyone. Your location is then shared every 15 seconds until you say you're OK.",
+                checked = showSos,
+                onChange = { showSos = it; prefs.showSosButton = it },
+            )
+            SwitchRow(
+                title = "Notify me when someone presses SOS",
+                detail = "Rings like an alarm until you look.",
+                checked = notifySos,
+                onChange = { on -> if (on) { notifySos = true; prefs.notifySos = true } else confirmSosOff = true },
+            )
+            if (notifySos) {
+                OutlinedButton(onClick = {
+                    Alerts.ensureChannels(context)
+                    context.startActivity(
+                        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            .putExtra(Settings.EXTRA_CHANNEL_ID, Alerts.CHANNEL_SOS),
+                    )
+                }) { Text("Let SOS ring in Do Not Disturb…") }
+                Text(
+                    "Opens Android's settings for SOS alerts. Turn on \"Override Do Not Disturb\" so an SOS always gets through.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Text("Check-ins", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            SwitchRow(
+                title = "Show the Check in button",
+                detail = "Send \"I'm here\" with your location and an optional note.",
+                checked = showCheckIn,
+                onChange = { showCheckIn = it; prefs.showCheckInButton = it },
+            )
+            SwitchRow(
+                title = "Notify me when someone checks in",
+                detail = "",
+                checked = notifyCheckIn,
+                onChange = { notifyCheckIn = it; prefs.notifyCheckIn = it },
+            )
+
+            Text("Instant alerts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            SwitchRow(
+                title = "Get alerts within seconds",
+                detail = "Keeps a connection open to your family's server so SOS and other alerts arrive right away, even while your own sharing is paused. Uses a little more battery. When off, alerts can take up to one update interval.",
+                checked = instantAlerts,
+                onChange = {
+                    instantAlerts = it
+                    prefs.instantAlerts = it
+                    LocationService.start(context)
+                },
+            )
             HorizontalDivider()
 
             Text("Reliability", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
@@ -574,6 +774,18 @@ private fun SettingsScreen(
                 modifier = Modifier.padding(vertical = 16.dp),
             )
         }
+    }
+
+    if (confirmSosOff) {
+        AlertDialog(
+            onDismissRequest = { confirmSosOff = false },
+            title = { Text("Turn off SOS alerts?") },
+            text = { Text("If someone in your family presses SOS, this phone won't notify you. You'll only see it when you open the app.") },
+            confirmButton = {
+                TextButton(onClick = { confirmSosOff = false; notifySos = false; prefs.notifySos = false }) { Text("Turn off") }
+            },
+            dismissButton = { TextButton(onClick = { confirmSosOff = false }) { Text("Keep them on") } },
+        )
     }
 
     if (confirmLeave) {
@@ -675,7 +887,9 @@ private fun SwitchRow(title: String, detail: String, checked: Boolean, enabled: 
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (detail.isNotEmpty()) {
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
     }
@@ -687,4 +901,157 @@ private fun CheckRow(label: String, ok: Boolean, onFix: () -> Unit) {
         Text((if (ok) "✓  " else "✗  ") + label, Modifier.weight(1f), color = if (ok) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error)
         if (!ok) TextButton(onClick = onFix) { Text("Fix") }
     }
+}
+
+
+val SOS_RED = Color(0xFFD32F2F)
+
+/** "just now", "5 minutes ago"... */
+fun ago(time: Long): String {
+    val now = System.currentTimeMillis()
+    return if (now - time < 60_000) "just now"
+    else DateUtils.getRelativeTimeSpanString(time, now, DateUtils.MINUTE_IN_MILLIS).toString()
+}
+
+/** A red strip across the top of the map, for SOS. */
+@Composable
+private fun SosBanner(text: String, action: String?, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(SOS_RED).clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        if (action != null) {
+            OutlinedButton(onClick = onClick, border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
+                Text(action, color = Color.White)
+            }
+        }
+    }
+}
+
+/**
+ * The SOS button. It only fires after being held for 3 seconds (a ring fills up),
+ * so it can't go off by accident in a pocket. Letting go early cancels.
+ */
+@Composable
+private fun HoldForSosButton(onTriggered: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    val progress = remember { Animatable(0f) }
+    var hint by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            Modifier
+                .size(64.dp)
+                .semantics { contentDescription = "SOS. Press and hold for 3 seconds to alert your family." }
+                .pointerInput(Unit) {
+                    detectTapGestures(onPress = {
+                        hint = true
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        val fill = scope.launch {
+                            progress.animateTo(1f, tween(SOS_HOLD_MS, easing = LinearEasing))
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onTriggered()
+                        }
+                        tryAwaitRelease()
+                        if (progress.value < 1f) fill.cancel()
+                        scope.launch { progress.snapTo(0f) }
+                        scope.launch { delay(3_000); hint = false }
+                    })
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier.size(56.dp).clip(CircleShape).background(SOS_RED),
+                contentAlignment = Alignment.Center,
+            ) { Text("SOS", color = Color.White, fontWeight = FontWeight.Bold) }
+            if (progress.value > 0f) {
+                CircularProgressIndicator(
+                    progress = { progress.value },
+                    modifier = Modifier.size(64.dp),
+                    color = SOS_RED,
+                    strokeWidth = 5.dp,
+                )
+            }
+        }
+        if (hint) {
+            Surface(shape = RoundedCornerShape(50), tonalElevation = 4.dp, shadowElevation = 2.dp) {
+                Text("Hold for 3 seconds", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+private const val SOS_HOLD_MS = 3_000
+
+/** "I'm here", with an optional note, sent to everyone. */
+@Composable
+private fun CheckInDialog(prefs: Prefs, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var note by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDone() },
+        title = { Text("Check in") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Let your family know where you are. They get a notification with your location.")
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it.take(140) },
+                    label = { Text("Note (optional)") },
+                    placeholder = { Text("Made it home") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy, onClick = {
+                busy = true
+                scope.launch {
+                    try {
+                        Api(prefs.serverUrl, prefs.token).checkIn(note.trim(), currentLocation(context))
+                        Toast.makeText(context, "Checked in", Toast.LENGTH_SHORT).show()
+                        onDone()
+                    } catch (e: IOException) {
+                        Toast.makeText(context, "Couldn't check in: ${e.message}", Toast.LENGTH_LONG).show()
+                        busy = false
+                    }
+                }
+            }) { Text(if (busy) "Sending…" else "Send") }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDone) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Where the phone is now: the last known location if it's recent, otherwise a fresh
+ * fix (waiting up to 10 seconds), otherwise whatever is known. Null without permission.
+ */
+@SuppressLint("MissingPermission")
+suspend fun currentLocation(context: Context): Location? {
+    if (!LocationService.hasLocationPermission(context)) return null
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val last = lm.allProviders.mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }.maxByOrNull { it.time }
+    if (last != null && System.currentTimeMillis() - last.time < 2 * 60_000) return last
+    val provider = when {
+        Build.VERSION.SDK_INT >= 31 && lm.hasProvider(LocationManager.FUSED_PROVIDER) -> LocationManager.FUSED_PROVIDER
+        runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false) -> LocationManager.GPS_PROVIDER
+        else -> LocationManager.NETWORK_PROVIDER
+    }
+    val fresh = withTimeoutOrNull(10_000) {
+        suspendCancellableCoroutine<Location?> { cont ->
+            val cancel = android.os.CancellationSignal()
+            cont.invokeOnCancellation { cancel.cancel() }
+            runCatching {
+                LocationManagerCompat.getCurrentLocation(lm, provider, cancel, ContextCompat.getMainExecutor(context)) { loc ->
+                    if (cont.isActive) cont.resume(loc)
+                }
+            }.onFailure { if (cont.isActive) cont.resume(null) }
+        }
+    }
+    return fresh ?: last
 }

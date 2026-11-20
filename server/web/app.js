@@ -59,7 +59,18 @@ function account(m) {
   return `@${m.username}` + (m.lastSignIn ? ` · signed in ${ago(m.lastSignIn)}` : "");
 }
 
+// A red banner across the top while anyone has an SOS active. Click to zoom to them.
+function renderSOS(list) {
+  const banner = $("#sos-banner");
+  banner.hidden = list.length === 0;
+  banner.replaceChildren(...list.map((m) =>
+    el("button", { class: "sos-item", onclick: () => m.loc && map.setView([m.loc.lat, m.loc.lon], 17) },
+      `🆘 SOS from ${m.name} since ${new Date(m.sosSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` +
+      (m.loc ? ` · last seen ${ago(m.loc.time)}, click to show` : " · no location yet"))));
+}
+
 function describe(m) {
+  if (m.sosSince) return `SOS since ${new Date(m.sosSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` + (m.loc ? ` · ${ago(m.loc.time)}` : "");
   if (m.paused) return "Sharing paused";
   if (!m.loc) return "No location yet";
   const parts = [ago(m.loc.time)];
@@ -115,7 +126,7 @@ function renderMembers(members) {
 
   for (const m of members) {
     const stale = !m.loc || Date.now() - m.loc.time > STALE_MS;
-    const avatar = el("div", { class: "avatar" + (stale ? " stale" : ""), style: `background:${m.color}` }, initial(m.name));
+    const avatar = el("div", { class: "avatar" + (stale ? " stale" : "") + (m.sosSince ? " sos" : ""), style: `background:${m.color}` }, initial(m.name));
     const li = el("li", { class: m.loc ? "clickable" : "" },
       avatar,
       el("div", { class: "grow" },
@@ -136,7 +147,7 @@ function renderMembers(members) {
     bounds.push(pos);
     const icon = L.divIcon({
       className: "pin",
-      html: `<div class="avatar${stale ? " stale" : ""}" style="background:${m.color}"></div>`,
+      html: `<div class="avatar${stale ? " stale" : ""}${m.sosSince ? " sos" : ""}" style="background:${m.color}"></div>`,
       iconSize: [38, 38],
       iconAnchor: [19, 19],
     });
@@ -188,7 +199,9 @@ async function refresh() {
   try {
     const [data, invites] = await Promise.all([api("GET", "/api/admin/members"), api("GET", "/api/admin/invites")]);
     $("#family-name").textContent = data.server.name;
-    document.title = `${data.server.name} · Thereabouts`;
+    const sos = data.members.filter((m) => m.sosSince);
+    document.title = (sos.length ? "🆘 SOS · " : "") + `${data.server.name} · Thereabouts`;
+    renderSOS(sos);
     ensureMap(data.server);
     renderMembers(data.members);
     renderInvites(invites);

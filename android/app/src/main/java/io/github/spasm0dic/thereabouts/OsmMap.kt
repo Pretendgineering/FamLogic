@@ -112,7 +112,7 @@ fun OsmMap(
             }
             val stale = System.currentTimeMillis() - loc.time > STALE_MS
             marker.position = GeoPoint(loc.lat, loc.lon)
-            marker.icon = BitmapDrawable(context.resources, avatarBitmap(context, m.name, m.color, stale))
+            marker.icon = BitmapDrawable(context.resources, avatarBitmap(context, m.name, m.color, stale, sos = m.sosSince > 0))
             marker.title = m.name
             marker.snippet = statusOf(m)
         }
@@ -150,20 +150,27 @@ fun parseColor(hex: String): Int = runCatching { Color.parseColor(hex) }.getOrDe
 fun initialOf(name: String) = name.trim().take(1).uppercase().ifEmpty { "?" }
 
 /** A coloured circle with the person's initial, used as their map pin. */
-fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean): Bitmap {
+fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, sos: Boolean = false): Bitmap {
     val d = context.resources.displayMetrics.density
-    val size = (40 * d).toInt()
+    // An SOS pin is bigger, with a thick red ring, so it stands out on the map.
+    val ring = if (sos) 7 * d else 0f
+    val size = (40 * d + 2 * ring).toInt()
     val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
     val r = size / 2f
-    val alpha = if (faded) 140 else 255
+    val alpha = if (faded && !sos) 140 else 255
     val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    if (sos) {
+        p.color = Color.rgb(211, 47, 47)
+        c.drawCircle(r, r, r, p)
+    }
+    val inner = r - ring
     p.color = Color.argb(70, 0, 0, 0)
-    c.drawCircle(r, r + d, r - d, p) // soft shadow
+    c.drawCircle(r, r + d, inner - d, p) // soft shadow
     p.color = Color.WHITE; p.alpha = alpha
-    c.drawCircle(r, r, r - 2 * d, p)
+    c.drawCircle(r, r, inner - 2 * d, p)
     p.color = parseColor(color); p.alpha = alpha
-    c.drawCircle(r, r, r - 5 * d, p)
+    c.drawCircle(r, r, inner - 5 * d, p)
     p.color = Color.WHITE; p.alpha = alpha
     p.textSize = 17 * d
     p.typeface = Typeface.DEFAULT_BOLD
