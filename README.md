@@ -4,7 +4,7 @@ Simple alternative family tracker, mostly made for myself as a vibe coding proje
 
 ____________________
 
-Thereabouts does one thing: each phone reports where it is to **your own server**, and everyone in the family sees everyone else on an OpenStreetMap map. There are no accounts, no cloud, no ads, no Google Play Services, and no location history.
+Thereabouts does one thing: each phone reports where it is to **your own server**, and everyone in the family sees everyone else on an OpenStreetMap map. There are no third-party accounts, no cloud, no ads, no Google Play Services, and no location history. Sign-in happens only on your own server.
 
 - **Server**: one small container (~19 MB) with no database to run. Everything is kept in one JSON file.
 - **Android app**: join with an invite link. You get a map of everyone, last-seen times, battery levels, distances and a "Directions" button.
