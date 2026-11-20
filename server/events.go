@@ -33,9 +33,9 @@ type Event struct {
 	Type     string `json:"type"`
 	MemberID string `json:"memberId"`
 	Name     string `json:"name"`
-	Battery  int    `json:"battery,omitempty"` // battery_low: the level when it happened
-	Level    int    `json:"level,omitempty"`   // battery_low: which alert level was crossed
-	Note     string `json:"note,omitempty"`    // checkin: optional message
+	Battery  int    `json:"battery,omitempty"`  // battery_low: the level when it happened
+	Level    int    `json:"level,omitempty"`    // battery_low: which alert level was crossed
+	Note     string `json:"note,omitempty"`     // checkin: optional message
 	CircleID string `json:"circleId,omitempty"` // place alerts: the circle the place belongs to
 	PlaceID  string `json:"placeId,omitempty"`
 	Place    string `json:"place,omitempty"` // place name, for "Sam arrived at School"
