@@ -90,6 +90,22 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("notify_checkin", true)
         set(v) = sp.edit { putBoolean("notify_checkin", v) }
 
+    /** Feature: which place alerts this phone shows, and places muted here. */
+    var notifyArrivals: Boolean
+        get() = sp.getBoolean("notify_arrivals", true)
+        set(v) = sp.edit { putBoolean("notify_arrivals", v) }
+    var notifyDepartures: Boolean
+        get() = sp.getBoolean("notify_departures", true)
+        set(v) = sp.edit { putBoolean("notify_departures", v) }
+    var mutedPlaces: Set<String>
+        get() = sp.getStringSet("muted_places", emptySet())?.toSet() ?: emptySet()
+        set(v) = sp.edit { putStringSet("muted_places", v) }
+
+    /** Feature: draw someone's trail on the map when you tap them. */
+    var showTrails: Boolean
+        get() = sp.getBoolean("show_trails", true)
+        set(v) = sp.edit { putBoolean("show_trails", v) }
+
     /** Which circle the map shows: "" for everyone. */
     var circleFilter: String
         get() = sp.getString("circle_filter", "") ?: ""

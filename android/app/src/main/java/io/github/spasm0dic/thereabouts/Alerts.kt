@@ -76,6 +76,13 @@ object Alerts {
                 val text = e.note.ifBlank { "Tap to see where." }
                 notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} checked in", text, e.memberId)
             }
+            "arrived", "left" -> {
+                val arriving = e.type == "arrived"
+                if (arriving && !prefs.notifyArrivals || !arriving && !prefs.notifyDepartures) return
+                if (e.placeId in prefs.mutedPlaces) return
+                val title = if (arriving) "${e.name} arrived at ${e.place}" else "${e.name} left ${e.place}"
+                notify(context, CHANNEL_ALERTS, eventId(e), title, "Tap to see the map.", e.memberId)
+            }
             // Unknown types come from a newer server: ignore them.
         }
     }

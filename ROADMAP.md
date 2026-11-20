@@ -109,7 +109,7 @@ Make adding someone a single copy-paste. The dashboard's **Copy invite** button 
 3. ✅ **Instant alerts, SOS and check-in** (0.5.0). The app's background service keeps a connection open to your own server, so alerts arrive in seconds without Google services or extra apps. This replaces the "optional UnifiedPush" idea: nobody has to install or host anything extra.
 4. ✅ **Circles** (0.6.0).
 5. ✅ **QR code invites** (0.6.0).
-6. **Places and geofences** with arrive/leave alerts.
-7. **Trail / history** (opt-in).
+6. ✅ **Places and geofences** with arrive/leave alerts (0.7.0). Not done yet: per-person mutes and active hours (e.g. only on school days).
+7. ✅ **Trail / history** (opt-in, 0.7.0).
 8. **Profile pictures** (later).
 9. **Shareable invite message** with an app download link (once the app is on F-Droid or IzzyOnDroid).

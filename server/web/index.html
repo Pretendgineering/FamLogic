@@ -39,6 +39,10 @@
         <h2>Open invites</h2>
         <ul id="invites" class="list"></ul>
         <p id="no-invites" class="muted">No open invites.</p>
+        <h2>Places</h2>
+        <p class="muted small">Named areas like Home or School. People in the place's circle are told when someone arrives or leaves.</p>
+        <ul id="places" class="list"></ul>
+        <button id="new-place-btn" class="secondary small-btn">+ Add place</button>
         <h2>Circles</h2>
         <p class="muted small">Groups that see each other, such as Family or Grandparents. People only see others they share a circle with.</p>
         <ul id="circles" class="list"></ul>
@@ -63,6 +67,16 @@
       <p class="muted">Or in the app, enter server <code id="invite-server"></code> and code <code id="invite-code"></code>.</p>
       <div class="row"><button type="button" data-close>Done</button></div>
     </div>
+  </dialog>
+
+  <dialog id="place-dialog">
+    <form id="place-form" method="dialog">
+      <h2 id="place-dialog-title">Add a place</h2>
+      <label>Name <input id="place-name" maxlength="40" required placeholder="e.g. Home, School, Work"></label>
+      <label>Size (radius in metres) <input id="place-radius" type="number" min="30" max="5000" step="10" value="150" required></label>
+      <label id="place-circle-label">Circle <select id="place-circle"></select></label>
+      <div class="row"><button type="submit">Save</button><button type="button" class="secondary" data-close>Cancel</button></div>
+    </form>
   </dialog>
 
   <dialog id="circles-dialog">

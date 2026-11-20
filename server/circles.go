@@ -79,7 +79,14 @@ func (s *Store) circlesLocked(ids []string) []Circle {
 func (s *Store) CreateCircle(name string) (*Circle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c := &Circle{ID: randomString(6), Name: name, CreatedAt: time.Now().UnixMilli()}
+	// Strictly after every existing circle, so "oldest" (the default) never changes.
+	created := time.Now().UnixMilli()
+	for _, c := range s.d.Circles {
+		if c.CreatedAt >= created {
+			created = c.CreatedAt + 1
+		}
+	}
+	c := &Circle{ID: randomString(6), Name: name, CreatedAt: created}
 	s.d.Circles[c.ID] = c
 	cp := *c
 	return &cp, s.saveLocked()
@@ -139,6 +146,11 @@ func (s *Store) SetMembership(memberID, circleID string, in bool) error {
 	} else {
 		m.Circles = slices.DeleteFunc(m.Circles, func(c string) bool { return c == circleID })
 		m.HiddenFrom = slices.DeleteFunc(m.HiddenFrom, func(c string) bool { return c == circleID })
+		for pid, p := range s.d.Places {
+			if p.CircleID == circleID {
+				delete(m.Presence, pid)
+			}
+		}
 	}
 	return s.saveLocked()
 }
@@ -233,6 +245,7 @@ func sharesLocationWith(m, viewer *Member) bool {
 type MemberView struct {
 	Member
 	SharedCircles []string // circles they have in common with the viewer
+	Place         string   // the place they're at, if any, among places the viewer can see
 }
 
 // VisibleTo returns the people `viewerID` can see (themselves included), with
@@ -262,7 +275,11 @@ func (s *Store) VisibleTo(viewerID string) ([]MemberView, []Circle) {
 			l := *cp.Loc
 			cp.Loc = &l
 		}
-		out = append(out, MemberView{cp, shared})
+		place := ""
+		if cp.Loc != nil {
+			place = s.placeNameForLocked(m, viewer)
+		}
+		out = append(out, MemberView{cp, shared, place})
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out, s.circlesLocked(viewer.Circles)
@@ -275,12 +292,15 @@ func (s *Store) eventVisibleLocked(e Event, viewer *Member) bool {
 	if e.MemberID == viewer.ID {
 		return false
 	}
-	if e.CircleID != "" { // place alerts belong to one circle
-		return slices.Contains(viewer.Circles, e.CircleID)
-	}
 	sender, ok := s.d.Members[e.MemberID]
 	if !ok {
 		return false // they've been removed since
+	}
+	if e.CircleID != "" {
+		// Place alerts belong to one circle, and reveal where someone is: only
+		// for that circle, and only if they share their location with it.
+		return slices.Contains(viewer.Circles, e.CircleID) && slices.Contains(sender.Circles, e.CircleID) &&
+			!sender.Paused && !slices.Contains(sender.HiddenFrom, e.CircleID)
 	}
 	if e.Type == EventBatteryLow {
 		return sharesLocationWith(sender, viewer)

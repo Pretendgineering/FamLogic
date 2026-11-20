@@ -53,6 +53,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/signin", s.handleSignIn)
 	mux.HandleFunc("POST /api/me/password", s.device(s.handleSetPassword))
 	mux.HandleFunc("POST /api/me/circles/join", s.device(s.handleJoinCircle))
+	mux.HandleFunc("GET /api/members/{id}/trail", s.device(s.handleTrail))
+	mux.HandleFunc("POST /api/places", s.device(s.handleCreatePlace))
+	mux.HandleFunc("PATCH /api/places/{id}", s.device(s.handleUpdatePlace))
+	mux.HandleFunc("POST /api/places/{id}", s.device(s.handleUpdatePlace)) // for clients that can't send PATCH
+	mux.HandleFunc("DELETE /api/places/{id}", s.device(s.handleDeletePlace))
 	mux.HandleFunc("POST /api/me/circles/{id}", s.device(s.handleSetCircleSharing))
 	mux.HandleFunc("GET /api/members", s.device(s.handleMembers))
 	mux.HandleFunc("POST /api/location", s.device(s.handleLocation))
@@ -71,6 +76,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
+	mux.HandleFunc("GET /api/admin/members/{id}/trail", s.admin(s.handleAdminTrail))
+	mux.HandleFunc("GET /api/admin/places", s.admin(s.handleAdminPlaces))
+	mux.HandleFunc("POST /api/admin/places", s.admin(s.handleAdminCreatePlace))
+	mux.HandleFunc("PATCH /api/admin/places/{id}", s.admin(s.handleAdminUpdatePlace))
+	mux.HandleFunc("DELETE /api/admin/places/{id}", s.admin(s.handleAdminDeletePlace))
 	mux.HandleFunc("GET /api/admin/circles", s.admin(s.handleAdminCircles))
 	mux.HandleFunc("POST /api/admin/circles", s.admin(s.handleAdminCreateCircle))
 	mux.HandleFunc("PATCH /api/admin/circles/{id}", s.admin(s.handleAdminRenameCircle))
@@ -148,6 +158,10 @@ type publicMember struct {
 	SOSSince int64 `json:"sosSince,omitempty"`
 	// Circles: for phones, the ones in common with the viewer; for the dashboard, all of theirs.
 	Circles []string `json:"circles"`
+	// The place they're at (e.g. "Home"), if any.
+	Place string `json:"place,omitempty"`
+	// Whether they keep a trail you can look at.
+	Trail bool `json:"trail,omitempty"`
 }
 
 func toPublic(ms []Member) []publicMember {
@@ -463,6 +477,8 @@ func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Membe
 		m := v.Member
 		m.Circles = v.SharedCircles
 		members[i] = toPublic([]Member{m})[0]
+		members[i].Place = v.Place
+		members[i].Trail = v.TrailHours > 0 && v.Loc != nil
 	}
 	myCircles := make([]map[string]any, len(circles))
 	for i, c := range circles {
@@ -472,9 +488,12 @@ func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Membe
 		"me":      me.ID,
 		"members": members,
 		"circles": myCircles,
+		"places":  s.store.PlacesFor(me.ID),
 		"server":  s.serverInfo(),
 		"settings": map[string]any{
 			"shareLowBattery": me.SharesLowBattery(),
+			"shareArrivals":   me.SharesArrivals(),
+			"trailHours":      me.TrailHours,
 			"username":        me.Username,
 			"hasPassword":     me.PasswordHash != "",
 		},
@@ -612,6 +631,8 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 		Paused          *bool   `json:"paused"`
 		Color           *string `json:"color"`
 		ShareLowBattery *bool   `json:"shareLowBattery"`
+		ShareArrivals   *bool   `json:"shareArrivals"`
+		TrailHours      *int    `json:"trailHours"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -619,7 +640,17 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 	if !s.validatePatch(w, req.Name, req.Color) {
 		return
 	}
-	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, ShareLowBattery: req.ShareLowBattery})
+	if req.TrailHours != nil {
+		if !validTrailHours(*req.TrailHours) {
+			writeError(w, http.StatusBadRequest, "trailHours must be 0, 6, 12 or 24")
+			return
+		}
+		if err := s.store.SetTrailHours(me.ID, *req.TrailHours); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not save")
+			return
+		}
+	}
+	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, ShareLowBattery: req.ShareLowBattery, ShareArrivals: req.ShareArrivals})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
@@ -728,11 +759,16 @@ type adminMember struct {
 func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
 	ms := s.store.Members()
 	pub := toPublic(ms)
+	at := s.store.AdminPlaceNames()
+	for i := range pub {
+		pub[i].Place = at[pub[i].ID]
+		pub[i].Trail = ms[i].TrailHours > 0 && !ms[i].Paused
+	}
 	out := make([]adminMember, len(ms))
 	for i, m := range ms {
 		out[i] = adminMember{pub[i], m.Username, m.PasswordHash != "", m.LastSignIn, append([]string{}, m.HiddenFrom...)}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"members": out, "circles": s.store.Circles(), "server": s.serverInfo()})
+	writeJSON(w, http.StatusOK, map[string]any{"members": out, "circles": s.store.Circles(), "places": s.store.AllPlaces(), "server": s.serverInfo()})
 }
 
 // handleAdminResetSignIn makes a one-time link that lets a member who forgot
@@ -942,6 +978,117 @@ func (s *Server) handleAdminDeleteCircle(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleAdminMembership(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SetMembership(r.PathValue("mid"), r.PathValue("id"), r.Method == http.MethodPut); err != nil {
 		writeError(w, http.StatusNotFound, "no such member or circle")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- trails ----
+
+func (s *Server) handleTrail(w http.ResponseWriter, r *http.Request, me *Member) {
+	points, ok := s.store.TrailFor(me.ID, r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "no trail to show")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"points": points})
+}
+
+func (s *Server) handleAdminTrail(w http.ResponseWriter, r *http.Request) {
+	points, ok := s.store.TrailFor("", r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "no such member")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"points": points})
+}
+
+// ---- places ----
+
+type placeRequest struct {
+	CircleID string   `json:"circleId"`
+	Name     *string  `json:"name"`
+	Lat      *float64 `json:"lat"`
+	Lon      *float64 `json:"lon"`
+	Radius   *float64 `json:"radius"`
+}
+
+func (req *placeRequest) cleanName() bool {
+	if req.Name == nil {
+		return true
+	}
+	n, ok := cleanName(*req.Name)
+	req.Name = &n
+	return ok
+}
+
+func (s *Server) createPlace(w http.ResponseWriter, r *http.Request, byMember string) {
+	var req placeRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.Name == nil || req.Lat == nil || req.Lon == nil || req.Radius == nil || !req.cleanName() {
+		writeError(w, http.StatusBadRequest, capitalize(ErrBadPlace.Error()))
+		return
+	}
+	p, err := s.store.CreatePlace(byMember, Place{CircleID: req.CircleID, Name: *req.Name, Lat: *req.Lat, Lon: *req.Lon, Radius: *req.Radius})
+	s.writePlaceResult(w, p, err)
+}
+
+func (s *Server) updatePlace(w http.ResponseWriter, r *http.Request, byMember string) {
+	var req placeRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if !req.cleanName() {
+		writeError(w, http.StatusBadRequest, capitalize(ErrBadPlace.Error()))
+		return
+	}
+	p, err := s.store.UpdatePlace(byMember, r.PathValue("id"), req.Name, req.Lat, req.Lon, req.Radius)
+	s.writePlaceResult(w, p, err)
+}
+
+func (s *Server) writePlaceResult(w http.ResponseWriter, p *Place, err error) {
+	switch {
+	case errors.Is(err, ErrBadPlace):
+		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+	case err != nil:
+		writeError(w, http.StatusNotFound, "no such place or circle")
+	default:
+		writeJSON(w, http.StatusOK, p)
+	}
+}
+
+func (s *Server) handleCreatePlace(w http.ResponseWriter, r *http.Request, me *Member) {
+	s.createPlace(w, r, me.ID)
+}
+
+func (s *Server) handleUpdatePlace(w http.ResponseWriter, r *http.Request, me *Member) {
+	s.updatePlace(w, r, me.ID)
+}
+
+func (s *Server) handleDeletePlace(w http.ResponseWriter, r *http.Request, me *Member) {
+	if err := s.store.DeletePlace(me.ID, r.PathValue("id")); err != nil {
+		writeError(w, http.StatusNotFound, "no such place")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminPlaces(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.store.AllPlaces())
+}
+
+func (s *Server) handleAdminCreatePlace(w http.ResponseWriter, r *http.Request) {
+	s.createPlace(w, r, "")
+}
+func (s *Server) handleAdminUpdatePlace(w http.ResponseWriter, r *http.Request) {
+	s.updatePlace(w, r, "")
+}
+
+func (s *Server) handleAdminDeletePlace(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.DeletePlace("", r.PathValue("id")); err != nil {
+		writeError(w, http.StatusNotFound, "no such place")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

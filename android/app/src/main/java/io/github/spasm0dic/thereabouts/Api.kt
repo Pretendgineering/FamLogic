@@ -26,6 +26,23 @@ data class Member(
     val sosSince: Long = 0,
     /** Circles this person shares with you (for yourself: all of yours). */
     val circles: List<String> = emptyList(),
+    /** The place they're at (e.g. "Home"), if any. */
+    val place: String = "",
+    /** Whether they keep a trail you can look at. */
+    val trail: Boolean = false,
+)
+
+/** One spot on someone's trail. */
+data class TrailPoint(val lat: Double, val lon: Double, val time: Long)
+
+/** A named area (Home, School...) in one of your circles. */
+data class Place(
+    val id: String,
+    val circleId: String,
+    val name: String,
+    val lat: Double,
+    val lon: Double,
+    val radius: Double,
 )
 
 /** A circle you're in, and whether you share your location with it. */
@@ -44,6 +61,9 @@ data class AppEvent(
     val time: Long,
     /** Check-in note. */
     val note: String = "",
+    /** Place alerts: the place's name and id. */
+    val place: String = "",
+    val placeId: String = "",
     /** Where it happened (SOS, check-in), or 0/0 if unknown. */
     val lat: Double = 0.0,
     val lon: Double = 0.0,
@@ -65,6 +85,10 @@ data class MembersResponse(
     val username: String,
     val hasPassword: Boolean,
     val circles: List<CircleInfo> = emptyList(),
+    val places: List<Place> = emptyList(),
+    val shareArrivals: Boolean = true,
+    /** How many hours of trail you keep for others (0 = off). */
+    val trailHours: Int = 0,
 )
 
 /** What join, sign-in and password resets return: this phone is now signed in as [member]. */
@@ -158,8 +182,56 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 }
             } ?: emptyList(),
             events = parseEvents(o, since),
+            places = o.optJSONArray("places")?.let { arr -> (0 until arr.length()).map { parsePlace(arr.getJSONObject(it)) } }
+                ?: emptyList(),
+            shareArrivals = settings?.optBoolean("shareArrivals", true) ?: true,
+            trailHours = settings?.optInt("trailHours", 0) ?: 0,
         )
     }
+
+    private fun parsePlace(p: JSONObject) = Place(
+        id = p.getString("id"),
+        circleId = p.optString("circleId"),
+        name = p.optString("name"),
+        lat = p.getDouble("lat"),
+        lon = p.getDouble("lon"),
+        radius = p.optDouble("radius", 150.0),
+    )
+
+    suspend fun createPlace(circleId: String, name: String, lat: Double, lon: Double, radius: Double): Place =
+        parsePlace(
+            request(
+                "POST", "/api/places",
+                JSONObject().put("circleId", circleId).put("name", name).put("lat", lat).put("lon", lon).put("radius", radius),
+            ),
+        )
+
+    suspend fun updatePlace(id: String, name: String, radius: Double): Place =
+        parsePlace(request("POST", "/api/places/" + enc(id), JSONObject().put("name", name).put("radius", radius)))
+
+    suspend fun deletePlace(id: String) {
+        request("DELETE", "/api/places/" + enc(id))
+    }
+
+    /** Someone's trail, oldest point first (empty if they don't keep one). */
+    suspend fun trail(memberId: String): List<TrailPoint> {
+        val arr = request("GET", "/api/members/" + enc(memberId) + "/trail").optJSONArray("points") ?: return emptyList()
+        return (0 until arr.length()).map {
+            val p = arr.getJSONObject(it)
+            TrailPoint(p.getDouble("lat"), p.getDouble("lon"), p.optLong("time"))
+        }
+    }
+
+    /** Keep a trail of your own for 6, 12 or 24 hours, or 0 to turn it off (and delete it). */
+    suspend fun setTrailHours(hours: Int) {
+        request("POST", "/api/me", JSONObject().put("trailHours", hours))
+    }
+
+    suspend fun setShareArrivals(on: Boolean) {
+        request("POST", "/api/me", JSONObject().put("shareArrivals", on))
+    }
+
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
 
     /** Sends a fix; the reply carries any alerts newer than [since]. */
     suspend fun sendLocation(
@@ -279,6 +351,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 level = e.optInt("level", 0),
                 time = e.optLong("time", 0),
                 note = e.optString("note"),
+                place = e.optString("place"),
+                placeId = e.optString("placeId"),
                 lat = e.optDouble("lat", 0.0),
                 lon = e.optDouble("lon", 0.0),
             )
@@ -301,6 +375,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
             paused = o.optBoolean("paused", false),
             sosSince = o.optLong("sosSince", 0),
             circles = o.optJSONArray("circles")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
+            place = o.optString("place"),
+            trail = o.optBoolean("trail", false),
             loc = l?.let {
                 MemberLocation(
                     lat = it.getDouble("lat"),

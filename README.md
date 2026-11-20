@@ -4,7 +4,7 @@ Simple alternative family tracker, mostly made for myself as a vibe coding proje
 
 ____________________
 
-Thereabouts does one thing: each phone reports where it is to **your own server**, and everyone in the family sees everyone else on an OpenStreetMap map. There are no third-party accounts, no cloud, no ads, no Google Play Services, and no location history. Sign-in happens only on your own server.
+Thereabouts does one thing: each phone reports where it is to **your own server**, and everyone in the family sees everyone else on an OpenStreetMap map. There are no third-party accounts, no cloud, no ads, no Google Play Services, and no location history unless you turn it on. Sign-in happens only on your own server.
 
 - **Server**: one small container (~19 MB) with no database to run. Everything is kept in one JSON file.
 - **Android app**: join with an invite link. You get a map of everyone, last-seen times, battery levels, distances and a "Directions" button.
@@ -18,11 +18,12 @@ Thereabouts does one thing: each phone reports where it is to **your own server*
 |---|---|
 | Map | OpenStreetMap (osmdroid in the app, Leaflet on the web). The tile server can be changed. |
 | Location | Android's own location service, so it works on de-Googled phones (GrapheneOS, LineageOS, /e/). |
-| Privacy | Only the **latest** position is stored. Pausing wipes it from the server. Removing a member deletes them. |
+| Privacy | Only the **latest** position is stored, unless someone chooses to keep a trail (off by default, 6 to 24 hours, deleted when turned off). Pausing wipes your position from the server. Removing a member deletes them. |
 | Battery | Updates every 1/2/5/15 minutes (your choice) using balanced-power location. |
 | Joining | The admin creates a one-time invite link. The person taps it on their phone, and the app opens with everything filled in. They choose a username and password. |
 | New phone? | Sign in with your username and password. You're back as yourself, and your old phone is signed out (the latest sign-in wins). Forgot your password? The admin sends a one-time **Reset sign-in** link. |
 | Circles | Separate groups such as Family, Grandparents or Friends. You see only people you share a circle with, and choose per circle whether to share your location. |
+| Places | Named areas like Home or School. Everyone in the place's circle is told "Sam arrived at School" or "Alex left Work", and people's status shows "At Home". |
 | SOS | Hold the SOS button for 3 seconds. Everyone gets an alarm-style alert within seconds, and your location is shared every 15 seconds until you say you're OK. |
 | Check-in | One tap sends "I'm here" with your location and an optional note. |
 | Alerts | SOS, check-ins and low battery, each switchable in the app. They arrive **within seconds** over a connection the app keeps to your own server: no Google services, no push service, nothing extra to install. |
@@ -128,6 +129,8 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 - **Pause sharing** (Settings): your pin disappears for everyone, who see "Location sharing paused" instead. Resume any time. You still get SOS and other alerts while paused.
 - **SOS**: press and hold the red **SOS** button for 3 seconds. Everyone else gets an alert that keeps ringing until they look, and a red banner on their map. Your location updates every 15 seconds, and the app keeps retrying until the alert gets through. Tap **I'm OK** when you're safe. Pressing SOS also turns sharing back on if you'd paused it.
   - So an SOS always rings: in Settings → Features → SOS, tap **Let SOS ring in Do Not Disturb** and turn on "Override Do Not Disturb".
+- **Places**: long-press the map to add a place (name and size), and tap a place to change or delete it. The dashboard can add them too (**+ Add place**, then click the map). Arrivals are announced right away. Departures wait until someone is clearly outside, with a buffer zone, so GPS jitter at the edge doesn't cause false alerts. In Settings → Features → Places you choose whether your own arrivals are announced, which alerts you get, and you can mute single places.
+- **Trail** (opt-in): in Settings → Features → Trail, choose to keep your trail for 6, 12 or 24 hours. When someone taps you in the list, they see where you've been as a line on the map. Only people who can see your location can see it, and choosing **Off** deletes it.
 - **Check in**: tap **Check in** to send "I'm here" with your location and an optional note ("Made it home").
 - **Circles**: if you're in more than one circle, chips at the top of the map show one circle at a time. In Settings you choose per circle whether to share your location (for example share with Family but not with Friends). Someone already signed in can tap another circle's invite link (or use **Join another circle…** in Settings) to join it as themselves.
 - **Features** (Settings): each feature has its own on/off switches, for example to hide the SOS or Check in button, or to stop a kind of alert.
@@ -178,6 +181,8 @@ Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/there
 | `POST /api/me/password` `{currentPassword, newPassword, username?}` | `Bearer <token>` | Set or change your password |
 | `POST /api/me/circles/<id>` `{sharing}` | `Bearer <token>` | Share or stop sharing your location with one circle |
 | `POST /api/me/circles/join` `{code}` | `Bearer <token>` | Join another circle with an invite code |
+| `POST /api/places` `{circleId, name, lat, lon, radius}`, `POST`/`PATCH`/`DELETE /api/places/<id>` | `Bearer <token>` | Add, change or delete a place in one of your circles |
+| `GET /api/members/<id>/trail` | `Bearer <token>` | Someone's trail, if they keep one and you can see their location |
 | `GET /api/events/wait?since=<cursor>&wait=50` | `Bearer <token>` | Waits until there's a new alert (or `wait` seconds), then returns `{events, cursor}`. The app keeps one open for instant alerts |
 | `POST /api/sos` `{loc?}`, `POST /api/sos/end` | `Bearer <token>` | Raise or end an SOS |
 | `POST /api/checkin` `{note, loc?}` | `Bearer <token>` | Check in |

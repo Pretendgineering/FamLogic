@@ -25,6 +25,10 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.CopyrightOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.views.overlay.Polygon
+import org.osmdroid.views.overlay.Polyline
 
 /** Something the map should do once: zoom to everyone, or to one person. */
 sealed class CameraCommand {
@@ -47,6 +51,13 @@ private class MapState {
     var tileUrl: String? = null
     var appliedSeq = -1
     val markers = mutableMapOf<String, Marker>()
+    val places = mutableMapOf<String, Pair<Polygon, Marker>>()
+    var drawnPlaces: List<Place>? = null
+    var trailLine: Polyline? = null
+    var drawnTrail: Any? = null
+    // The latest callbacks, read by long-lived osmdroid listeners.
+    var onLongPress: (Double, Double) -> Unit = { _, _ -> }
+    var onPlaceClick: (Place) -> Unit = {}
 }
 
 const val STALE_MS = 30 * 60 * 1000L
@@ -59,9 +70,17 @@ fun OsmMap(
     camera: CameraCommand?,
     statusOf: (Member) -> String,
     modifier: Modifier = Modifier,
+    places: List<Place> = emptyList(),
+    /** A trail to draw (someone's recent path), and its colour. */
+    trail: List<TrailPoint> = emptyList(),
+    trailColor: String = "#4363d8",
+    onLongPress: (lat: Double, lon: Double) -> Unit = { _, _ -> },
+    onPlaceClick: (Place) -> Unit = {},
 ) {
     val context = LocalContext.current
     val state = remember { MapState() }
+    state.onLongPress = onLongPress
+    state.onPlaceClick = onPlaceClick
     val mapView = remember {
         MapView(context).apply {
             setMultiTouchControls(true)
@@ -69,6 +88,16 @@ fun OsmMap(
             isTilesScaledToDpi = true
             minZoomLevel = 2.0
             controller.setZoom(3.0)
+            // First overlay = last to see touches, so markers and places get theirs first.
+            overlays.add(
+                MapEventsOverlay(object : MapEventsReceiver {
+                    override fun singleTapConfirmedHelper(p: GeoPoint?) = false
+                    override fun longPressHelper(p: GeoPoint?): Boolean {
+                        p?.let { state.onLongPress(it.latitude, it.longitude) }
+                        return p != null
+                    }
+                }),
+            )
             overlays.add(CopyrightOverlay(context))
         }
     }
@@ -95,6 +124,28 @@ fun OsmMap(
         if (state.tileUrl != tileUrl) {
             map.setTileSource(TemplateTileSource(tileUrl, attribution))
             state.tileUrl = tileUrl
+        }
+
+        if (state.drawnPlaces != places) {
+            drawPlaces(map, state, places)
+            state.drawnPlaces = places
+        }
+        if (state.drawnTrail != trail to trailColor) {
+            state.trailLine?.let { map.overlays.remove(it) }
+            state.trailLine = null
+            if (trail.size >= 2) {
+                val line = Polyline(map).apply {
+                    setPoints(trail.map { GeoPoint(it.lat, it.lon) })
+                    outlinePaint.color = parseColor(trailColor)
+                    outlinePaint.strokeWidth = 10f
+                    outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                    outlinePaint.alpha = 200
+                }
+                // Above places, below people.
+                map.overlays.add(1 + 2 * state.places.size, line)
+                state.trailLine = line
+            }
+            state.drawnTrail = trail to trailColor
         }
 
         val located = members.filter { it.loc != null && !it.paused }
@@ -177,4 +228,39 @@ fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, 
     p.textAlign = Paint.Align.CENTER
     c.drawText(initialOf(name), r, r - (p.descent() + p.ascent()) / 2, p)
     return bmp
+}
+
+
+/** Places as shaded circles with their name, drawn under the people. */
+private fun drawPlaces(map: MapView, state: MapState, places: List<Place>) {
+    state.places.values.forEach { (poly, label) ->
+        map.overlays.remove(poly)
+        map.overlays.remove(label)
+    }
+    state.places.clear()
+    val blue = Color.rgb(47, 111, 237)
+    places.forEachIndexed { i, p ->
+        val center = GeoPoint(p.lat, p.lon)
+        val poly = Polygon(map).apply {
+            points = Polygon.pointsAsCircle(center, p.radius)
+            fillPaint.color = Color.argb(28, 47, 111, 237)
+            outlinePaint.color = blue
+            outlinePaint.strokeWidth = 4f
+            title = p.name
+            setOnClickListener { _, _, _ -> state.onPlaceClick(p); true }
+        }
+        val label = Marker(map).apply {
+            position = center
+            setTextIcon(p.name)
+            textLabelForegroundColor = blue
+            textLabelBackgroundColor = Color.argb(200, 255, 255, 255)
+            textLabelFontSize = 34
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            setOnMarkerClickListener { _, _ -> state.onPlaceClick(p); true }
+        }
+        // Just above the touch overlay (index 0), below everything else.
+        map.overlays.add(1 + 2 * i, poly)
+        map.overlays.add(2 + 2 * i, label)
+        state.places[p.id] = poly to label
+    }
 }

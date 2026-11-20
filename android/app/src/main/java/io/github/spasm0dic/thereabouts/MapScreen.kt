@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.location.Location
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.FilterChip
@@ -137,6 +138,13 @@ fun MapScreen(
     var showCheckIn by remember { mutableStateOf(false) }
     var circles by remember { mutableStateOf<List<CircleInfo>>(emptyList()) }
     var circleFilter by remember { mutableStateOf(prefs.circleFilter) }
+    var places by remember { mutableStateOf<List<Place>>(emptyList()) }
+    var placeEdit by remember { mutableStateOf<PlaceEdit?>(null) }
+    var shareArrivals by remember { mutableStateOf<Boolean?>(null) }
+    var trailHours by remember { mutableStateOf<Int?>(null) }
+    // The person you tapped, whose trail (if they keep one) is drawn on the map.
+    var selected by remember { mutableStateOf<String?>(null) }
+    var trail by remember { mutableStateOf<List<TrailPoint>>(emptyList()) }
     // Bumped every minute so "5 min ago" labels stay current.
     var tick by remember { mutableIntStateOf(0) }
 
@@ -152,6 +160,16 @@ fun MapScreen(
             // Alerts also come in here, so they show while the app is open even if sharing is paused.
             Alerts.handle(context, res.events)
             shareLowBattery = res.shareLowBattery
+            places = res.places
+            shareArrivals = res.shareArrivals
+            trailHours = res.trailHours
+            // Keep the selected person's trail up to date.
+            val sel = res.members.find { it.id == selected }
+            trail = if (sel != null && sel.trail && prefs.showTrails) {
+                runCatching { Api(prefs.serverUrl, prefs.token).trail(sel.id) }.getOrDefault(trail)
+            } else {
+                emptyList()
+            }
             hasPassword = res.hasPassword
             username = res.username
             prefs.username = res.username
@@ -317,6 +335,12 @@ fun MapScreen(
     if (showCheckIn) {
         CheckInDialog(prefs, onDone = { showCheckIn = false })
     }
+    placeEdit?.let { edit ->
+        PlaceDialog(prefs, edit, circles, defaultCircle = circleFilter, onDone = { changed ->
+            placeEdit = null
+            if (changed) scope.launch { refresh() }
+        })
+    }
     if (joinCircleCode != null) {
         JoinCircleDialog(prefs, initialCode = joinCircleCode, onDone = { joined ->
             onJoinCircleHandled()
@@ -347,6 +371,33 @@ fun MapScreen(
                 }
             },
             onCirclesChanged = { scope.launch { refresh() } },
+            places = places,
+            shareArrivals = shareArrivals,
+            trailHours = trailHours,
+            onTrailHoursChange = { h ->
+                val before = trailHours
+                trailHours = h
+                scope.launch {
+                    try {
+                        Api(prefs.serverUrl, prefs.token).setTrailHours(h)
+                    } catch (e: IOException) {
+                        trailHours = before
+                        Toast.makeText(context, "Couldn't save: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onShareArrivalsChange = { on ->
+                val before = shareArrivals
+                shareArrivals = on
+                scope.launch {
+                    try {
+                        Api(prefs.serverUrl, prefs.token).setShareArrivals(on)
+                    } catch (e: IOException) {
+                        shareArrivals = before
+                        Toast.makeText(context, "Couldn't save: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
             onPasswordSaved = { u ->
                 username = u
                 prefs.username = u
@@ -459,6 +510,11 @@ fun MapScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 OsmMap(
                     members = shown,
+                    places = if (circleFilter.isEmpty()) places else places.filter { it.circleId == circleFilter },
+                    onLongPress = { lat, lon -> placeEdit = PlaceEdit.Add(lat, lon) },
+                    onPlaceClick = { p -> placeEdit = PlaceEdit.Edit(p) },
+                    trail = trail,
+                    trailColor = members.find { it.id == selected }?.color ?: "#4363d8",
                     tileUrl = tileUrl,
                     attribution = attribution,
                     camera = camera,
@@ -466,7 +522,11 @@ fun MapScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
                 FilledTonalButton(
-                    onClick = { camera = CameraCommand.FitAll(++cameraSeq) },
+                    onClick = {
+                        selected = null
+                        trail = emptyList()
+                        camera = CameraCommand.FitAll(++cameraSeq)
+                    },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                 ) { Text("Show everyone") }
                 Column(
@@ -492,7 +552,14 @@ fun MapScreen(
                             m = m,
                             isMe = m.id == prefs.memberId,
                             status = statusOf(m),
-                            onClick = { m.loc?.let { camera = CameraCommand.Center(it.lat, it.lon, ++cameraSeq) } },
+                            onClick = {
+                                m.loc?.let { camera = CameraCommand.Center(it.lat, it.lon, ++cameraSeq) }
+                                selected = m.id
+                                trail = emptyList()
+                                if (m.trail && prefs.showTrails) scope.launch {
+                                    trail = runCatching { Api(prefs.serverUrl, prefs.token).trail(m.id) }.getOrDefault(emptyList())
+                                }
+                            },
                             onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
                         )
                         HorizontalDivider()
@@ -552,6 +619,7 @@ private fun statusLine(m: Member, me: Member?, tick: Int): String {
     if (m.paused) return "Location sharing paused"
     val loc = m.loc ?: return "No location yet"
     val parts = mutableListOf<String>()
+    if (m.place.isNotEmpty()) parts += "At ${m.place}"
     val age = System.currentTimeMillis() - loc.time
     parts += if (age < 60_000) "Just now" else DateUtils.getRelativeTimeSpanString(loc.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
     if (loc.battery >= 0) parts += "${loc.battery}%" + if (loc.charging) " charging" else ""
@@ -559,7 +627,7 @@ private fun statusLine(m: Member, me: Member?, tick: Int): String {
     if (me != null && me.id != m.id && myLoc != null && !me.paused) {
         val out = FloatArray(1)
         Location.distanceBetween(myLoc.lat, myLoc.lon, loc.lat, loc.lon, out)
-        parts += formatDistance(out[0]) + " away"
+        parts += if (out[0] < 100) "nearby" else formatDistance(out[0]) + " away"
     }
     return parts.joinToString(" · ")
 }
@@ -629,6 +697,11 @@ private fun SettingsScreen(
     circles: List<CircleInfo>,
     onCircleSharingChange: (CircleInfo, Boolean) -> Unit,
     onCirclesChanged: () -> Unit,
+    places: List<Place>,
+    shareArrivals: Boolean?,
+    onShareArrivalsChange: (Boolean) -> Unit,
+    trailHours: Int?,
+    onTrailHoursChange: (Int) -> Unit,
     onPasswordSaved: (String) -> Unit,
     onBack: () -> Unit,
     onLeave: () -> Unit,
@@ -647,6 +720,10 @@ private fun SettingsScreen(
     var confirmSosOff by remember { mutableStateOf(false) }
     var showCheckIn by remember { mutableStateOf(prefs.showCheckInButton) }
     var notifyCheckIn by remember { mutableStateOf(prefs.notifyCheckIn) }
+    var notifyArrivals by remember { mutableStateOf(prefs.notifyArrivals) }
+    var notifyDepartures by remember { mutableStateOf(prefs.notifyDepartures) }
+    var mutedPlaces by remember { mutableStateOf(prefs.mutedPlaces) }
+    var showTrails by remember { mutableStateOf(prefs.showTrails) }
 
     Scaffold(
         topBar = {
@@ -810,6 +887,73 @@ private fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
+            Text("Places", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                "Long-press the map to add a place like Home or School. Tap a place on the map to change or delete it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SwitchRow(
+                title = "Tell my family when I arrive or leave",
+                detail = "Only for places in circles you share your location with.",
+                checked = shareArrivals ?: true,
+                enabled = shareArrivals != null,
+                onChange = onShareArrivalsChange,
+            )
+            SwitchRow(
+                title = "Notify me when someone arrives",
+                detail = "",
+                checked = notifyArrivals,
+                onChange = { notifyArrivals = it; prefs.notifyArrivals = it },
+            )
+            SwitchRow(
+                title = "Notify me when someone leaves",
+                detail = "",
+                checked = notifyDepartures,
+                onChange = { notifyDepartures = it; prefs.notifyDepartures = it },
+            )
+            if (places.isNotEmpty() && (notifyArrivals || notifyDepartures)) {
+                Text("Alerts for each place", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+                places.forEach { p ->
+                    SwitchRow(
+                        title = p.name,
+                        detail = "",
+                        checked = p.id !in mutedPlaces,
+                        onChange = { on ->
+                            mutedPlaces = if (on) mutedPlaces - p.id else mutedPlaces + p.id
+                            prefs.mutedPlaces = mutedPlaces
+                        },
+                    )
+                }
+            }
+
+            Text("Trail", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                "Keep my trail for others to see",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                "Where you've been recently, drawn as a line when someone taps you. Only people who can see your location see it. Turning it off deletes it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                listOf(0 to "Off", 6 to "6 hours", 12 to "12 hours", 24 to "24 hours").forEach { (h, label) ->
+                    FilterChip(
+                        selected = trailHours == h,
+                        enabled = trailHours != null,
+                        onClick = { onTrailHoursChange(h) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+            SwitchRow(
+                title = "Show a person's trail when I tap them",
+                detail = "",
+                checked = showTrails,
+                onChange = { showTrails = it; prefs.showTrails = it },
+            )
 
             Text("Check-ins", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
             SwitchRow(
@@ -1216,5 +1360,109 @@ fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean
             }) { Text(if (circleName == null) "Continue" else "Join") }
         },
         dismissButton = { TextButton(enabled = !busy, onClick = { onDone(false) }) { Text("Cancel") } },
+    )
+}
+
+/** What the place dialog is doing: adding at a point, or editing an existing place. */
+sealed class PlaceEdit {
+    data class Add(val lat: Double, val lon: Double) : PlaceEdit()
+    data class Edit(val place: Place) : PlaceEdit()
+}
+
+private val RADIUS_CHOICES = listOf(75.0, 150.0, 300.0, 600.0, 1200.0)
+
+/** Add or edit a place: name, size and (when adding) which circle it belongs to. */
+@Composable
+private fun PlaceDialog(prefs: Prefs, edit: PlaceEdit, circles: List<CircleInfo>, defaultCircle: String, onDone: (changed: Boolean) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val existing = (edit as? PlaceEdit.Edit)?.place
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var radius by remember { mutableStateOf(existing?.radius ?: 150.0) }
+    var circleId by remember { mutableStateOf(existing?.circleId ?: defaultCircle.ifEmpty { circles.firstOrNull()?.id ?: "" }) }
+    var busy by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    fun run(block: suspend () -> Unit) {
+        busy = true
+        scope.launch {
+            try {
+                block()
+                onDone(true)
+            } catch (e: IOException) {
+                Toast.makeText(context, e.message ?: "Couldn't save", Toast.LENGTH_LONG).show()
+                busy = false
+            }
+        }
+    }
+
+    if (confirmDelete && existing != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete ${existing.name}?") },
+            text = { Text("Nobody will be told about arriving at or leaving it any more.") },
+            confirmButton = { TextButton(onClick = { run { Api(prefs.serverUrl, prefs.token).deletePlace(existing.id) } }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
+        return
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDone(false) },
+        title = { Text(if (existing == null) "Add a place" else "Edit ${existing.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (existing == null) {
+                    Text("Your circle is told when someone arrives here or leaves.", style = MaterialTheme.typography.bodySmall)
+                }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(40) },
+                    label = { Text("Name") },
+                    placeholder = { Text("Home, School, Work…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Size", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    RADIUS_CHOICES.forEach { r ->
+                        FilterChip(
+                            selected = radius == r,
+                            onClick = { radius = r },
+                            label = { Text(if (r < 1000) "${r.toInt()} m" else "${r / 1000} km") },
+                        )
+                    }
+                }
+                if (existing == null && circles.size > 1) {
+                    Text("Circle", style = MaterialTheme.typography.titleSmall)
+                    circles.forEach { c ->
+                        Row(
+                            Modifier.fillMaxWidth().selectable(selected = circleId == c.id) { circleId = c.id },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = circleId == c.id, onClick = null)
+                            Text(c.name, Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && name.isNotBlank() && circleId.isNotEmpty(), onClick = {
+                run {
+                    val api = Api(prefs.serverUrl, prefs.token)
+                    when (edit) {
+                        is PlaceEdit.Add -> api.createPlace(circleId, name.trim(), edit.lat, edit.lon, radius)
+                        is PlaceEdit.Edit -> api.updatePlace(edit.place.id, name.trim(), radius)
+                    }
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                if (existing != null) TextButton(enabled = !busy, onClick = { confirmDelete = true }) { Text("Delete") }
+                TextButton(enabled = !busy, onClick = { onDone(false) }) { Text("Cancel") }
+            }
+        },
     )
 }

@@ -44,6 +44,14 @@ type Member struct {
 	Circles    []string `json:"circles,omitempty"`
 	HiddenFrom []string `json:"hiddenFrom,omitempty"`
 
+	// Places they're in (see places.go), and whether their arrivals and
+	// departures are announced (nil = yes).
+	Presence      map[string]*Presence `json:"presence,omitempty"`
+	ShareArrivals *bool                `json:"shareArrivals,omitempty"`
+
+	// How many hours of trail this person keeps for others to see (0 = none, the default).
+	TrailHours int `json:"trailHours,omitempty"`
+
 	// SOS: set while this person has an SOS active, until they say they're OK.
 	SOSSince int64 `json:"sosSince,omitempty"`
 
@@ -66,6 +74,9 @@ type Member struct {
 // SharesLowBattery reports whether others get told when this person's battery is low.
 func (m *Member) SharesLowBattery() bool { return m.ShareLowBattery == nil || *m.ShareLowBattery }
 
+// SharesArrivals reports whether this person's arrivals and departures at places are announced.
+func (m *Member) SharesArrivals() bool { return m.ShareArrivals == nil || *m.ShareArrivals }
+
 // Invite is a single-use code that lets a phone join. A "reset" invite
 // (MemberID set) instead lets an existing member choose a new password.
 type Invite struct {
@@ -83,6 +94,8 @@ type data struct {
 	Invites map[string]*Invite `json:"invites"`
 	Circles map[string]*Circle `json:"circles"`
 	Places  map[string]*Place  `json:"places,omitempty"`
+	// Trails, per member, oldest point first (see trails.go).
+	Trails map[string][]TrailPoint `json:"trails,omitempty"`
 
 	// Recent alerts for phones to pick up (see events.go).
 	LastEventID int64   `json:"lastEventId"`
@@ -108,7 +121,7 @@ func OpenStore(path string) (*Store, error) {
 	b, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		s.d = data{Secret: randomString(32), Members: map[string]*Member{}, Invites: map[string]*Invite{}, Circles: map[string]*Circle{}, Places: map[string]*Place{}}
+		s.d = data{Secret: randomString(32), Members: map[string]*Member{}, Invites: map[string]*Invite{}, Circles: map[string]*Circle{}, Places: map[string]*Place{}, Trails: map[string][]TrailPoint{}}
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return nil, err
 		}
@@ -130,6 +143,9 @@ func OpenStore(path string) (*Store, error) {
 	}
 	if s.d.Places == nil {
 		s.d.Places = map[string]*Place{}
+	}
+	if s.d.Trails == nil {
+		s.d.Trails = map[string][]TrailPoint{}
 	}
 	if s.d.Secret == "" {
 		s.d.Secret = randomString(32)
@@ -302,6 +318,8 @@ func (s *Store) UpdateLocation(id string, loc Location) error {
 	}
 	m.Loc = &loc
 	s.checkBatteryLocked(m, loc)
+	s.checkPlacesLocked(m, loc)
+	s.addTrailPointLocked(m, loc)
 	return s.saveLocked()
 }
 
@@ -311,6 +329,7 @@ type MemberPatch struct {
 	Paused          *bool
 	Color           *string
 	ShareLowBattery *bool
+	ShareArrivals   *bool
 }
 
 // UpdateMember applies a patch. Pausing also forgets the last location so
@@ -332,11 +351,18 @@ func (s *Store) UpdateMember(id string, p MemberPatch) (*Member, error) {
 		m.Paused = *p.Paused
 		if *p.Paused {
 			m.Loc = nil
+			// Forget which places they're in, so resuming later doesn't announce
+			// what happened while they were paused.
+			m.Presence = nil
 		}
 	}
 	if p.ShareLowBattery != nil {
 		v := *p.ShareLowBattery
 		m.ShareLowBattery = &v
+	}
+	if p.ShareArrivals != nil {
+		v := *p.ShareArrivals
+		m.ShareArrivals = &v
 	}
 	cp := *m
 	return &cp, s.saveLocked()
@@ -349,6 +375,7 @@ func (s *Store) DeleteMember(id string) error {
 		return ErrNotFound
 	}
 	delete(s.d.Members, id)
+	delete(s.d.Trails, id)
 	for code, inv := range s.d.Invites {
 		if inv.MemberID == id {
 			delete(s.d.Invites, code) // their reset links die with them
