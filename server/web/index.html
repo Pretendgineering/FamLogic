@@ -30,23 +30,31 @@
     <div id="sos-banner" class="sos-banner" hidden></div>
     <div class="layout">
       <aside>
-        <h2>People</h2>
-        <label class="filter" id="filter-label" hidden>Show
-          <select id="circle-filter"><option value="">Everyone</option></select>
-        </label>
-        <ul id="members" class="list"></ul>
-        <p id="no-members" class="muted" hidden>Nobody has joined yet. Use <strong>Invite someone</strong> to add the first phone.</p>
-        <h2>Open invites</h2>
-        <ul id="invites" class="list"></ul>
-        <p id="no-invites" class="muted">No open invites.</p>
-        <h2>Places</h2>
-        <p class="muted small">Named areas like Home or School. People in the place's circle are told when someone arrives or leaves.</p>
-        <ul id="places" class="list"></ul>
-        <button id="new-place-btn" class="secondary small-btn">+ Add place</button>
-        <h2>Circles</h2>
-        <p class="muted small">Groups that see each other, such as Family or Grandparents. People only see others they share a circle with.</p>
-        <ul id="circles" class="list"></ul>
-        <button id="new-circle-btn" class="secondary small-btn">+ New circle</button>
+        <section class="panel">
+          <h2>People</h2>
+          <label class="filter" id="filter-label" hidden>Show
+            <select id="circle-filter"><option value="">Everyone</option></select>
+          </label>
+          <ul id="members" class="list"></ul>
+          <p id="no-members" class="muted" hidden>Nobody has joined yet. Use <strong>Invite someone</strong> to add the first phone.</p>
+        </section>
+        <section class="panel">
+          <h2>Open invites</h2>
+          <ul id="invites" class="list"></ul>
+          <p id="no-invites" class="muted">No open invites.</p>
+        </section>
+        <section class="panel">
+          <h2>Fences</h2>
+          <p class="muted small">Areas like Home or School. Everyone in the fence's group is told when someone arrives or leaves.</p>
+          <ul id="places" class="list"></ul>
+          <button id="new-place-btn" class="tonal small-btn">+ Add fence</button>
+        </section>
+        <section class="panel">
+          <h2>Groups</h2>
+          <p class="muted small">People who see each other, such as Family or Grandparents. Everyone only sees people they share a group with.</p>
+          <ul id="circles" class="list"></ul>
+          <button id="new-circle-btn" class="tonal small-btn">+ New group</button>
+        </section>
       </aside>
       <div id="map"></div>
     </div>
@@ -56,7 +64,7 @@
     <form id="invite-form" method="dialog">
       <h2>Invite someone</h2>
       <label>Their name (optional) <input id="invite-name" maxlength="40" placeholder="e.g. Grandma"></label>
-      <label id="invite-circle-label">Circle <select id="invite-circle"></select></label>
+      <label id="invite-circle-label">Group <select id="invite-circle"></select></label>
       <div class="row"><button type="submit">Create invite</button><button type="button" class="secondary" data-close>Cancel</button></div>
     </form>
     <div id="invite-result" hidden>
@@ -71,18 +79,27 @@
 
   <dialog id="place-dialog">
     <form id="place-form" method="dialog">
-      <h2 id="place-dialog-title">Add a place</h2>
+      <h2 id="place-dialog-title">Add a fence</h2>
+      <div class="where">
+        <div class="where-head"><strong>Where</strong> <span id="place-where" class="muted">Not chosen yet</span></div>
+        <div class="search-row" id="place-search-row">
+          <input id="place-search" placeholder="Search for an address" autocomplete="off">
+          <button type="button" id="place-search-btn" class="tonal">Search</button>
+        </div>
+        <ul id="place-results" class="results"></ul>
+        <button type="button" id="place-pick" class="link">…or pick a spot on the map</button>
+      </div>
       <label>Name <input id="place-name" maxlength="40" required placeholder="e.g. Home, School, Work"></label>
       <label>Size (radius in metres) <input id="place-radius" type="number" min="30" max="5000" step="10" value="150" required></label>
-      <label id="place-circle-label">Circle <select id="place-circle"></select></label>
+      <label id="place-circle-label">Group <select id="place-circle"></select></label>
       <div class="row"><button type="submit">Save</button><button type="button" class="secondary" data-close>Cancel</button></div>
     </form>
   </dialog>
 
   <dialog id="circles-dialog">
     <form method="dialog">
-      <h2 id="circles-dialog-title">Circles</h2>
-      <p class="muted">Tick the circles this person is in. They see everyone in those circles.</p>
+      <h2 id="circles-dialog-title">Groups</h2>
+      <p class="muted">Tick the groups this person is in. They see everyone in those groups.</p>
       <div id="circles-checks"></div>
       <div class="row"><button type="button" data-close>Done</button></div>
     </form>

@@ -19,7 +19,7 @@ type Circle struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
-var ErrLastCircle = errors.New("a server needs at least one circle")
+var ErrLastCircle = errors.New("a server needs at least one group")
 
 // EnsureDefaultCircle creates the first circle on a server that has none (a new
 // server, or one from before circles existed) and puts everyone in it, so

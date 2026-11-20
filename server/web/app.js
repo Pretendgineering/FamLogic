@@ -10,7 +10,10 @@ let circles = [];       // all circles on the server
 let lastMembers = [];   // everyone, from the last refresh
 let places = [];        // all places
 const placeLayers = new Map(); // place id -> Leaflet layer group
-let trailLayer = null;  // the clicked person's trail, if they keep one
+let trailLayer = null;
+let serverFeatures = []; // what the server can do, e.g. "geocode"
+// The theme's accent colour (fences on the map use it).
+const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#8b5cf6";  // the clicked person's trail, if they keep one
 let circleFilter = "";  // "" = everyone, else a circle id
 try { circleFilter = localStorage.getItem("circleFilter") || ""; } catch (_) {}
 
@@ -121,6 +124,10 @@ $("#logout-btn").addEventListener("click", async () => {
 function ensureMap(server) {
   if (map) return;
   map = L.map("map", { zoomControl: true }).setView([20, 0], 2);
+  // Fence names only when zoomed in enough to read them without piling up.
+  const labelsByZoom = () => document.body.classList.toggle("zoomed-out", map.getZoom() < 14);
+  map.on("zoomend", labelsByZoom);
+  labelsByZoom();
   // Tile servers (OpenStreetMap's in particular) require a Referer; send only our origin.
   L.tileLayer(server.tileUrl, {
     maxZoom: 19,
@@ -151,7 +158,7 @@ function renderMembers(members) {
             title: (m.hiddenFrom || []).includes(id) ? `Not sharing their location with ${circleName(id)}` : "",
           }, circleName(id)))) : null,
         el("div", { class: "row-actions" },
-          el("button", { class: "link", title: "Choose which circles they're in", onclick: (e) => { e.stopPropagation(); openCircles(m); } }, "Circles…"),
+          el("button", { class: "link", title: "Choose which groups they're in", onclick: (e) => { e.stopPropagation(); openCircles(m); } }, "Groups…"),
           el("button", { class: "link", title: "Rename", onclick: (e) => { e.stopPropagation(); rename(m); } }, "Rename"),
           el("button", { class: "link", title: "Let them choose a new password and sign in on a phone", onclick: (e) => { e.stopPropagation(); resetSignIn(m); } }, "Reset sign-in"),
           el("button", { class: "link danger", title: "Remove", onclick: (e) => { e.stopPropagation(); removeMember(m); } }, "Remove"))),
@@ -222,6 +229,7 @@ async function refresh() {
     const [data, invites] = await Promise.all([api("GET", "/api/admin/members"), api("GET", "/api/admin/invites")]);
     $("#family-name").textContent = data.server.name;
     $("#server-version").textContent = `Thereabouts server ${data.server.version}`;
+    serverFeatures = data.server.features || [];
     const sos = data.members.filter((m) => m.sosSince);
     document.title = (sos.length ? "🆘 SOS · " : "") + `${data.server.name} · Thereabouts`;
     renderSOS(sos);
@@ -273,30 +281,30 @@ $("#circle-filter").addEventListener("change", (e) => {
 });
 
 $("#new-circle-btn").addEventListener("click", async () => {
-  const name = prompt("Name of the new circle (e.g. Grandparents, Friends):");
+  const name = prompt("Name of the new group (e.g. Grandparents, Friends):");
   if (!name) return;
   try { await api("POST", "/api/admin/circles", { name }); refresh(); }
   catch (err) { alert(err.message); }
 });
 
 async function renameCircle(c) {
-  const name = prompt("New name for this circle:", c.name);
+  const name = prompt("New name for this group:", c.name);
   if (!name || name === c.name) return;
   try { await api("PATCH", `/api/admin/circles/${encodeURIComponent(c.id)}`, { name }); refresh(); }
   catch (err) { alert(err.message); }
 }
 
 async function deleteCircle(c) {
-  if (!confirm(`Delete the circle "${c.name}"? Its members stay on the server (and in their other circles), but no longer see each other through this circle. Its invites stop working.`)) return;
+  if (!confirm(`Delete the group "${c.name}"? Its members stay on the server (and in their other groups), but no longer see each other through this group. Its invites and fences go too.`)) return;
   try { await api("DELETE", `/api/admin/circles/${encodeURIComponent(c.id)}`); refresh(); }
   catch (err) { alert(err.message); }
 }
 
-// The "Circles…" dialog: tick the circles a person is in.
+// The "Groups…" dialog: tick the circles a person is in.
 const circlesDialog = $("#circles-dialog");
 circlesDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => circlesDialog.close()));
 function openCircles(m) {
-  $("#circles-dialog-title").textContent = `Circles for ${m.name}`;
+  $("#circles-dialog-title").textContent = `Groups for ${m.name}`;
   $("#circles-checks").replaceChildren(...circles.map((c) => {
     const box = el("input", { type: "checkbox" });
     box.checked = (m.circles || []).includes(c.id);
@@ -352,10 +360,10 @@ function renderPlaces() {
   for (const p of shown) {
     placeLayers.get(p.id)?.remove();
     const layer = L.layerGroup([
-      L.circle([p.lat, p.lon], { radius: p.radius, color: "#2f6fed", weight: 2, fillOpacity: 0.08, interactive: false }),
+      L.circle([p.lat, p.lon], { radius: p.radius, color: accentColor(), weight: 2, fillOpacity: 0.1, interactive: false }),
       L.marker([p.lat, p.lon], {
         interactive: false,
-        icon: L.divIcon({ className: "place-label", html: "", iconSize: [120, 18], iconAnchor: [60, 9] }),
+        icon: L.divIcon({ className: "place-label", html: "", iconSize: [160, 18], iconAnchor: [80, 9] }),
       }),
     ]).addTo(map);
     // Set the name as text so it can never inject HTML.
@@ -366,30 +374,77 @@ function renderPlaces() {
 
 const placeDialog = $("#place-dialog");
 placeDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => placeDialog.close()));
-let placeDraft = null; // { lat, lon } for a new place, or an existing place being edited
+// The fence being added or edited: { id?, name, radius, circleId, lat?, lon?, where? }
+let placeDraft = null;
+
+function setWhere(text) {
+  $("#place-where").textContent = text;
+}
 
 function openPlaceDialog(draft) {
   placeDraft = draft;
   const editing = !!draft.id;
-  $("#place-dialog-title").textContent = editing ? `Edit ${draft.name}` : "Add a place";
+  $("#place-dialog-title").textContent = editing ? `Edit ${draft.name}` : "Add a fence";
   $("#place-name").value = draft.name || "";
   $("#place-radius").value = Math.round(draft.radius || 150);
   const sel = $("#place-circle");
   sel.replaceChildren(...circles.map((c) => el("option", { value: c.id }, c.name)));
   sel.value = draft.circleId || circleFilter || (circles[0] && circles[0].id) || "";
-  sel.disabled = editing; // a place stays in its circle
+  sel.disabled = editing; // a fence stays in its group
   $("#place-circle-label").hidden = circles.length < 2;
-  placeDialog.showModal();
+  setWhere(draft.where || (draft.lat != null ? (editing ? "Where it is now (search or pick to move it)" : "The spot you picked") : "Not chosen yet"));
+  $("#place-search").value = "";
+  $("#place-results").replaceChildren();
+  $("#place-search-row").hidden = !serverFeatures.includes("geocode");
+  if (!placeDialog.open) placeDialog.showModal();
+  if (draft.lat == null && serverFeatures.includes("geocode")) $("#place-search").focus();
 }
+
+async function searchAddress() {
+  const q = $("#place-search").value.trim();
+  if (q.length < 3) return;
+  const list = $("#place-results");
+  list.replaceChildren(el("li", { class: "muted" }, "Searching…"));
+  try {
+    const results = await api("GET", `/api/admin/geocode?q=${encodeURIComponent(q)}`);
+    if (!results.length) {
+      list.replaceChildren(el("li", { class: "muted" }, "Nothing found. Try adding the town, or pick the spot on the map."));
+      return;
+    }
+    list.replaceChildren(...results.map((r) => {
+      const li = el("li", {}, r.name);
+      li.addEventListener("click", () => {
+        placeDraft.lat = r.lat;
+        placeDraft.lon = r.lon;
+        placeDraft.where = r.name;
+        setWhere(r.name);
+        list.querySelectorAll("li").forEach((x) => x.classList.remove("chosen"));
+        li.classList.add("chosen");
+        // Suggest a name from the first part of the address if none yet.
+        if (!$("#place-name").value) $("#place-name").value = r.name.split(",")[0].slice(0, 40);
+        map.setView([r.lat, r.lon], 16);
+      });
+      return li;
+    }));
+  } catch (err) {
+    list.replaceChildren(el("li", { class: "muted" }, err.message));
+  }
+}
+$("#place-search-btn").addEventListener("click", searchAddress);
+$("#place-search").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); searchAddress(); } });
 
 $("#place-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const body = { name: $("#place-name").value, radius: Number($("#place-radius").value) };
+  if (placeDraft.lat == null) {
+    alert("Choose where the fence goes: search for an address or pick a spot on the map.");
+    return;
+  }
+  const body = { name: $("#place-name").value, radius: Number($("#place-radius").value), lat: placeDraft.lat, lon: placeDraft.lon };
   try {
     if (placeDraft.id) {
       await api("PATCH", `/api/admin/places/${encodeURIComponent(placeDraft.id)}`, body);
     } else {
-      await api("POST", "/api/admin/places", { ...body, lat: placeDraft.lat, lon: placeDraft.lon, circleId: $("#place-circle").value });
+      await api("POST", "/api/admin/places", { ...body, circleId: $("#place-circle").value });
     }
     placeDialog.close();
     refresh();
@@ -398,11 +453,11 @@ $("#place-form").addEventListener("submit", async (e) => {
   }
 });
 
-// "+ Add place": click the map where it is.
-$("#new-place-btn").addEventListener("click", () => {
+// "Pick a spot on the map": hide the dialog, click the map, come back with the spot.
+function pickOnMap(then) {
   if (!map) return;
   document.body.classList.add("picking");
-  const hint = el("div", { class: "pick-hint" }, "Click the map where the place is (Esc to cancel)");
+  const hint = el("div", { class: "pick-hint" }, "Click the map where the fence goes (Esc to cancel)");
   $("#map").append(hint);
   const done = () => {
     document.body.classList.remove("picking");
@@ -410,16 +465,34 @@ $("#new-place-btn").addEventListener("click", () => {
     map.off("click", onClick);
     document.removeEventListener("keydown", onKey);
   };
-  const onClick = (ev) => { done(); openPlaceDialog({ lat: ev.latlng.lat, lon: ev.latlng.lng }); };
-  const onKey = (ev) => { if (ev.key === "Escape") done(); };
+  const onClick = (ev) => { done(); then(ev.latlng.lat, ev.latlng.lng); };
+  const onKey = (ev) => { if (ev.key === "Escape") { done(); then(null, null); } };
   map.once("click", onClick);
   document.addEventListener("keydown", onKey);
+}
+
+$("#place-pick").addEventListener("click", () => {
+  // Keep what was typed so far.
+  placeDraft.name = $("#place-name").value;
+  placeDraft.radius = Number($("#place-radius").value);
+  placeDraft.circleId = $("#place-circle").value;
+  placeDialog.close();
+  pickOnMap((lat, lon) => {
+    if (lat != null) {
+      placeDraft.lat = lat;
+      placeDraft.lon = lon;
+      placeDraft.where = "The spot you picked";
+    }
+    openPlaceDialog(placeDraft);
+  });
 });
+
+$("#new-place-btn").addEventListener("click", () => openPlaceDialog({}));
 
 function editPlace(p) { openPlaceDialog({ ...p }); }
 
 async function deletePlace(p) {
-  if (!confirm(`Delete the place "${p.name}"? Nobody will be told about arriving or leaving it any more.`)) return;
+  if (!confirm(`Delete the fence "${p.name}"? Nobody will be told about arriving or leaving it any more.`)) return;
   try { await api("DELETE", `/api/admin/places/${encodeURIComponent(p.id)}`); refresh(); }
   catch (err) { alert(err.message); }
 }

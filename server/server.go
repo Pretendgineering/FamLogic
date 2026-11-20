@@ -35,10 +35,11 @@ type Server struct {
 
 	loginMu sync.Mutex    // serialises failed logins so guessing is slow
 	limiter *loginLimiter // locks a username after repeated wrong passwords
+	geo     *geocoder     // address search for fences
 }
 
 func NewServer(cfg Config, store *Store, static fs.FS) *Server {
-	return &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter()}
+	return &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter(), geo: newGeocoder(cfg.GeocoderURL)}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -54,6 +55,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/me/password", s.device(s.handleSetPassword))
 	mux.HandleFunc("POST /api/me/circles/join", s.device(s.handleJoinCircle))
 	mux.HandleFunc("GET /api/members/{id}/trail", s.device(s.handleTrail))
+	mux.HandleFunc("GET /api/geocode", s.device(s.handleGeocode))
 	mux.HandleFunc("POST /api/places", s.device(s.handleCreatePlace))
 	mux.HandleFunc("PATCH /api/places/{id}", s.device(s.handleUpdatePlace))
 	mux.HandleFunc("POST /api/places/{id}", s.device(s.handleUpdatePlace)) // for clients that can't send PATCH
@@ -77,6 +79,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
 	mux.HandleFunc("GET /api/admin/members/{id}/trail", s.admin(s.handleAdminTrail))
+	mux.HandleFunc("GET /api/admin/geocode", s.admin(s.handleAdminGeocode))
 	mux.HandleFunc("GET /api/admin/places", s.admin(s.handleAdminPlaces))
 	mux.HandleFunc("POST /api/admin/places", s.admin(s.handleAdminCreatePlace))
 	mux.HandleFunc("PATCH /api/admin/places/{id}", s.admin(s.handleAdminUpdatePlace))
@@ -180,12 +183,16 @@ func toPublic(ms []Member) []publicMember {
 var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails"}
 
 func (s *Server) serverInfo() map[string]any {
+	features := serverFeatures
+	if s.geo != nil && s.geo.enabled() {
+		features = append(slices.Clone(serverFeatures), "geocode")
+	}
 	return map[string]any{
 		"name":            s.cfg.FamilyName,
 		"version":         version,
 		"tileUrl":         s.cfg.TileURL,
 		"tileAttribution": s.cfg.TileAttribution,
-		"features":        serverFeatures,
+		"features":        features,
 	}
 }
 
@@ -858,7 +865,7 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	inv, err := s.store.CreateInvite(name, req.CircleID, s.cfg.InviteTTL)
 	if errors.Is(err, ErrNotFound) {
-		writeError(w, http.StatusBadRequest, "no such circle")
+		writeError(w, http.StatusBadRequest, "no such group")
 		return
 	}
 	if err != nil {
@@ -897,7 +904,7 @@ func (s *Server) handleSetCircleSharing(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if err := s.store.SetSharingIn(me.ID, r.PathValue("id"), req.Sharing); err != nil {
-		writeError(w, http.StatusNotFound, "you're not in that circle")
+		writeError(w, http.StatusNotFound, "you're not in that group")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -938,7 +945,7 @@ func (s *Server) handleAdminCreateCircle(w http.ResponseWriter, r *http.Request)
 	}
 	name, ok := cleanCircleName(req.Name)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "circle names are 1-40 characters")
+		writeError(w, http.StatusBadRequest, "group names are 1-40 characters")
 		return
 	}
 	c, err := s.store.CreateCircle(name)
@@ -958,11 +965,11 @@ func (s *Server) handleAdminRenameCircle(w http.ResponseWriter, r *http.Request)
 	}
 	name, ok := cleanCircleName(req.Name)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "circle names are 1-40 characters")
+		writeError(w, http.StatusBadRequest, "group names are 1-40 characters")
 		return
 	}
 	if err := s.store.RenameCircle(r.PathValue("id"), name); err != nil {
-		writeError(w, http.StatusNotFound, "no such circle")
+		writeError(w, http.StatusNotFound, "no such group")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -971,9 +978,9 @@ func (s *Server) handleAdminRenameCircle(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleAdminDeleteCircle(w http.ResponseWriter, r *http.Request) {
 	switch err := s.store.DeleteCircle(r.PathValue("id")); {
 	case errors.Is(err, ErrLastCircle):
-		writeError(w, http.StatusConflict, "You can't delete the last circle")
+		writeError(w, http.StatusConflict, "You can't delete the last group")
 	case err != nil:
-		writeError(w, http.StatusNotFound, "no such circle")
+		writeError(w, http.StatusNotFound, "no such group")
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -982,7 +989,7 @@ func (s *Server) handleAdminDeleteCircle(w http.ResponseWriter, r *http.Request)
 // handleAdminMembership puts a member in a circle (PUT) or takes them out (DELETE).
 func (s *Server) handleAdminMembership(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SetMembership(r.PathValue("mid"), r.PathValue("id"), r.Method == http.MethodPut); err != nil {
-		writeError(w, http.StatusNotFound, "no such member or circle")
+		writeError(w, http.StatusNotFound, "no such member or group")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -1058,7 +1065,7 @@ func (s *Server) writePlaceResult(w http.ResponseWriter, p *Place, err error) {
 	case errors.Is(err, ErrBadPlace):
 		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
 	case err != nil:
-		writeError(w, http.StatusNotFound, "no such place or circle")
+		writeError(w, http.StatusNotFound, "no such fence or group")
 	default:
 		writeJSON(w, http.StatusOK, p)
 	}
@@ -1074,7 +1081,7 @@ func (s *Server) handleUpdatePlace(w http.ResponseWriter, r *http.Request, me *M
 
 func (s *Server) handleDeletePlace(w http.ResponseWriter, r *http.Request, me *Member) {
 	if err := s.store.DeletePlace(me.ID, r.PathValue("id")); err != nil {
-		writeError(w, http.StatusNotFound, "no such place")
+		writeError(w, http.StatusNotFound, "no such fence")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -1093,7 +1100,7 @@ func (s *Server) handleAdminUpdatePlace(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleAdminDeletePlace(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeletePlace("", r.PathValue("id")); err != nil {
-		writeError(w, http.StatusNotFound, "no such place")
+		writeError(w, http.StatusNotFound, "no such fence")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

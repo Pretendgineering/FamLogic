@@ -32,6 +32,7 @@ type Config struct {
 	FamilyName      string
 	TileURL         string
 	TileAttribution string
+	GeocoderURL     string
 	InviteTTL       time.Duration
 }
 
@@ -51,6 +52,7 @@ func loadConfig() (Config, error) {
 		FamilyName:      env("FAMILY_NAME", "Family"),
 		TileURL:         env("TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
 		TileAttribution: env("TILE_ATTRIBUTION", "© OpenStreetMap contributors"),
+		GeocoderURL:     env("GEOCODER_URL", "https://nominatim.openstreetmap.org/search"),
 	}
 	hours, err := strconv.Atoi(env("INVITE_HOURS", "72"))
 	if err != nil || hours < 1 {

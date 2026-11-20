@@ -44,7 +44,7 @@ const (
 	departureDelay = 60 * time.Second
 )
 
-var ErrBadPlace = errors.New("places need a name and a radius between 30 m and 5 km")
+var ErrBadPlace = errors.New("fences need a name and a radius between 30 m and 5 km")
 
 // exitMargin is the buffer zone around a place: you arrive when inside the
 // radius, but only leave once you're this much further out, so standing near
