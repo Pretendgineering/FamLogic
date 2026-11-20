@@ -249,7 +249,12 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
 
                 // ---- step 2: joining as someone new ----
                 else -> {
-                    Text("Joining ${invite!!.server.name}", style = MaterialTheme.typography.titleLarge)
+                    val inv = invite!!
+                    Text(
+                        if (inv.circle.isNotEmpty() && inv.circle != inv.server.name) "Joining ${inv.circle} in ${inv.server.name}"
+                        else "Joining ${inv.server.name}",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it.take(40); error = null },

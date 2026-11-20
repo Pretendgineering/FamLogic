@@ -6,6 +6,12 @@ const REFRESH_MS = 10000;
 const STALE_MS = 30 * 60 * 1000; // a location older than this is shown faded
 
 let map, refreshTimer, fittedOnce = false;
+let circles = [];       // all circles on the server
+let lastMembers = [];   // everyone, from the last refresh
+let circleFilter = "";  // "" = everyone, else a circle id
+try { circleFilter = localStorage.getItem("circleFilter") || ""; } catch (_) {}
+
+const circleName = (id) => (circles.find((c) => c.id === id) || {}).name || "?";
 const markers = new Map(); // member id -> { marker, circle }
 
 async function api(method, path, body) {
@@ -133,7 +139,13 @@ function renderMembers(members) {
         el("div", { class: "title" }, m.name),
         el("div", { class: "sub" }, describe(m)),
         el("div", { class: "sub" }, account(m)),
+        circles.length > 1 ? el("div", { class: "chips" }, ...(m.circles || []).map((id) =>
+          el("span", {
+            class: "chip" + ((m.hiddenFrom || []).includes(id) ? " hidden-from" : ""),
+            title: (m.hiddenFrom || []).includes(id) ? `Not sharing their location with ${circleName(id)}` : "",
+          }, circleName(id)))) : null,
         el("div", { class: "row-actions" },
+          el("button", { class: "link", title: "Choose which circles they're in", onclick: (e) => { e.stopPropagation(); openCircles(m); } }, "Circles…"),
           el("button", { class: "link", title: "Rename", onclick: (e) => { e.stopPropagation(); rename(m); } }, "Rename"),
           el("button", { class: "link", title: "Let them choose a new password and sign in on a phone", onclick: (e) => { e.stopPropagation(); resetSignIn(m); } }, "Reset sign-in"),
           el("button", { class: "link danger", title: "Remove", onclick: (e) => { e.stopPropagation(); removeMember(m); } }, "Remove"))),
@@ -188,7 +200,8 @@ function renderInvites(invites) {
     list.append(el("li", {},
       el("div", { class: "grow" },
         el("div", { class: "title" }, inv.memberId ? `Reset sign-in for ${inv.name}` : (inv.name || "Anyone")),
-        el("div", { class: "sub" }, `${inv.code} · expires ${new Date(inv.expiresAt).toLocaleDateString()}`)),
+        el("div", { class: "sub" }, `${inv.code} · ` + (!inv.memberId && circles.length > 1 ? `joins ${circleName(inv.circleId)} · ` : "") +
+          `expires ${new Date(inv.expiresAt).toLocaleDateString()}`)),
       el("button", { class: "link", onclick: () => copy(inv.link) }, "Copy link"),
       el("button", { class: "link danger", onclick: () => cancelInvite(inv) }, "Cancel"),
     ));
@@ -203,12 +216,91 @@ async function refresh() {
     document.title = (sos.length ? "🆘 SOS · " : "") + `${data.server.name} · Thereabouts`;
     renderSOS(sos);
     ensureMap(data.server);
-    renderMembers(data.members);
+    circles = data.circles || [];
+    lastMembers = data.members;
+    renderCircles();
+    renderMembers(visibleMembers());
     renderInvites(invites);
   } catch (err) {
     if (err.message !== "unauthorized") console.error(err);
   }
 }
+
+// ---- circles ----
+
+function visibleMembers() {
+  if (!circles.some((c) => c.id === circleFilter)) circleFilter = "";
+  return circleFilter ? lastMembers.filter((m) => (m.circles || []).includes(circleFilter)) : lastMembers;
+}
+
+function renderCircles() {
+  // The "Show" filter above the people list (only useful with 2+ circles).
+  const sel = $("#circle-filter");
+  sel.replaceChildren(el("option", { value: "" }, "Everyone"), ...circles.map((c) => el("option", { value: c.id }, c.name)));
+  sel.value = circles.some((c) => c.id === circleFilter) ? circleFilter : "";
+  $("#filter-label").hidden = circles.length < 2;
+
+  const list = $("#circles");
+  list.replaceChildren(...circles.map((c) => {
+    const count = lastMembers.filter((m) => (m.circles || []).includes(c.id)).length;
+    return el("li", {},
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, c.name),
+        el("div", { class: "sub" }, count === 1 ? "1 person" : `${count} people`)),
+      el("button", { class: "link", onclick: () => renameCircle(c) }, "Rename"),
+      circles.length > 1 ? el("button", { class: "link danger", onclick: () => deleteCircle(c) }, "Delete") : null);
+  }));
+}
+
+$("#circle-filter").addEventListener("change", (e) => {
+  circleFilter = e.target.value;
+  try { localStorage.setItem("circleFilter", circleFilter); } catch (_) {}
+  fittedOnce = false; // zoom to the people in this circle
+  renderMembers(visibleMembers());
+});
+
+$("#new-circle-btn").addEventListener("click", async () => {
+  const name = prompt("Name of the new circle (e.g. Grandparents, Friends):");
+  if (!name) return;
+  try { await api("POST", "/api/admin/circles", { name }); refresh(); }
+  catch (err) { alert(err.message); }
+});
+
+async function renameCircle(c) {
+  const name = prompt("New name for this circle:", c.name);
+  if (!name || name === c.name) return;
+  try { await api("PATCH", `/api/admin/circles/${encodeURIComponent(c.id)}`, { name }); refresh(); }
+  catch (err) { alert(err.message); }
+}
+
+async function deleteCircle(c) {
+  if (!confirm(`Delete the circle "${c.name}"? Its members stay on the server (and in their other circles), but no longer see each other through this circle. Its invites stop working.`)) return;
+  try { await api("DELETE", `/api/admin/circles/${encodeURIComponent(c.id)}`); refresh(); }
+  catch (err) { alert(err.message); }
+}
+
+// The "Circles…" dialog: tick the circles a person is in.
+const circlesDialog = $("#circles-dialog");
+circlesDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => circlesDialog.close()));
+function openCircles(m) {
+  $("#circles-dialog-title").textContent = `Circles for ${m.name}`;
+  $("#circles-checks").replaceChildren(...circles.map((c) => {
+    const box = el("input", { type: "checkbox" });
+    box.checked = (m.circles || []).includes(c.id);
+    box.addEventListener("change", async () => {
+      try {
+        await api(box.checked ? "PUT" : "DELETE", `/api/admin/circles/${encodeURIComponent(c.id)}/members/${encodeURIComponent(m.id)}`);
+        refresh();
+      } catch (err) {
+        box.checked = !box.checked;
+        alert(err.message);
+      }
+    });
+    return el("label", {}, box, c.name);
+  }));
+  circlesDialog.showModal();
+}
+
 
 // ---- actions ----
 
@@ -250,13 +342,17 @@ $("#invite-btn").addEventListener("click", () => {
   $("#invite-form").hidden = false;
   $("#invite-result").hidden = true;
   $("#invite-name").value = "";
+  const sel = $("#invite-circle");
+  sel.replaceChildren(...circles.map((c) => el("option", { value: c.id }, c.name)));
+  if (circleFilter) sel.value = circleFilter;
+  $("#invite-circle-label").hidden = circles.length < 2;
   dialog.showModal();
 });
 dialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => dialog.close()));
 $("#invite-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
-    const inv = await api("POST", "/api/admin/invites", { name: $("#invite-name").value });
+    const inv = await api("POST", "/api/admin/invites", { name: $("#invite-name").value, circleId: $("#invite-circle").value });
     showLink(inv, "Invite ready", "Send this link to their phone. It works once and expires in a few days.");
     refresh();
   } catch (err) {
@@ -270,6 +366,16 @@ function showLink(inv, title, text) {
   $("#invite-link").value = inv.link;
   $("#invite-code").textContent = inv.code;
   $("#invite-server").textContent = new URL(inv.link).origin;
+  // QR code of the link, so a phone can scan it from the screen.
+  try {
+    const qr = qrcode(0, "M");
+    qr.addData(inv.link);
+    qr.make();
+    $("#invite-qr").src = qr.createDataURL(6, 2);
+    $("#invite-qr").parentElement.hidden = false;
+  } catch (_) {
+    $("#invite-qr").parentElement.hidden = true;
+  }
   $("#invite-form").hidden = true;
   $("#invite-result").hidden = false;
   if (!dialog.open) dialog.showModal();

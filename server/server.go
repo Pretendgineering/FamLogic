@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/invites/{code}", s.handleInviteInfo)
 	mux.HandleFunc("POST /api/signin", s.handleSignIn)
 	mux.HandleFunc("POST /api/me/password", s.device(s.handleSetPassword))
+	mux.HandleFunc("POST /api/me/circles/join", s.device(s.handleJoinCircle))
+	mux.HandleFunc("POST /api/me/circles/{id}", s.device(s.handleSetCircleSharing))
 	mux.HandleFunc("GET /api/members", s.device(s.handleMembers))
 	mux.HandleFunc("POST /api/location", s.device(s.handleLocation))
 	mux.HandleFunc("GET /api/events/wait", s.device(s.handleWaitEvents))
@@ -68,6 +71,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
+	mux.HandleFunc("GET /api/admin/circles", s.admin(s.handleAdminCircles))
+	mux.HandleFunc("POST /api/admin/circles", s.admin(s.handleAdminCreateCircle))
+	mux.HandleFunc("PATCH /api/admin/circles/{id}", s.admin(s.handleAdminRenameCircle))
+	mux.HandleFunc("DELETE /api/admin/circles/{id}", s.admin(s.handleAdminDeleteCircle))
+	mux.HandleFunc("PUT /api/admin/circles/{id}/members/{mid}", s.admin(s.handleAdminMembership))
+	mux.HandleFunc("DELETE /api/admin/circles/{id}/members/{mid}", s.admin(s.handleAdminMembership))
 	mux.HandleFunc("GET /api/admin/invites", s.admin(s.handleListInvites))
 	mux.HandleFunc("POST /api/admin/invites", s.admin(s.handleCreateInvite))
 	mux.HandleFunc("DELETE /api/admin/invites/{code}", s.admin(s.handleDeleteInvite))
@@ -137,12 +146,17 @@ type publicMember struct {
 	Loc    *Location `json:"loc"`
 	// When this person's active SOS started (unix ms); absent if no SOS.
 	SOSSince int64 `json:"sosSince,omitempty"`
+	// Circles: for phones, the ones in common with the viewer; for the dashboard, all of theirs.
+	Circles []string `json:"circles"`
 }
 
 func toPublic(ms []Member) []publicMember {
 	out := make([]publicMember, len(ms))
 	for i, m := range ms {
-		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince}
+		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
+		if out[i].Circles == nil {
+			out[i].Circles = []string{}
+		}
 	}
 	return out
 }
@@ -228,7 +242,7 @@ func (s *Server) handleInviteInfo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "that invite code is not valid or has expired")
 		return
 	}
-	resp := map[string]any{"kind": "join", "name": inv.Name, "server": s.serverInfo()}
+	resp := map[string]any{"kind": "join", "name": inv.Name, "server": s.serverInfo(), "circle": s.circleName(inv.CircleID)}
 	if m != nil {
 		resp["kind"] = "reset"
 		resp["name"] = m.Name
@@ -443,9 +457,21 @@ func sinceParam(r *http.Request) (int64, bool) {
 }
 
 func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Member) {
+	views, circles := s.store.VisibleTo(me.ID)
+	members := make([]publicMember, len(views))
+	for i, v := range views {
+		m := v.Member
+		m.Circles = v.SharedCircles
+		members[i] = toPublic([]Member{m})[0]
+	}
+	myCircles := make([]map[string]any, len(circles))
+	for i, c := range circles {
+		myCircles[i] = map[string]any{"id": c.ID, "name": c.Name, "sharing": !slices.Contains(me.HiddenFrom, c.ID)}
+	}
 	resp := map[string]any{
 		"me":      me.ID,
-		"members": toPublic(s.store.Members()),
+		"members": members,
+		"circles": myCircles,
 		"server":  s.serverInfo(),
 		"settings": map[string]any{
 			"shareLowBattery": me.SharesLowBattery(),
@@ -693,9 +719,10 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 // adminMember adds sign-in details that only the dashboard sees.
 type adminMember struct {
 	publicMember
-	Username    string `json:"username"`
-	HasPassword bool   `json:"hasPassword"`
-	LastSignIn  int64  `json:"lastSignIn,omitempty"`
+	Username    string   `json:"username"`
+	HasPassword bool     `json:"hasPassword"`
+	LastSignIn  int64    `json:"lastSignIn,omitempty"`
+	HiddenFrom  []string `json:"hiddenFrom"`
 }
 
 func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
@@ -703,9 +730,9 @@ func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
 	pub := toPublic(ms)
 	out := make([]adminMember, len(ms))
 	for i, m := range ms {
-		out[i] = adminMember{pub[i], m.Username, m.PasswordHash != "", m.LastSignIn}
+		out[i] = adminMember{pub[i], m.Username, m.PasswordHash != "", m.LastSignIn, append([]string{}, m.HiddenFrom...)}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"members": out, "server": s.serverInfo()})
+	writeJSON(w, http.StatusOK, map[string]any{"members": out, "circles": s.store.Circles(), "server": s.serverInfo()})
 }
 
 // handleAdminResetSignIn makes a one-time link that lets a member who forgot
@@ -774,7 +801,8 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		CircleID string `json:"circleId"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -787,7 +815,11 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	inv, err := s.store.CreateInvite(name, s.cfg.InviteTTL)
+	inv, err := s.store.CreateInvite(name, req.CircleID, s.cfg.InviteTTL)
+	if errors.Is(err, ErrNotFound) {
+		writeError(w, http.StatusBadRequest, "no such circle")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
@@ -798,6 +830,118 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteInvite(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteInvite(r.PathValue("code")); err != nil {
 		writeError(w, http.StatusNotFound, "no such invite")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- circles ----
+
+// circleName looks up a circle's name ("" if it no longer exists).
+func (s *Server) circleName(id string) string {
+	for _, c := range s.store.Circles() {
+		if c.ID == id {
+			return c.Name
+		}
+	}
+	return ""
+}
+
+// handleSetCircleSharing lets a person share or stop sharing their location with one circle.
+func (s *Server) handleSetCircleSharing(w http.ResponseWriter, r *http.Request, me *Member) {
+	var req struct {
+		Sharing bool `json:"sharing"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.store.SetSharingIn(me.ID, r.PathValue("id"), req.Sharing); err != nil {
+		writeError(w, http.StatusNotFound, "you're not in that circle")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleJoinCircle lets someone already signed in use an invite code to join another circle.
+func (s *Server) handleJoinCircle(w http.ResponseWriter, r *http.Request, me *Member) {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	c, err := s.store.JoinCircleWithCode(me.ID, req.Code)
+	if err != nil {
+		time.Sleep(500 * time.Millisecond) // slow down code guessing
+		writeError(w, http.StatusNotFound, "that invite code is not valid or has expired")
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+func (s *Server) handleAdminCircles(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.store.Circles())
+}
+
+func cleanCircleName(n string) (string, bool) {
+	n = strings.Join(strings.Fields(n), " ")
+	return n, n != "" && utf8.RuneCountInString(n) <= 40
+}
+
+func (s *Server) handleAdminCreateCircle(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name, ok := cleanCircleName(req.Name)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "circle names are 1-40 characters")
+		return
+	}
+	c, err := s.store.CreateCircle(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+func (s *Server) handleAdminRenameCircle(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name, ok := cleanCircleName(req.Name)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "circle names are 1-40 characters")
+		return
+	}
+	if err := s.store.RenameCircle(r.PathValue("id"), name); err != nil {
+		writeError(w, http.StatusNotFound, "no such circle")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminDeleteCircle(w http.ResponseWriter, r *http.Request) {
+	switch err := s.store.DeleteCircle(r.PathValue("id")); {
+	case errors.Is(err, ErrLastCircle):
+		writeError(w, http.StatusConflict, "You can't delete the last circle")
+	case err != nil:
+		writeError(w, http.StatusNotFound, "no such circle")
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleAdminMembership puts a member in a circle (PUT) or takes them out (DELETE).
+func (s *Server) handleAdminMembership(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.SetMembership(r.PathValue("mid"), r.PathValue("id"), r.Method == http.MethodPut); err != nil {
+		writeError(w, http.StatusNotFound, "no such member or circle")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

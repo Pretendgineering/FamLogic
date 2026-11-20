@@ -36,6 +36,9 @@ type Event struct {
 	Battery  int    `json:"battery,omitempty"` // battery_low: the level when it happened
 	Level    int    `json:"level,omitempty"`   // battery_low: which alert level was crossed
 	Note     string `json:"note,omitempty"`    // checkin: optional message
+	CircleID string `json:"circleId,omitempty"` // place alerts: the circle the place belongs to
+	PlaceID  string `json:"placeId,omitempty"`
+	Place    string `json:"place,omitempty"` // place name, for "Sam arrived at School"
 	// Where it happened (sos, checkin), when the phone knew.
 	Lat float64 `json:"lat,omitempty"`
 	Lon float64 `json:"lon,omitempty"`
@@ -123,8 +126,12 @@ func (s *Store) EventsFor(memberID string, since int64) ([]Event, int64) {
 	if since < 0 || since > cursor {
 		return out, cursor
 	}
+	viewer, ok := s.d.Members[memberID]
+	if !ok {
+		return out, cursor
+	}
 	for _, e := range s.d.Events {
-		if e.ID > since && e.MemberID != memberID {
+		if e.ID > since && s.eventVisibleLocked(e, viewer) {
 			out = append(out, e)
 		}
 	}

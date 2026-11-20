@@ -6,6 +6,9 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.location.Location
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material3.FilterChip
 import android.location.LocationManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -102,7 +105,14 @@ private const val REFRESH_MS = 15_000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onFocusHandled: () -> Unit = {}) {
+fun MapScreen(
+    prefs: Prefs,
+    onLeft: () -> Unit,
+    focusMember: String? = null,
+    onFocusHandled: () -> Unit = {},
+    joinCircleCode: String? = null,
+    onJoinCircleHandled: () -> Unit = {},
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -125,6 +135,8 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onF
     var sosPending by remember { mutableStateOf(prefs.sosPending) }
     var confirmOk by remember { mutableStateOf(false) }
     var showCheckIn by remember { mutableStateOf(false) }
+    var circles by remember { mutableStateOf<List<CircleInfo>>(emptyList()) }
+    var circleFilter by remember { mutableStateOf(prefs.circleFilter) }
     // Bumped every minute so "5 min ago" labels stay current.
     var tick by remember { mutableIntStateOf(0) }
 
@@ -144,6 +156,11 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onF
             username = res.username
             prefs.username = res.username
             members = res.members
+            circles = res.circles
+            if (circleFilter.isNotEmpty() && res.circles.none { it.id == circleFilter }) {
+                circleFilter = ""
+                prefs.circleFilter = ""
+            }
             familyName = res.server.name
             tileUrl = res.server.tileUrl
             attribution = res.server.tileAttribution
@@ -300,6 +317,12 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onF
     if (showCheckIn) {
         CheckInDialog(prefs, onDone = { showCheckIn = false })
     }
+    if (joinCircleCode != null) {
+        JoinCircleDialog(prefs, initialCode = joinCircleCode, onDone = { joined ->
+            onJoinCircleHandled()
+            if (joined) scope.launch { refresh() }
+        })
+    }
 
     if (showSettings) {
         BackHandler { showSettings = false }
@@ -311,6 +334,19 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onF
             shareLowBattery = shareLowBattery,
             username = username,
             hasPassword = hasPassword,
+            circles = circles,
+            onCircleSharingChange = { c, on ->
+                circles = circles.map { if (it.id == c.id) it.copy(sharing = on) else it }
+                scope.launch {
+                    try {
+                        Api(prefs.serverUrl, prefs.token).setCircleSharing(c.id, on)
+                    } catch (e: IOException) {
+                        circles = circles.map { if (it.id == c.id) it.copy(sharing = !on) else it }
+                        Toast.makeText(context, "Couldn't save: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onCirclesChanged = { scope.launch { refresh() } },
             onPasswordSaved = { u ->
                 username = u
                 prefs.username = u
@@ -340,6 +376,9 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onF
     }
 
     val me = members.find { it.id == prefs.memberId }
+    // The circle picker narrows the map and list to one circle (you always stay in view).
+    val shown = if (circleFilter.isEmpty()) members
+    else members.filter { it.id == prefs.memberId || circleFilter in it.circles }
     val statusOf: (Member) -> String = { m -> statusLine(m, me, tick) }
 
     Scaffold(
@@ -396,9 +435,30 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onF
                 )
             }
 
+            if (circles.size > 1) {
+                LazyRow(
+                    Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val choices = listOf("" to "Everyone") + circles.map { it.id to it.name }
+                    items(choices, key = { it.first }) { (id, name) ->
+                        FilterChip(
+                            selected = circleFilter == id,
+                            onClick = {
+                                circleFilter = id
+                                prefs.circleFilter = id
+                                camera = CameraCommand.FitAll(++cameraSeq)
+                            },
+                            label = { Text(name) },
+                        )
+                    }
+                }
+            }
+
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 OsmMap(
-                    members = members,
+                    members = shown,
                     tileUrl = tileUrl,
                     attribution = attribution,
                     camera = camera,
@@ -424,10 +484,10 @@ fun MapScreen(prefs: Prefs, onLeft: () -> Unit, focusMember: String? = null, onF
 
             Surface(tonalElevation = 2.dp) {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
-                    if (members.isEmpty()) {
+                    if (shown.isEmpty()) {
                         item { Text("Loading…", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
-                    items(members, key = { it.id }) { m ->
+                    items(shown, key = { it.id }) { m ->
                         MemberRow(
                             m = m,
                             isMe = m.id == prefs.memberId,
@@ -566,6 +626,9 @@ private fun SettingsScreen(
     onShareLowBatteryChange: (Boolean) -> Unit,
     username: String,
     hasPassword: Boolean?,
+    circles: List<CircleInfo>,
+    onCircleSharingChange: (CircleInfo, Boolean) -> Unit,
+    onCirclesChanged: () -> Unit,
     onPasswordSaved: (String) -> Unit,
     onBack: () -> Unit,
     onLeave: () -> Unit,
@@ -609,6 +672,31 @@ private fun SettingsScreen(
                     )
                 }
                 Switch(checked = sharing, onCheckedChange = onSharingChange)
+            }
+            // Per circle: e.g. share with Family but not with Friends.
+            if (circles.size > 1) {
+                Text(
+                    "Share with each circle",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                circles.forEach { c ->
+                    SwitchRow(
+                        title = c.name,
+                        detail = if (c.sharing && sharing) "Sees where you are" else "Sees you as \"sharing paused\"",
+                        checked = c.sharing,
+                        enabled = sharing,
+                        onChange = { on -> onCircleSharingChange(c, on) },
+                    )
+                }
+            }
+            var joining by remember { mutableStateOf(false) }
+            OutlinedButton(onClick = { joining = true }) { Text("Join another circle…") }
+            if (joining) {
+                JoinCircleDialog(prefs, initialCode = "", onDone = { joined ->
+                    joining = false
+                    if (joined) onCirclesChanged()
+                })
             }
             HorizontalDivider()
 
@@ -1054,4 +1142,79 @@ suspend fun currentLocation(context: Context): Location? {
         }
     }
     return fresh ?: last
+}
+
+
+/**
+ * Joins another circle with an invite code while staying signed in as yourself.
+ * Shows which circle the code is for before joining.
+ */
+@Composable
+fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var code by remember { mutableStateOf(initialCode) }
+    var circleName by remember { mutableStateOf<String?>(null) } // known once the code is checked
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun check() {
+        busy = true
+        error = null
+        scope.launch {
+            try {
+                val info = Api(prefs.serverUrl).inviteInfo(code)
+                if (info.isReset) error = "That's a sign-in reset link, not a circle invite."
+                else circleName = info.circle.ifEmpty { info.server.name }
+            } catch (e: IOException) {
+                error = e.message
+            } finally {
+                busy = false
+            }
+        }
+    }
+    LaunchedEffect(Unit) { if (initialCode.isNotBlank()) check() }
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDone(false) },
+        title = { Text(circleName?.let { "Join $it?" } ?: "Join another circle") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (circleName == null) {
+                    Text("Enter the invite code you were given. You'll stay signed in as yourself.")
+                    OutlinedTextField(
+                        value = code,
+                        onValueChange = { code = it; error = null },
+                        label = { Text("Invite code") },
+                        placeholder = { Text("ABCD-EFGH") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Text("You'll see everyone in $circleName, and they'll see you. You can stop sharing your location with any circle in Settings.")
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && code.isNotBlank(), onClick = {
+                if (circleName == null) {
+                    check()
+                    return@TextButton
+                }
+                busy = true
+                scope.launch {
+                    try {
+                        val name = Api(prefs.serverUrl, prefs.token).joinCircle(code)
+                        Toast.makeText(context, "You joined $name", Toast.LENGTH_SHORT).show()
+                        onDone(true)
+                    } catch (e: IOException) {
+                        error = e.message
+                        busy = false
+                    }
+                }
+            }) { Text(if (circleName == null) "Continue" else "Join") }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = { onDone(false) }) { Text("Cancel") } },
+    )
 }

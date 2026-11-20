@@ -13,9 +13,10 @@ func newStoreWithMembers(t *testing.T, names ...string) (*Store, []*Member) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.EnsureDefaultCircle("Family") // as the server does at start-up
 	var ms []*Member
 	for _, n := range names {
-		inv, _ := s.CreateInvite(n, time.Hour)
+		inv, _ := s.CreateInvite(n, "", time.Hour)
 		m, _, err := s.Join(inv.Code, "", "", "")
 		if err != nil {
 			t.Fatal(err)
@@ -117,21 +118,24 @@ func TestLowBatteryRespectsSwitchAndPause(t *testing.T) {
 func TestEventsSurviveRestartAndResetCursor(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "thereabouts.json")
 	s, _ := OpenStore(path)
-	inv, _ := s.CreateInvite("Alex", time.Hour)
+	s.EnsureDefaultCircle("Family")
+	inv, _ := s.CreateInvite("Alex", "", time.Hour)
 	alex, _, _ := s.Join(inv.Code, "", "", "")
+	inv2, _ := s.CreateInvite("Bob", "", time.Hour)
+	bob, _, _ := s.Join(inv2.Code, "", "", "")
 	report(t, s, alex.ID, 50, false)
 	report(t, s, alex.ID, 12, false)
 
 	s2, _ := OpenStore(path)
-	evs, cur := s2.EventsFor("someone-else", -1) // no cursor yet: no backlog, just the cursor
+	evs, cur := s2.EventsFor(bob.ID, -1) // no cursor yet: no backlog, just the cursor
 	if len(evs) != 0 || cur != 1 {
 		t.Fatalf("fresh phone: got %d events, cursor %d; want 0 events, cursor 1", len(evs), cur)
 	}
-	if evs, _ := s2.EventsFor("someone-else", 0); len(evs) != 1 {
+	if evs, _ := s2.EventsFor(bob.ID, 0); len(evs) != 1 {
 		t.Fatalf("cursor 0 means \"seen nothing yet\": want the 1 event, got %d", len(evs))
 	}
 	// A phone whose cursor is ahead (server data was reset) starts over.
-	if evs, cur := s2.EventsFor("someone-else", 99); len(evs) != 0 || cur != 1 {
+	if evs, cur := s2.EventsFor(bob.ID, 99); len(evs) != 0 || cur != 1 {
 		t.Fatalf("cursor ahead: got %d events, cursor %d", len(evs), cur)
 	}
 }

@@ -121,6 +121,7 @@ func (s *Store) InviteInfo(code string) (*Invite, *Member, bool) {
 	}
 	ic := *inv
 	if inv.MemberID == "" {
+		ic.CircleID = s.inviteCircleLocked(inv)
 		return &ic, nil, true
 	}
 	m, ok := s.d.Members[inv.MemberID]

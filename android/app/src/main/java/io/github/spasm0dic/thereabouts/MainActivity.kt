@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
     private var joined by mutableStateOf(false)
     private var invite by mutableStateOf<Pair<String, String>?>(null) // server, code from an invite link
     private var focusMember by mutableStateOf<String?>(null) // from tapping an alert about someone
+    private var joinCircleCode by mutableStateOf<String?>(null) // an invite link opened while signed in
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +45,8 @@ class MainActivity : ComponentActivity() {
                         onLeft = { joined = false },
                         focusMember = focusMember,
                         onFocusHandled = { focusMember = null },
+                        joinCircleCode = joinCircleCode,
+                        onJoinCircleHandled = { joinCircleCode = null },
                     )
                 } else {
                     SetupScreen(
@@ -79,10 +82,16 @@ class MainActivity : ComponentActivity() {
         val server = data.getQueryParameter("server").orEmpty()
         val code = data.getQueryParameter("code").orEmpty()
         if (server.isEmpty() && code.isEmpty()) return
-        // Only switch to the join screen if we're not already in a family; otherwise
-        // the person can leave from settings first. Never silently replace a membership.
-        if (!prefs.joined) invite = server to code
-        else android.widget.Toast.makeText(this, "Leave your current family in Settings before joining another.", android.widget.Toast.LENGTH_LONG).show()
+        // Not signed in: the join screen. Signed in on the same server: offer to join
+        // that invite's circle as yourself. A different server: we can't mix them.
+        when {
+            !prefs.joined -> invite = server to code
+            normalizeServerUrl(server).trimEnd('/') == prefs.serverUrl.trimEnd('/') || server.isEmpty() -> joinCircleCode = code
+            else -> android.widget.Toast.makeText(
+                this, "That invite is for a different server. Leave this one in Settings first to join it.",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
     }
 }
 

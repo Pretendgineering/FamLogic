@@ -31,11 +31,18 @@
     <div class="layout">
       <aside>
         <h2>People</h2>
+        <label class="filter" id="filter-label" hidden>Show
+          <select id="circle-filter"><option value="">Everyone</option></select>
+        </label>
         <ul id="members" class="list"></ul>
         <p id="no-members" class="muted" hidden>Nobody has joined yet. Use <strong>Invite someone</strong> to add the first phone.</p>
         <h2>Open invites</h2>
         <ul id="invites" class="list"></ul>
         <p id="no-invites" class="muted">No open invites.</p>
+        <h2>Circles</h2>
+        <p class="muted small">Groups that see each other, such as Family or Grandparents. People only see others they share a circle with.</p>
+        <ul id="circles" class="list"></ul>
+        <button id="new-circle-btn" class="secondary small-btn">+ New circle</button>
       </aside>
       <div id="map"></div>
     </div>
@@ -45,18 +52,30 @@
     <form id="invite-form" method="dialog">
       <h2>Invite someone</h2>
       <label>Their name (optional) <input id="invite-name" maxlength="40" placeholder="e.g. Grandma"></label>
+      <label id="invite-circle-label">Circle <select id="invite-circle"></select></label>
       <div class="row"><button type="submit">Create invite</button><button type="button" class="secondary" data-close>Cancel</button></div>
     </form>
     <div id="invite-result" hidden>
       <h2 id="result-title">Invite ready</h2>
       <p id="result-text">Send this link to their phone. It works once and expires in a few days.</p>
       <div class="copy"><input id="invite-link" readonly><button type="button" id="copy-link">Copy</button></div>
+      <div class="qr"><img id="invite-qr" alt="QR code of the link"><p class="muted small">Or scan this with their phone's camera.</p></div>
       <p class="muted">Or in the app, enter server <code id="invite-server"></code> and code <code id="invite-code"></code>.</p>
       <div class="row"><button type="button" data-close>Done</button></div>
     </div>
   </dialog>
 
+  <dialog id="circles-dialog">
+    <form method="dialog">
+      <h2 id="circles-dialog-title">Circles</h2>
+      <p class="muted">Tick the circles this person is in. They see everyone in those circles.</p>
+      <div id="circles-checks"></div>
+      <div class="row"><button type="button" data-close>Done</button></div>
+    </form>
+  </dialog>
+
   <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/vendor/qrcode/qrcode.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

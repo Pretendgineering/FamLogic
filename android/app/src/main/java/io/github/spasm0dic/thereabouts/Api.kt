@@ -24,7 +24,12 @@ data class Member(
     val loc: MemberLocation?,
     /** When this person's active SOS started (unix ms), or 0 if none. */
     val sosSince: Long = 0,
+    /** Circles this person shares with you (for yourself: all of yours). */
+    val circles: List<String> = emptyList(),
 )
+
+/** A circle you're in, and whether you share your location with it. */
+data class CircleInfo(val id: String, val name: String, val sharing: Boolean)
 
 data class ServerInfo(val name: String, val tileUrl: String, val tileAttribution: String)
 
@@ -59,13 +64,14 @@ data class MembersResponse(
     /** This person's username; empty if they joined before accounts existed. */
     val username: String,
     val hasPassword: Boolean,
+    val circles: List<CircleInfo> = emptyList(),
 )
 
 /** What join, sign-in and password resets return: this phone is now signed in as [member]. */
 data class JoinResponse(val token: String, val member: Member, val server: ServerInfo, val username: String)
 
 /** What an invite code is for: joining as someone new, or resetting an existing person's sign-in. */
-data class InviteInfo(val isReset: Boolean, val name: String, val username: String, val server: ServerInfo)
+data class InviteInfo(val isReset: Boolean, val name: String, val username: String, val server: ServerInfo, val circle: String = "")
 
 /** The server rejected our token: this phone was removed from the family. */
 /**
@@ -95,6 +101,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             name = o.optString("name"),
             username = o.optString("username"),
             server = parseServer(o.getJSONObject("server")),
+            circle = o.optString("circle"),
         )
     }
 
@@ -144,6 +151,12 @@ class Api(private val baseUrl: String, private val token: String = "") {
             shareLowBattery = settings?.optBoolean("shareLowBattery", true) ?: true,
             username = settings?.optString("username", "").orEmpty(),
             hasPassword = settings?.optBoolean("hasPassword", false) ?: false,
+            circles = o.optJSONArray("circles")?.let { arr ->
+                (0 until arr.length()).map { i ->
+                    val c = arr.getJSONObject(i)
+                    CircleInfo(c.getString("id"), c.optString("name"), c.optBoolean("sharing", true))
+                }
+            } ?: emptyList(),
             events = parseEvents(o, since),
         )
     }
@@ -185,6 +198,15 @@ class Api(private val baseUrl: String, private val token: String = "") {
             request("GET", "/api/events/wait?since=$since&wait=$waitSeconds", readTimeoutMs = (waitSeconds + 25) * 1000),
             since,
         )
+
+    /** Shares (or stops sharing) your location with one circle. */
+    suspend fun setCircleSharing(circleId: String, sharing: Boolean) {
+        request("POST", "/api/me/circles/" + java.net.URLEncoder.encode(circleId, "UTF-8"), JSONObject().put("sharing", sharing))
+    }
+
+    /** Uses an invite code to join another circle while signed in. Returns the circle's name. */
+    suspend fun joinCircle(code: String): String =
+        request("POST", "/api/me/circles/join", JSONObject().put("code", code.trim())).optString("name")
 
     /** Raises (or re-sends) an SOS, with where the phone is if known. */
     suspend fun sos(loc: android.location.Location?) {
@@ -278,6 +300,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             color = o.optString("color", "#4363d8"),
             paused = o.optBoolean("paused", false),
             sosSince = o.optLong("sosSince", 0),
+            circles = o.optJSONArray("circles")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
             loc = l?.let {
                 MemberLocation(
                     lat = it.getDouble("lat"),

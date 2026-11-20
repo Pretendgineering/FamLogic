@@ -40,6 +40,10 @@ type Member struct {
 
 	// Sign-in (see accounts.go). Members who joined before accounts existed have
 	// neither until they set a password in the app.
+	// Circles this person is in, and the ones they've stopped sharing their location with.
+	Circles    []string `json:"circles,omitempty"`
+	HiddenFrom []string `json:"hiddenFrom,omitempty"`
+
 	// SOS: set while this person has an SOS active, until they say they're OK.
 	SOSSince int64 `json:"sosSince,omitempty"`
 
@@ -68,6 +72,7 @@ type Invite struct {
 	Code      string `json:"code"`
 	Name      string `json:"name,omitempty"`
 	MemberID  string `json:"memberId,omitempty"`
+	CircleID  string `json:"circleId,omitempty"` // the circle a (normal) invite joins
 	CreatedAt int64  `json:"createdAt"`
 	ExpiresAt int64  `json:"expiresAt"`
 }
@@ -76,6 +81,8 @@ type data struct {
 	Secret  string             `json:"secret"` // signs admin session cookies
 	Members map[string]*Member `json:"members"`
 	Invites map[string]*Invite `json:"invites"`
+	Circles map[string]*Circle `json:"circles"`
+	Places  map[string]*Place  `json:"places,omitempty"`
 
 	// Recent alerts for phones to pick up (see events.go).
 	LastEventID int64   `json:"lastEventId"`
@@ -101,7 +108,7 @@ func OpenStore(path string) (*Store, error) {
 	b, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		s.d = data{Secret: randomString(32), Members: map[string]*Member{}, Invites: map[string]*Invite{}}
+		s.d = data{Secret: randomString(32), Members: map[string]*Member{}, Invites: map[string]*Invite{}, Circles: map[string]*Circle{}, Places: map[string]*Place{}}
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return nil, err
 		}
@@ -117,6 +124,12 @@ func OpenStore(path string) (*Store, error) {
 	}
 	if s.d.Invites == nil {
 		s.d.Invites = map[string]*Invite{}
+	}
+	if s.d.Circles == nil {
+		s.d.Circles = map[string]*Circle{}
+	}
+	if s.d.Places == nil {
+		s.d.Places = map[string]*Place{}
 	}
 	if s.d.Secret == "" {
 		s.d.Secret = randomString(32)
@@ -144,11 +157,18 @@ func (s *Store) Secret() string {
 	return s.d.Secret
 }
 
-func (s *Store) CreateInvite(name string, ttl time.Duration) (*Invite, error) {
+// CreateInvite makes a one-time code for someone new to join circleID
+// ("" = the default circle).
+func (s *Store) CreateInvite(name, circleID string, ttl time.Duration) (*Invite, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if circleID == "" {
+		circleID = s.defaultCircleLocked()
+	} else if _, ok := s.d.Circles[circleID]; !ok {
+		return nil, ErrNotFound
+	}
 	now := time.Now()
-	inv := &Invite{Code: inviteCode(), Name: name, CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(ttl).UnixMilli()}
+	inv := &Invite{Code: inviteCode(), Name: name, CircleID: circleID, CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(ttl).UnixMilli()}
 	s.d.Invites[inv.Code] = inv
 	return inv, s.saveLocked()
 }
@@ -163,7 +183,11 @@ func (s *Store) Invites() []Invite {
 			delete(s.d.Invites, code) // tidy up as we go; persisted on next save
 			continue
 		}
-		out = append(out, *inv)
+		cp := *inv
+		if cp.MemberID == "" {
+			cp.CircleID = s.inviteCircleLocked(inv) // invites from before circles join the default one
+		}
+		out = append(out, cp)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt < out[j].CreatedAt })
 	return out
@@ -209,6 +233,9 @@ func (s *Store) Join(code, name, username, passwordHash string) (*Member, string
 	}
 	if username != "" {
 		m.LastSignIn = now
+	}
+	if c := s.inviteCircleLocked(inv); c != "" {
+		m.Circles = []string{c}
 	}
 	s.d.Members[m.ID] = m
 	delete(s.d.Invites, code)

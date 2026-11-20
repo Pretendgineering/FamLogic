@@ -25,6 +25,7 @@ func newEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	store.EnsureDefaultCircle("Test Family") // as the server does at start-up
 	static, _ := fs.Sub(webFS, "web")
 	cfg := Config{AdminPassword: "correct horse", FamilyName: "Test Family", TileURL: "https://tiles/{z}/{x}/{y}.png", InviteTTL: time.Hour}
 	srv := httptest.NewServer(NewServer(cfg, store, static).Routes())
@@ -157,7 +158,7 @@ func TestFullFlow(t *testing.T) {
 func TestStorePersists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "thereabouts.json")
 	s, _ := OpenStore(path)
-	inv, _ := s.CreateInvite("Carol", time.Hour)
+	inv, _ := s.CreateInvite("Carol", "", time.Hour)
 	m, token, err := s.Join(inv.Code, "", "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +230,7 @@ func TestAlertsOverHTTP(t *testing.T) {
 func TestMigrateOldDataFile(t *testing.T) {
 	dir := t.TempDir()
 	old, _ := OpenStore(filepath.Join(dir, "libre360.json"))
-	inv, _ := old.CreateInvite("Alex", time.Hour)
+	inv, _ := old.CreateInvite("Alex", "", time.Hour)
 	_, token, _ := old.Join(inv.Code, "", "", "")
 
 	newPath := filepath.Join(dir, "thereabouts.json")

@@ -22,6 +22,7 @@ Thereabouts does one thing: each phone reports where it is to **your own server*
 | Battery | Updates every 1/2/5/15 minutes (your choice) using balanced-power location. |
 | Joining | The admin creates a one-time invite link. The person taps it on their phone, and the app opens with everything filled in. They choose a username and password. |
 | New phone? | Sign in with your username and password. You're back as yourself, and your old phone is signed out (the latest sign-in wins). Forgot your password? The admin sends a one-time **Reset sign-in** link. |
+| Circles | Separate groups such as Family, Grandparents or Friends. You see only people you share a circle with, and choose per circle whether to share your location. |
 | SOS | Hold the SOS button for 3 seconds. Everyone gets an alarm-style alert within seconds, and your location is shared every 15 seconds until you say you're OK. |
 | Check-in | One tap sends "I'm here" with your location and an optional note. |
 | Alerts | SOS, check-ins and low battery, each switchable in the app. They arrive **within seconds** over a connection the app keeps to your own server: no Google services, no push service, nothing extra to install. |
@@ -102,8 +103,8 @@ Download `thereabouts.apk` from the [Releases](../../releases) page (or from the
 
 ## 3. Add your family
 
-1. In the dashboard, click **Invite someone** and type their name.
-2. Send them the link (text message, Signal, email...).
+1. In the dashboard, click **Invite someone**, type their name, and pick the circle they're joining (if you have more than one).
+2. Send them the link (text message, Signal, email...), or let them scan the QR code with their phone.
 3. On their phone they tap the link, then **Open in Thereabouts**. They choose a **username and password** (a password manager is the easy way to keep them), then tap **Join**.
 4. The app asks for location access. Choose **Allow all the time**, and say yes to the battery prompt, so that sharing keeps working when the phone is locked.
 
@@ -114,6 +115,7 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 ### New phone, reinstalling, or forgot your password
 
 - **New phone or reinstall:** open the app, choose **Sign in**, and enter the server address, your username and your password. You're back as yourself, with the same name, color and settings. Only one phone is signed in per person: the old one is signed out and says so.
+- **Circles** (dashboard): **+ New circle** creates one; **Circles…** next to a person picks the circles they're in. Everyone starts in one circle named after `FAMILY_NAME`.
 - **Forgot your password:** in the dashboard, click **Reset sign-in** next to the person's name and send them the link. It lets them choose a new password and sign in, keeping their place in the family. It works once and expires after a few days.
 - **Joined before version 0.4.0?** The app shows a banner. Tap **Set up** to choose a username and password.
 
@@ -127,6 +129,7 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 - **SOS**: press and hold the red **SOS** button for 3 seconds. Everyone else gets an alert that keeps ringing until they look, and a red banner on their map. Your location updates every 15 seconds, and the app keeps retrying until the alert gets through. Tap **I'm OK** when you're safe. Pressing SOS also turns sharing back on if you'd paused it.
   - So an SOS always rings: in Settings → Features → SOS, tap **Let SOS ring in Do Not Disturb** and turn on "Override Do Not Disturb".
 - **Check in**: tap **Check in** to send "I'm here" with your location and an optional note ("Made it home").
+- **Circles**: if you're in more than one circle, chips at the top of the map show one circle at a time. In Settings you choose per circle whether to share your location (for example share with Family but not with Friends). Someone already signed in can tap another circle's invite link (or use **Join another circle…** in Settings) to join it as themselves.
 - **Features** (Settings): each feature has its own on/off switches, for example to hide the SOS or Check in button, or to stop a kind of alert.
 - **Leave family** (Settings): removes you from the server.
 
@@ -173,6 +176,8 @@ Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/there
 | `POST /api/join` `{code, name, username, password}` | invite code | Join, or redeem a reset link. Returns a device token |
 | `POST /api/signin` `{username, password}` | password | Sign this phone in. The previous phone is signed out |
 | `POST /api/me/password` `{currentPassword, newPassword, username?}` | `Bearer <token>` | Set or change your password |
+| `POST /api/me/circles/<id>` `{sharing}` | `Bearer <token>` | Share or stop sharing your location with one circle |
+| `POST /api/me/circles/join` `{code}` | `Bearer <token>` | Join another circle with an invite code |
 | `GET /api/events/wait?since=<cursor>&wait=50` | `Bearer <token>` | Waits until there's a new alert (or `wait` seconds), then returns `{events, cursor}`. The app keeps one open for instant alerts |
 | `POST /api/sos` `{loc?}`, `POST /api/sos/end` | `Bearer <token>` | Raise or end an SOS |
 | `POST /api/checkin` `{note, loc?}` | `Bearer <token>` | Check in |

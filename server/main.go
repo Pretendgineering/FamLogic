@@ -80,6 +80,9 @@ func main() {
 		log.Fatalf("moving old data file: %v", err)
 	}
 	store, err := OpenStore(dataFile)
+	if err == nil {
+		err = store.EnsureDefaultCircle(cfg.FamilyName)
+	}
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			log.Fatalf("can't write to %s (%v). The container runs as user %d; make sure that user owns the data folder, "+

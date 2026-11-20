@@ -8,7 +8,7 @@ Planned features, to build once the core (sharing, map, invites) has been proven
 2. **Sending and receiving are separate switches** where a feature has both sides. For example, "Let others see my trail" is separate from "Show other people's trails".
 3. **Switches that affect what others see are stored on the server**, so other phones respect them. Switches that only change your own phone (such as which alerts you get) are stored on the phone.
 4. **Off means off.** When "my trail" is off, the server doesn't record it at all, and switching it off deletes what was stored.
-5. **No new infrastructure by default.** Alerts ride along with the app's normal location updates, so they arrive within one update interval (2 minutes by default). Instant delivery is an optional extra.
+5. **No new infrastructure.** Alerts arrive within seconds over a connection the app keeps to your own server (since 0.5.0), with the normal location updates as a fallback. Nobody has to install or host anything extra.
 
 ## Delivery mechanism (shared by alerts)
 
@@ -106,9 +106,9 @@ Make adding someone a single copy-paste. The dashboard's **Copy invite** button 
 
 1. ✅ **Delivery mechanism plus low-battery alerts** (0.2.0).
 2. ✅ **Accounts:** sign back in with a username and password (0.4.0).
-3. **Instant alerts, SOS and check-in.** The app's background service keeps a connection open to your own server, so alerts arrive in seconds without Google services or extra apps. This replaces the "optional UnifiedPush" idea: nobody has to install or host anything extra.
-4. **Circles.** These change who sees whom, so they come before places and trails, which belong to a circle.
-5. **QR code invites.** Small; done alongside the circle invite changes.
+3. ✅ **Instant alerts, SOS and check-in** (0.5.0). The app's background service keeps a connection open to your own server, so alerts arrive in seconds without Google services or extra apps. This replaces the "optional UnifiedPush" idea: nobody has to install or host anything extra.
+4. ✅ **Circles** (0.6.0).
+5. ✅ **QR code invites** (0.6.0).
 6. **Places and geofences** with arrive/leave alerts.
 7. **Trail / history** (opt-in).
 8. **Profile pictures** (later).

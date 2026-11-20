@@ -90,6 +90,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("notify_checkin", true)
         set(v) = sp.edit { putBoolean("notify_checkin", v) }
 
+    /** Which circle the map shows: "" for everyone. */
+    var circleFilter: String
+        get() = sp.getString("circle_filter", "") ?: ""
+        set(v) = sp.edit { putString("circle_filter", v) }
+
     /** This person's username, kept after signing out so the sign-in form can be pre-filled. */
     var username: String
         get() = sp.getString("username", "") ?: ""
