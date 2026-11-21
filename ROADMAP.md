@@ -129,7 +129,7 @@ These are parked until we decide to pick them up. Each needs a short design pass
   - **A.** An opt-in, clearly-experimental "Find Hub bridge" on the server, using that approach and the admin's own Google account. It would only fetch on a schedule.
   - **B.** Skip Google. Instead, family phones listen for the family's own cheap Bluetooth tags and report where they heard them. This is private and FOSS, but only works near family phones.
   - **C.** Drop it.
-- Decision pending.
+- Decision: parked for now (Nov 2026). Revisit with options A/B above.
 
 ### 12. Pebble watch companion
 - A small watch app plus phone-side glue:
