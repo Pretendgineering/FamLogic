@@ -247,6 +247,7 @@ class LocationService : Service() {
             val alerts = Api(prefs.serverUrl, prefs.token).sendLocation(
                 loc.latitude, loc.longitude, loc.accuracy, loc.speed, loc.time, battery, charging,
                 since = prefs.eventCursor, saving = saving, driving = drive.driving,
+                watchBattery = prefs.watchBattery.takeIf { System.currentTimeMillis() - prefs.watchBatteryAt < 3 * 3_600_000L } ?: 0,
             )
             Alerts.handle(this@LocationService, alerts)
             lastSentElapsed = SystemClock.elapsedRealtime()
@@ -361,8 +362,10 @@ class LocationService : Service() {
                 try {
                     val api = Api(prefs.serverUrl, prefs.token)
                     if (prefs.sosPending) {
-                        api.sos(lastFix ?: newestLastKnown())
+                        api.sos(lastFix ?: newestLastKnown(), prefs.sosSource, prefs.sosHeartRate)
                         prefs.sosPending = false
+                        prefs.sosSource = ""
+                        prefs.sosHeartRate = 0
                     }
                     if (prefs.sosEndPending) {
                         api.sosEnd()

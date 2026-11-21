@@ -154,6 +154,39 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("notify_trips", false)
         set(v) = sp.edit { putBoolean("notify_trips", v) }
 
+    // ---- Pebble ----
+
+    /** Last battery level the Pebble reported (1-100), and when. */
+    var watchBattery: Int
+        get() = sp.getInt("watch_battery", 0)
+        set(v) = sp.edit { putInt("watch_battery", v) }
+    var watchBatteryAt: Long
+        get() = sp.getLong("watch_battery_at", 0)
+        set(v) = sp.edit { putLong("watch_battery_at", v) }
+
+    /** Where a pending SOS came from ("watch", "fall", or "" for the phone) and the heart rate to send. */
+    var sosSource: String
+        get() = sp.getString("sos_source", "") ?: ""
+        set(v) = sp.edit { putString("sos_source", v) }
+    var sosHeartRate: Int
+        get() = sp.getInt("sos_heart_rate", 0)
+        set(v) = sp.edit { putInt("sos_heart_rate", v) }
+
+    /** Send the watch's heart rate with an SOS raised from it. Off by default. */
+    var pebbleHeartRate: Boolean
+        get() = sp.getBoolean("pebble_heart_rate", false)
+        set(v) = sp.edit { putBoolean("pebble_heart_rate", v) }
+
+    /** Watch fall detection (counts down, then sends an SOS). Off by default. */
+    var pebbleFalls: Boolean
+        get() = sp.getBoolean("pebble_falls", false)
+        set(v) = sp.edit { putBoolean("pebble_falls", v) }
+
+    /** Arrivals, check-ins, trips and reminders as timeline pins on the watch. */
+    var pebbleTimeline: Boolean
+        get() = sp.getBoolean("pebble_timeline", true)
+        set(v) = sp.edit { putBoolean("pebble_timeline", v) }
+
     /** Feature: "Sam started driving". Off by default. */
     var notifyDriving: Boolean
         get() = sp.getBoolean("notify_driving", false)

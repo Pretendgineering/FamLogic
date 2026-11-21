@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.io.IOException
+import kotlinx.coroutines.launch
 
 /**
  * Opens when you tap someone: directions, whether you get alerts about them,
@@ -44,6 +45,7 @@ fun PersonSheet(
     isMe: Boolean,
     status: String,
     canTrips: Boolean,
+    canRequests: Boolean = false,
     onDirections: () -> Unit,
     onShowTrip: (Trip) -> Unit,
     onDismiss: () -> Unit,
@@ -77,6 +79,27 @@ fun PersonSheet(
                 }
                 if (!isMe && m.loc != null && !m.paused) {
                     FilledTonalButton(onClick = onDirections) { Text("Directions") }
+                }
+            }
+            if (!isMe && canRequests) {
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                val context = LocalContext.current
+                val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+                fun ask(kind: String) {
+                    scope.launch {
+                        val msg = try {
+                            Api(prefs.serverUrl, prefs.token).request(m.id, kind, currentLocation(context))
+                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                            if (kind == "call") "Asked ${m.name} to call you" else "Asked ${m.name} to pick you up"
+                        } catch (e: IOException) {
+                            e.message ?: "Couldn't send"
+                        }
+                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.OutlinedButton(onClick = { ask("pickup") }, modifier = Modifier.weight(1f)) { Text("Pick me up") }
+                    androidx.compose.material3.OutlinedButton(onClick = { ask("call") }, modifier = Modifier.weight(1f)) { Text("Call me") }
                 }
             }
             if (!isMe) {

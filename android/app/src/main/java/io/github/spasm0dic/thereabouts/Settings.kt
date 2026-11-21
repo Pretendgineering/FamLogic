@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
@@ -88,6 +89,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
     Sharing("Sharing", Icons.Filled.Share),
     Map("Map", Icons.Filled.Edit),
     Account("Account", Icons.Filled.AccountCircle),
+    Pebble("Pebble & Index", Icons.Filled.Star),
     About("About", Icons.Filled.Info),
 }
 
@@ -171,10 +173,14 @@ fun SettingsScreen(
                 }
                 SettingsPage.Sharing -> SharingPage(prefs, sharing, onSharingChange)
                 SettingsPage.Groups -> GroupsPage(prefs, sharing, circles, onCircleSharingChange, onCirclesChanged)
-                SettingsPage.Fences -> FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
+                SettingsPage.Fences -> {
+                    FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
+                    if (supports("reminders") && features != null) RemindersCard(prefs, places)
+                }
                 SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
                 SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange, tripDays, onTripDaysChange, supports("trips"))
                 SettingsPage.Map -> MapPage(prefs, onMapStyleChange, onDimMapChange)
+                SettingsPage.Pebble -> PebblePage(prefs, supports("index01"))
                 SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved, members.find { it.id == myId },
                     supports("emoji"), onProfileChanged)
                 SettingsPage.About -> AboutPage(prefs, perms, serverVersion, onLeave)
@@ -201,6 +207,7 @@ private fun menuSummary(
     SettingsPage.Fences -> if (places.isEmpty()) "Alerts when people arrive or leave" else places.joinToString(", ") { it.name }
     SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, low battery, who you hear about" else "$it ${if (it == 1) "person" else "people"} muted" }
     SettingsPage.Map -> MapStyles.byId(prefs.mapStyle).title
+    SettingsPage.Pebble -> "Watch app, timeline, Index 01 ring"
     SettingsPage.Trail -> listOfNotNull(
         trailHours?.takeIf { it > 0 }?.let { "Trail $it h" },
         tripDays?.takeIf { it > 0 }?.let { "trips ${if (it == 1) "1 day" else "$it days"}" },
@@ -887,7 +894,7 @@ private fun MenuRow(icon: ImageVector, title: String, summary: String, onClick: 
 }
 
 @Composable
-private fun Hint(text: String) {
+internal fun Hint(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 

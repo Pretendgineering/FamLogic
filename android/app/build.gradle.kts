@@ -53,6 +53,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true // the PebbleKit 2 interface (src/main/aidl)
     }
     dependenciesInfo {
         // Keeps the APK free of Google-encrypted blobs (needed for F-Droid).

@@ -18,6 +18,8 @@ data class MemberLocation(
     val saving: Boolean = false,
     /** Their phone thinks they're driving. */
     val driving: Boolean = false,
+    /** Their Pebble watch's battery, or 0 if none. */
+    val watch: Int = 0,
 )
 
 data class Member(
@@ -30,6 +32,8 @@ data class Member(
     val emoji: String = "",
     /** When this person's active SOS started (unix ms), or 0 if none. */
     val sosSince: Long = 0,
+    /** Who has seen their SOS (names). */
+    val sosSeenBy: List<String> = emptyList(),
     /** Circles this person shares with you (for yourself: all of yours). */
     val circles: List<String> = emptyList(),
     /** The place they're at (e.g. "Home"), if any. */
@@ -38,6 +42,12 @@ data class Member(
     val trail: Boolean = false,
     val trips: Boolean = false,
 )
+
+/** A note to yourself for arriving at (or leaving) a fence. */
+data class PlaceReminder(val id: String, val placeId: String, val text: String, val onLeave: Boolean)
+
+/** Webhook links for a Pebble Index 01 ring, one per action, and the optional signing secret. */
+data class IndexLinks(val sos: String, val checkin: String, val remind: String, val signingSecret: String)
 
 /** An address search result. */
 data class GeoResult(val name: String, val lat: Double, val lon: Double)
@@ -130,6 +140,12 @@ data class AppEvent(
     val fromPlaceId: String = "",
     val distance: Double = 0.0,
     val duration: Long = 0,
+    /** Meant for one person only (receipts, requests, reminders). */
+    val to: String = "",
+    /** request: "pickup" or "call"; sos: "ring", "watch" or "fall"; reminder: "arrive" or "leave". */
+    val kind: String = "",
+    /** SOS from a watch: heart rate, if shared. */
+    val heartRate: Int = 0,
     /** Where it happened (SOS, check-in), or 0/0 if unknown. */
     val lat: Double = 0.0,
     val lon: Double = 0.0,
@@ -366,7 +382,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
     /** Sends a fix; the reply carries any alerts newer than [since]. */
     suspend fun sendLocation(
         lat: Double, lon: Double, accuracy: Float, speed: Float, time: Long, battery: Int, charging: Boolean,
-        since: Long, saving: Boolean = false, driving: Boolean = false,
+        since: Long, saving: Boolean = false, driving: Boolean = false, watchBattery: Int = 0,
     ): EventBatch? {
         val body = JSONObject()
             .put("lat", lat).put("lon", lon)
@@ -374,6 +390,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             .put("time", time).put("battery", battery).put("charging", charging)
         if (saving) body.put("saving", true)
         if (driving) body.put("driving", true)
+        if (watchBattery > 0) body.put("watch", watchBattery)
         return parseEvents(request("POST", "/api/location?since=$since", body), since)
     }
 
@@ -428,8 +445,44 @@ class Api(private val baseUrl: String, private val token: String = "") {
         request("POST", "/api/me/circles/join", JSONObject().put("code", code.trim())).optString("name")
 
     /** Raises (or re-sends) an SOS, with where the phone is if known. */
-    suspend fun sos(loc: android.location.Location?) {
-        request("POST", "/api/sos", JSONObject().put("loc", loc?.let { locationJson(it) }))
+    suspend fun sos(loc: android.location.Location?, source: String = "", heartRate: Int = 0, note: String = "") {
+        val body = JSONObject().put("loc", loc?.let { locationJson(it) })
+        if (source.isNotEmpty()) body.put("source", source)
+        if (heartRate > 0) body.put("heartRate", heartRate)
+        if (note.isNotEmpty()) body.put("note", note)
+        request("POST", "/api/sos", body)
+    }
+
+    /** Tells someone with an SOS that you've seen it. */
+    suspend fun sosSeen(memberId: String) {
+        request("POST", "/api/sos/" + enc(memberId) + "/seen", JSONObject())
+    }
+
+    /** Asks one person to pick you up ("pickup") or call you ("call"). */
+    suspend fun request(to: String, kind: String, loc: android.location.Location?) {
+        request("POST", "/api/requests", JSONObject().put("to", to).put("kind", kind).put("loc", loc?.let { locationJson(it) }))
+    }
+
+    suspend fun reminders(): List<PlaceReminder> {
+        val arr = request("GET", "/api/reminders").optJSONArray("reminders") ?: return emptyList()
+        return (0 until arr.length()).map {
+            val r = arr.getJSONObject(it)
+            PlaceReminder(r.getString("id"), r.optString("placeId"), r.optString("text"), r.optBoolean("onLeave", false))
+        }
+    }
+
+    suspend fun addReminder(placeId: String, text: String, onLeave: Boolean) {
+        request("POST", "/api/reminders", JSONObject().put("placeId", placeId).put("text", text).put("onLeave", onLeave))
+    }
+
+    suspend fun deleteReminder(id: String) {
+        request("POST", "/api/reminders/" + enc(id) + "/delete", JSONObject())
+    }
+
+    /** Your Pebble Index 01 ring webhook links ([reset] makes new ones). */
+    suspend fun indexLinks(reset: Boolean = false): IndexLinks {
+        val o = if (reset) request("POST", "/api/me/index/reset", JSONObject()) else request("GET", "/api/me/index")
+        return IndexLinks(o.optString("sos"), o.optString("checkin"), o.optString("remind"), o.optString("signingSecret"))
     }
 
     /** Ends this person's SOS and tells everyone they're OK. */
@@ -513,6 +566,9 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 placeId = e.optString("placeId"),
                 circleId = e.optString("circleId"),
                 fromPlaceId = e.optString("fromPlaceId"),
+                to = e.optString("to"),
+                kind = e.optString("kind"),
+                heartRate = e.optInt("heartRate", 0),
                 distance = e.optDouble("distance", 0.0),
                 duration = e.optLong("duration", 0),
                 lat = e.optDouble("lat", 0.0),
@@ -540,6 +596,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             paused = o.optBoolean("paused", false),
             emoji = o.optString("emoji"),
             sosSince = o.optLong("sosSince", 0),
+            sosSeenBy = o.optJSONArray("sosSeenBy")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
             circles = o.optJSONArray("circles")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
             place = o.optString("place"),
             trail = o.optBoolean("trail", false),
@@ -554,6 +611,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
                     time = it.optLong("time", 0),
                     saving = it.optBoolean("saving", false),
                     driving = it.optBoolean("driving", false),
+                    watch = it.optInt("watch", 0),
                 )
             },
         )

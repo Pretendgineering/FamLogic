@@ -14,6 +14,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import io.github.spasm0dic.thereabouts.pebble.PebbleBridge
 
 /**
  * Turns alerts from the server into Android notifications.
@@ -44,7 +45,11 @@ object Alerts {
             return
         }
         val fresh = if (seen >= 0) batch.events.filter { it.id > seen } else emptyList()
-        fresh.forEach { show(context, prefs, it) }
+        fresh.forEach {
+            show(context, prefs, it)
+            // The watch: SOS alarm screen, timeline pins (mutes apply, except to SOS).
+            if (it.type == "sos" || it.memberId !in prefs.mutedPeople) PebbleBridge.onAlert(context, it)
+        }
         // Only ever move forward: replies from the service and the map can arrive out of order.
         if (batch.cursor > seen) prefs.eventCursor = batch.cursor
         if (fresh.isNotEmpty()) lastArrival = System.currentTimeMillis()
@@ -61,11 +66,43 @@ object Alerts {
             "sos" -> {
                 if (!prefs.notifySos) return
                 val where = if (e.lat != 0.0 || e.lon != 0.0) "Tap to see where they are." else "Their location isn't known yet."
+                val from = when (e.kind) {
+                    "ring" -> " (from their ring)"
+                    "watch" -> " (from their watch)"
+                    "fall" -> " (their watch detected a fall)"
+                    else -> ""
+                }
+                val said = if (e.note.isNotEmpty()) " They said: \u201c${e.note}\u201d" else ""
+                val hr = if (e.heartRate > 0) " Heart rate ${e.heartRate}." else ""
                 notify(
-                    context, CHANNEL_SOS, sosId(e.memberId), "🆘 SOS from ${e.name}",
-                    "${e.name} needs help. $where", e.memberId, sos = true,
+                    context, CHANNEL_SOS, sosId(e.memberId), "🆘 SOS from ${e.name}$from",
+                    "${e.name} needs help.$said$hr $where", e.memberId, sos = true, seenFor = e.memberId,
                 )
             }
+            "sos_remote" -> {
+                // Our own SOS, raised from the ring: switch this phone to SOS updates.
+                if (!prefs.sosActive) {
+                    prefs.sosActive = true
+                    LocationService.start(context)
+                }
+                notify(
+                    context, CHANNEL_ALERTS, 2_200_000, "SOS sent from your ring",
+                    "Your family has been alerted. Open Thereabouts and tap I'm OK when you're safe.", "",
+                )
+            }
+            "sos_seen" -> {
+                notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} has seen your SOS", "They know you need help.", e.memberId)
+            }
+            "request" -> {
+                if (e.memberId in prefs.mutedPeople) return
+                val title = if (e.kind == "call") "${e.name} asks you to call them" else "${e.name} asks you to pick them up"
+                notify(context, CHANNEL_ALERTS, eventId(e), title, "Tap to see where they are.", e.memberId)
+            }
+            "reminder" -> {
+                val at = if (e.kind == "leave") "Leaving ${e.place}" else "At ${e.place}"
+                notify(context, CHANNEL_ALERTS, eventId(e), e.note, "Reminder · $at", "")
+            }
+            "notice" -> notify(context, CHANNEL_ALERTS, eventId(e), e.name, e.note, "")
             "sos_end" -> {
                 // Replaces (and silences) that person's SOS notification.
                 if (!prefs.notifySos) return
@@ -126,7 +163,7 @@ object Alerts {
     private fun eventId(e: AppEvent) = (e.id % 1_000_000).toInt() + 1000
 
     /** One notification slot per person for SOS, so "is OK" replaces their SOS. */
-    private fun sosId(memberId: String) = 2_000_000 + (memberId.hashCode() and 0xffff)
+    fun sosId(memberId: String) = 2_000_000 + (memberId.hashCode() and 0xffff)
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -172,6 +209,8 @@ object Alerts {
         text: String,
         memberId: String,
         sos: Boolean = false,
+        /** Adds an "I've seen it" button that tells this person (their SOS). */
+        seenFor: String = "",
     ) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -192,6 +231,13 @@ object Alerts {
                 .setColor(0xFFC7354B.toInt())
         } else {
             b.setCategory(NotificationCompat.CATEGORY_STATUS)
+        }
+        if (seenFor.isNotEmpty()) {
+            val seen = PendingIntent.getBroadcast(
+                context, id, Intent(context, SeenReceiver::class.java).putExtra(SeenReceiver.EXTRA_MEMBER, seenFor),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            b.addAction(0, "I've seen it", seen)
         }
         val n = b.build()
         // SOS keeps ringing until the notification is opened or swiped away.

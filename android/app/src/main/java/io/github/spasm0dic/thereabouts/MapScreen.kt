@@ -515,6 +515,7 @@ fun MapScreen(
             isMe = m.id == prefs.memberId,
             status = statusOf(m),
             canTrips = supports("trips"),
+            canRequests = features?.contains("requests") == true,
             onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
             onShowTrip = { t ->
                 sheetFor = null
@@ -545,14 +546,29 @@ fun MapScreen(
                 }
             }
             if (sosActive) {
+                val seenBy = members.find { it.id == prefs.memberId }?.sosSeenBy.orEmpty()
                 SosBanner(
                     if (sosPending) "Sending SOS… Thereabouts keeps trying until it gets through."
-                    else "SOS sent. Your family has been alerted and sees your location every 15 seconds.",
+                    else "SOS sent. Your family has been alerted and sees your location every 15 seconds." +
+                        if (seenBy.isNotEmpty()) "\nSeen by ${seenBy.joinToString(", ")}." else "",
                     "I'm OK",
                 ) { confirmOk = true }
             }
             members.filter { it.sosSince > 0 && it.id != prefs.memberId }.forEach { m ->
-                SosBanner("🆘 SOS from ${m.name}" + (m.loc?.let { " · ${ago(it.time)}" } ?: ""), if (m.loc != null) "Show" else null) {
+                val myName = members.find { it.id == prefs.memberId }?.name
+                val iSaw = myName != null && myName in m.sosSeenBy
+                SosBanner(
+                    "🆘 SOS from ${m.name}" + (m.loc?.let { " · ${ago(it.time)}" } ?: ""),
+                    if (m.loc != null) "Show" else null,
+                    secondAction = if (supports("sos-seen") && !iSaw) "Seen" else null,
+                    onSecond = {
+                        scope.launch {
+                            runCatching { Api(prefs.serverUrl, prefs.token).sosSeen(m.id) }
+                            androidx.core.app.NotificationManagerCompat.from(context).cancel(Alerts.sosId(m.id))
+                            refresh()
+                        }
+                    },
+                ) {
                     m.loc?.let { camera = CameraCommand.Center(it.lat, it.lon, ++cameraSeq) }
                 }
             }
@@ -892,15 +908,20 @@ fun ago(time: Long): String {
 
 /** A red strip across the top of the map, for SOS. */
 @Composable
-private fun SosBanner(text: String, action: String?, onClick: () -> Unit) {
+private fun SosBanner(text: String, action: String?, secondAction: String? = null, onSecond: () -> Unit = {}, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(SOS_RED).clickable(onClick = onClick)
             .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        if (secondAction != null) {
+            OutlinedButton(onClick = onSecond, border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
+                Text(secondAction, color = Color.White)
+            }
+        }
         if (action != null) {
-            OutlinedButton(onClick = onClick, border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) {
+            OutlinedButton(onClick = onClick, border = androidx.compose.foundation.BorderStroke(1.dp, Color.White), modifier = Modifier.padding(start = 6.dp)) {
                 Text(action, color = Color.White)
             }
         }

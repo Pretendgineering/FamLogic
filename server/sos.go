@@ -62,9 +62,17 @@ func (s *Store) StartSOSWith(id string, loc *Location, d SOSDetails) (*Member, e
 		e.Lat, e.Lon, e.Acc = m.Loc.Lat, m.Loc.Lon, m.Loc.Accuracy
 	}
 	s.addEventLocked(e)
+	if d.Source == "ring" {
+		// Raised away from the phone: tell the person's own phone, so it switches to
+		// SOS updates (every 15 seconds) and shows "I'm OK".
+		s.addEventLocked(Event{Type: EventSOSRemote, MemberID: m.ID, Name: m.Name, To: m.ID, Kind: d.Source, Note: e.Note})
+	}
 	cp := *m
 	return &cp, s.saveLocked()
 }
+
+// EventSOSRemote tells a person's own phone that their SOS was raised from elsewhere (their ring).
+const EventSOSRemote = "sos_remote"
 
 // EndSOS clears an active SOS and tells everyone the person is OK.
 func (s *Store) EndSOS(id string) (*Member, error) {

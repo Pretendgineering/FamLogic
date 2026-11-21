@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -17,6 +18,13 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- To find the Pebble phone app (PebbleKit 2) -->
+    <queries>
+        <intent>
+            <action android:name="io.rebble.pebblekit2.SEND_DATA_TO_WATCH" />
+        </intent>
+    </queries>
 
     <application
         android:name=".App"
@@ -53,6 +61,21 @@
             android:name=".LocationService"
             android:exported="false"
             android:foregroundServiceType="location|remoteMessaging" />
+
+        <!-- "I've seen it" on SOS notifications -->
+        <receiver
+            android:name=".SeenReceiver"
+            android:exported="false" />
+
+        <!-- Messages from the Thereabouts watchapp/watchface via the Pebble app (PebbleKit 2) -->
+        <service
+            android:name=".pebble.PebbleListenerService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="io.rebble.pebblekit2.RECEIVE_DATA_FROM_WATCH" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".BootReceiver"
