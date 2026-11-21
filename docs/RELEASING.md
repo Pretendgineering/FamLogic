@@ -83,9 +83,9 @@ If the secret is missing or wrong, the build warns about a throwaway key (or fai
 **Recommended path:** keep one key (above) → list on IzzyOnDroid when the app feels ready → apply to F-Droid with reproducible builds so everyone keeps the same signature.
 
 Already in place for F-Droid:
-- 100% free-software dependencies, with no Google Play Services
+- 100% free-software dependencies in the `foss` flavour, with no Google Play Services (only the `plus` flavour adds them; F-Droid builds `foss`)
 - the Google "dependency info" blob is disabled in the APK
-- builds from source with a plain `./gradlew assembleRelease`
+- builds from source with a plain `./gradlew assembleFossRelease`
 
 Still to do when we get there:
 - store listing text and screenshots in `fastlane/metadata/android/`

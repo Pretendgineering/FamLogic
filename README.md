@@ -4,7 +4,7 @@ Simple alternative family tracker, mostly made for myself as a vibe coding proje
 
 ____________________
 
-Thereabouts does one thing: each phone reports where it is to **your own server**, and everyone in the family sees everyone else on an OpenStreetMap map. There are no third-party accounts, no cloud, no ads, no Google Play Services, and no location history unless you turn it on. Sign-in happens only on your own server.
+Thereabouts does one thing: each phone reports where it is to **your own server**, and everyone in the family sees everyone else on an OpenStreetMap map. There are no third-party accounts, no cloud, no ads, no Google Play Services (unless you pick the optional Plus build), and no location history unless you turn it on. Sign-in happens only on your own server.
 
 - **Server**: one small container (~19 MB) with no database to run. Everything is kept in one JSON file.
 - **Android app**: join with an invite link. You get a map of everyone, last-seen times, battery levels, distances and a "Directions" button.
@@ -95,6 +95,16 @@ Phones need to reach the server from anywhere, not just your Wi-Fi.
 ## 2. Install the app
 
 Download `thereabouts.apk` from the [Releases](../../releases) page (or from the latest run of the **Android** workflow under the Actions tab) and install it. Android will ask you to allow installing from your browser or file manager.
+
+**Two builds, pick one per phone:**
+- **`thereabouts.apk`** (FOSS): no Google code at all. Works on every phone, including GrapheneOS and others without Google.
+- **`thereabouts-plus.apk`** (Plus): the same app with Google Play services added for:
+  - **quicker, better location fixes** (Google's fused location, which also uses Wi-Fi and cell towers, so it's better indoors);
+  - **driving from motion sensors** (Google's activity recognition): more accurate than GPS speed and notices sooner. It asks for the "Physical activity" permission once; Settings → Sharing → **Google Play services** has the switch.
+
+  If Play services is missing or stops working, the Plus build quietly does what the FOSS build does. Settings → Sharing shows which is in use, and the dashboard shows "-plus" after the app version.
+
+Both are signed with the same key and are the same app to Android, so you can switch by installing one over the other: you stay signed in and keep your settings. You can't have both installed at once.
 
 **GrapheneOS and other phones without Google:** this works as-is, because the app uses Android's own location service. Without a network location provider, the app uses GPS, so indoor fixes can be slower and battery use a little higher. Turning on GrapheneOS's own network location (Settings → Location) lets the app use Wi-Fi positioning instead, which saves battery. Also set Thereabouts's battery usage to **Unrestricted** when the app asks.
 
@@ -193,7 +203,8 @@ ADMIN_PASSWORD=something-long DATA_DIR=./data go run .
 **App** (JDK 17+, Android SDK):
 ```sh
 cd android
-./gradlew assembleRelease   # -> app/build/outputs/apk/release/app-release.apk
+./gradlew assembleFossRelease   # -> app/build/outputs/apk/foss/release/app-foss-release.apk
+./gradlew assemblePlusRelease   # -> app/build/outputs/apk/plus/release/app-plus-release.apk (adds Google Play services)
 ```
 
 ### Signing and releases

@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.spasm0dic.thereabouts"
         minSdk = 26
         targetSdk = 35
-        versionCode = 22
-        versionName = "0.12.0"
+        versionCode = 23
+        versionName = "0.13.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo
@@ -31,6 +31,23 @@ android {
                 // PKCS12 keystores use the same password for the key; allow a separate one anyway.
                 keyPassword = System.getenv("THEREABOUTS_KEY_PASSWORD")?.ifBlank { null } ?: password
             }
+        }
+    }
+
+    // Two builds from the same code (see ROADMAP item 10):
+    //  - foss: no Google dependencies (the default; for F-Droid and de-Googled phones).
+    //  - plus: adds Google Play services for better location and driving detection,
+    //    falling back to the FOSS behaviour when Play services is missing.
+    // Same application ID and signing key, so one installs over the other as an update.
+    flavorDimensions += "build"
+    productFlavors {
+        create("foss") {
+            dimension = "build"
+            isDefault = true
+        }
+        create("plus") {
+            dimension = "build"
+            versionNameSuffix = "-plus"
         }
     }
 
@@ -75,6 +92,9 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // Plus build only: Google's fused location and activity recognition.
+    "plusImplementation"("com.google.android.gms:play-services-location:21.4.0")
 
     // OpenStreetMap map view (Apache 2.0).
     implementation("org.osmdroid:osmdroid-android:6.1.20")

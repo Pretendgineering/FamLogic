@@ -273,6 +273,7 @@ private fun SharingPage(prefs: Prefs, sharing: Boolean, onSharingChange: (Boolea
             },
         )
     }
+    if (Flavor.PLUS) PlusCard(prefs)
     SettingsCard("Wi-Fi positioning") {
         SwitchRow(
             title = "Find my location from Wi-Fi",

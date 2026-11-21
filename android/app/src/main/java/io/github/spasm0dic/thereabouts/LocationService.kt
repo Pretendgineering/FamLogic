@@ -156,6 +156,12 @@ class LocationService : Service() {
 
     private val drive = DriveDetector()
 
+    // Plus build extras (null in the FOSS build, or when Google Play services isn't working).
+    private var fused: FusedLocation? = null
+    private var motion: MotionSensing? = null
+    private var fusedFailed = false
+    private var motionFailed = false
+
     /** Updating less often because the battery is low (see [updateSaving]). */
     private var saving = false
 
@@ -189,6 +195,24 @@ class LocationService : Service() {
             .setMinUpdateIntervalMillis(intervalMs / 2)
             .build()
 
+        startMotion()
+        // Plus build: Google's fused location when Play services works; otherwise Android's own below.
+        if (fused == null && !fusedFailed) fused = Flavor.fusedLocation(this)
+        val f = fused
+        if (f != null && f.start(intervalMs, highAccuracy = prefs.sosActive, onFix = { onFix(it) }, onFailed = {
+                fusedFailed = true
+                fused = null
+                usingFused = false
+                if (locating) startUpdates(sendNow = false)
+            })
+        ) {
+            usingFused = true
+            if (sendNow) newestLastKnown()?.let { onFix(it, force = true) }
+            return
+        }
+        fused = null
+        usingFused = false
+
         val providers = if (Build.VERSION.SDK_INT >= 31 && lm.hasProvider(LocationManager.FUSED_PROVIDER)) {
             listOf(LocationManager.FUSED_PROVIDER)
         } else {
@@ -209,10 +233,45 @@ class LocationService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun stopUpdates() {
+        fused?.stop()
+        fused = null
+        usingFused = false
+        stopMotion()
         drive.reset()
         if (!locating) return
         locating = false
         runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
+    }
+
+    /** Plus build: driving from Google's activity recognition, if switched on and permitted. */
+    private fun startMotion() {
+        if (!prefs.motionDriving || motionFailed) { stopMotion(); return }
+        if (motion != null) return
+        val m = Flavor.motionSensing(this) ?: return
+        val started = m.start(onVehicle = ::onVehicle, onFailed = {
+            motionFailed = true
+            stopMotion()
+        })
+        if (started) {
+            motion = m
+            drive.useMotion = true
+            usingMotion = true
+        }
+    }
+
+    private fun stopMotion() {
+        motion?.stop()
+        motion = null
+        drive.useMotion = false
+        usingMotion = false
+    }
+
+    private fun onVehicle(inVehicle: Boolean) {
+        if (!drive.onVehicle(inVehicle)) return
+        Log.i(TAG, "Driving (motion sensors): ${drive.driving}")
+        if (locating) restartForNewInterval()
+        // Tell others now if we have a recent fix; otherwise the next fix (within a minute) will.
+        lastFix?.takeIf { System.currentTimeMillis() - it.time < 2 * 60_000 }?.let { upload(it, waitForTurn = true) }
     }
 
     @SuppressLint("MissingPermission")
@@ -477,6 +536,15 @@ class LocationService : Service() {
 
         @Volatile
         var isRunning = false
+            private set
+
+        /** Plus build: what's in use right now, for Settings. */
+        @Volatile
+        var usingFused = false
+            private set
+
+        @Volatile
+        var usingMotion = false
             private set
 
         /** Bumped when an SOS / "I'm OK" reaches the server, so the open map can update. */

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plus build only: Google activity recognition (driving from motion sensors). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <application>
+        <receiver android:name=".MotionReceiver" android:exported="false" />
+    </application>
+</manifest>

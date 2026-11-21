@@ -108,15 +108,6 @@ Make adding someone a single copy-paste. The dashboard's **Copy invite** button 
 
 These are parked until we decide to pick them up. Each needs a short design pass (and questions) first.
 
-### 10. Two builds of the app: FOSS and Google Play services
-- **FOSS build (today's app):** stays the default, with no Google dependencies, for F-Droid/IzzyOnDroid and de-Googled phones.
-- **"Plus" build with Google Play services:** a second product flavour from the same code. Extras live behind a small interface, so the FOSS build simply doesn't include them.
-- Candidate extras:
-  - Activity recognition: driving, walking and cycling from Google's sensors, more accurate and cheaper on battery than the GPS-speed method.
-  - The fused location provider (better indoor fixes).
-  - Optionally Firebase Cloud Messaging as a backup wake-up for alerts.
-- Open questions: distribution (GitHub release with two APKs vs. Play Store), whether both can be installed side by side (different application IDs), and how the server and dashboard show which build someone is on.
-
 ### 11. Google Find Hub trackers
 - Show Bluetooth trackers registered in Google's Find Hub network (keys, bags, pets) on the family map.
 - **Research (Nov 2026):**
@@ -145,5 +136,6 @@ These are parked until we decide to pick them up. Each needs a short design pass
 7c. ✅ **0.10.0:** trips: journeys between stops (kept 1, 3 or 7 days, opt-in), with fence or street names, distance, average and top speed, route on the map, optional "finished a trip" alerts, in the app (tap a person) and dashboard. Also: colour and emoji picker, keyless map styles, Settings reordered.
 7d. ✅ **0.11.0:** driving detection from GPS speed: "Driving" status and 🚗 badge, 1-minute updates while driving, optional "started driving" alert.
 7e. ✅ **0.12.0:** Pebble watchapp (family list, check-in with dictation, SOS from the watch, SOS alarm with siren, pick me up / call me, pause), Family watchface, timeline pins, opt-in fall detection and heart rate in SOS, watch battery; Index 01 ring webhooks (silent SOS, voice check-in, voice place reminders); SOS "seen" receipts and place reminders for everyone. See [docs/PEBBLE.md](docs/PEBBLE.md).
+7f. ✅ **0.13.0:** two builds: `thereabouts.apk` (FOSS, unchanged) and `thereabouts-plus.apk` with Google's fused location and activity recognition for driving, falling back to the FOSS behaviour without Play services. Same app ID and key, so either installs over the other. (Firebase push was left out: it would need a Firebase key on every self-hosted server.)
 8. **Profile pictures** (later; emoji icons cover the simple case).
 9. **Shareable invite message** with an app download link (once the app is on F-Droid or IzzyOnDroid).

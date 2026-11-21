@@ -9,6 +9,9 @@ import android.location.Location
  * One fast fix (over ~25 km/h) makes it a "candidate": the phone then updates
  * every minute to check. A second fast fix at least 20 s later confirms it.
  * It stays "driving" through stops of up to 3 minutes (lights, traffic).
+ *
+ * In the Plus build, Google's activity recognition can take over ([useMotion]):
+ * then "in a vehicle" from the phone's motion sensors decides, and GPS speed is ignored.
  */
 class DriveDetector {
     var driving = false
@@ -19,11 +22,28 @@ class DriveDetector {
     private var lastFastAt = 0L
     private var prev: Location? = null
 
+    /** True while Google's activity recognition decides (Plus build); GPS speed is then ignored. */
+    var useMotion = false
+        set(v) {
+            if (field != v) { driving = false; candidate = false }
+            field = v
+        }
+
+    /** Activity recognition says we got into (true) or out of (false) a vehicle; returns true if [driving] changed. */
+    fun onVehicle(inVehicle: Boolean): Boolean {
+        if (!useMotion) return false
+        val changed = driving != inVehicle
+        driving = inVehicle
+        candidate = false
+        return changed
+    }
+
     /** Feeds a fix; returns true if [driving] or [candidate] changed. */
     fun onFix(loc: Location): Boolean {
         val before = driving to candidate
         val speed = speedOf(loc, prev)
         if (prev == null || loc.time > prev!!.time) prev = loc
+        if (useMotion) return false
         val now = loc.time
         if (speed != null && speed >= FAST_MPS) {
             when {
