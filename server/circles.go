@@ -209,6 +209,7 @@ func (s *Store) inviteCircleLocked(inv *Invite) string {
 func (s *Store) deleteCircleDataLocked(id string) {
 	for pid, p := range s.d.Places {
 		if p.CircleID == id {
+			s.deletePlaceRemindersLocked(pid)
 			delete(s.d.Places, pid)
 		}
 	}
@@ -246,6 +247,7 @@ type MemberView struct {
 	Member
 	SharedCircles []string // circles they have in common with the viewer
 	Place         string   // the place they're at, if any, among places the viewer can see
+	SOSSeenNames  []string // who has seen their SOS
 }
 
 // VisibleTo returns the people `viewerID` can see (themselves included), with
@@ -279,7 +281,7 @@ func (s *Store) VisibleTo(viewerID string) ([]MemberView, []Circle) {
 		if cp.Loc != nil {
 			place = s.placeNameForLocked(m, viewer)
 		}
-		out = append(out, MemberView{cp, shared, place})
+		out = append(out, MemberView{cp, shared, place, s.sosSeenNamesLocked(m)})
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out, s.circlesLocked(viewer.Circles)
@@ -289,6 +291,9 @@ func (s *Store) VisibleTo(viewerID string) ([]MemberView, []Circle) {
 // and check-ins go to everyone sharing a circle with the sender; low-battery
 // alerts only to people the sender shares their location with.
 func (s *Store) eventVisibleLocked(e Event, viewer *Member) bool {
+	if e.To != "" {
+		return e.To == viewer.ID // meant for one person (even themselves, e.g. a reminder)
+	}
 	if e.MemberID == viewer.ID {
 		return false
 	}

@@ -150,6 +150,7 @@ function renderSOS(list) {
   banner.replaceChildren(...list.map((m) =>
     el("button", { class: "sos-item", onclick: () => m.loc && map.setView([m.loc.lat, m.loc.lon], 17) },
       `🆘 SOS from ${m.name} since ${new Date(m.sosSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` +
+      (m.sosSeenBy && m.sosSeenBy.length ? ` · seen by ${m.sosSeenBy.join(", ")}` : "") +
       (m.loc ? ` · last seen ${ago(m.loc.time)}, click to show` : " · no location yet"))));
 }
 
@@ -168,6 +169,7 @@ function describe(m) {
   if (!m.loc) return "No location yet";
   const parts = [ago(m.loc.time)];
   if (m.loc.battery >= 0) parts.push(`${m.loc.battery}%${m.loc.charging ? " ⚡" : m.loc.saving ? " (saving battery)" : ""}`);
+  if (m.loc.watch > 0) parts.push(`watch ${m.loc.watch}%`);
   return parts.join(" · ");
 }
 

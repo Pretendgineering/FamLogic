@@ -36,10 +36,13 @@ type Server struct {
 	loginMu sync.Mutex    // serialises failed logins so guessing is slow
 	limiter *loginLimiter // locks a username after repeated wrong passwords
 	geo     *geocoder     // address search for fences
+
+	indexSeen *indexDeliveries // Index 01 ring deliveries already handled
 }
 
 func NewServer(cfg Config, store *Store, static fs.FS) *Server {
-	return &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter(), geo: newGeocoder(cfg.GeocoderURL)}
+	return &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter(), geo: newGeocoder(cfg.GeocoderURL),
+		indexSeen: &indexDeliveries{seen: map[string]time.Time{}}}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -67,6 +70,16 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/events/wait", s.device(s.handleWaitEvents))
 	mux.HandleFunc("POST /api/sos", s.device(s.handleSOS))
 	mux.HandleFunc("POST /api/sos/end", s.device(s.handleSOSEnd))
+	mux.HandleFunc("POST /api/sos/{id}/seen", s.device(s.handleSOSSeen))
+	mux.HandleFunc("POST /api/requests", s.device(s.handleRequest))
+	mux.HandleFunc("GET /api/reminders", s.device(s.handleListReminders))
+	mux.HandleFunc("POST /api/reminders", s.device(s.handleAddReminder))
+	mux.HandleFunc("DELETE /api/reminders/{id}", s.device(s.handleDeleteReminder))
+	mux.HandleFunc("POST /api/reminders/{id}/delete", s.device(s.handleDeleteReminder)) // for clients that can't send DELETE
+	mux.HandleFunc("GET /api/me/index", s.device(s.handleIndexSettings))
+	mux.HandleFunc("POST /api/me/index/reset", s.device(s.handleIndexSettings))
+	// Pebble Index 01 ring webhooks: authenticated by the secret in the URL (and optional signing).
+	mux.HandleFunc("POST /api/index/{token}/{action}", s.handleIndexWebhook)
 	mux.HandleFunc("POST /api/checkin", s.device(s.handleCheckIn))
 	mux.HandleFunc("POST /api/me/status", s.device(s.handleStatus))
 	mux.HandleFunc("PATCH /api/me", s.device(s.handlePatchMe))
@@ -164,6 +177,8 @@ type publicMember struct {
 	Loc    *Location `json:"loc"`
 	// When this person's active SOS started (unix ms); absent if no SOS.
 	SOSSince int64 `json:"sosSince,omitempty"`
+	// Who has seen it (names).
+	SOSSeenBy []string `json:"sosSeenBy,omitempty"`
 	// Circles: for phones, the ones in common with the viewer; for the dashboard, all of theirs.
 	Circles []string `json:"circles"`
 	// The place they're at (e.g. "Home"), if any.
@@ -187,7 +202,7 @@ func toPublic(ms []Member) []publicMember {
 // serverFeatures tells apps what this server can do, so a newer app talking to
 // an older server can hide what won't work instead of failing.
 var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails",
-	"emoji", "status", "schedules", "trips", "driving"}
+	"emoji", "status", "schedules", "trips", "driving", "sos-seen", "requests", "reminders", "index01"}
 
 func (s *Server) serverInfo() map[string]any {
 	features := slices.Clone(serverFeatures)
@@ -502,6 +517,7 @@ func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Membe
 		m.Circles = v.SharedCircles
 		members[i] = toPublic([]Member{m})[0]
 		members[i].Place = v.Place
+		members[i].SOSSeenBy = v.SOSSeenNames
 		members[i].Trail = v.TrailHours > 0 && v.Loc != nil
 		members[i].Trips = v.TripDays > 0
 	}
@@ -564,12 +580,18 @@ func optionalLocation(l *Location) *Location {
 
 func (s *Server) handleSOS(w http.ResponseWriter, r *http.Request, me *Member) {
 	var req struct {
-		Loc *Location `json:"loc"`
+		Loc       *Location `json:"loc"`
+		Source    string    `json:"source"`    // "watch" or "fall" when raised from a Pebble
+		HeartRate int       `json:"heartRate"` // from the watch, if the person allows it
+		Note      string    `json:"note"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	m, err := s.store.StartSOS(me.ID, optionalLocation(req.Loc))
+	if req.Source != "watch" && req.Source != "fall" {
+		req.Source = ""
+	}
+	m, err := s.store.StartSOSWith(me.ID, optionalLocation(req.Loc), SOSDetails{Note: req.Note, Source: req.Source, HeartRate: req.HeartRate})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
@@ -718,6 +740,78 @@ func (s *Server) validatePatch(w http.ResponseWriter, name, color, emoji *string
 		return false
 	}
 	return true
+}
+
+func (s *Server) handleSOSSeen(w http.ResponseWriter, r *http.Request, me *Member) {
+	switch err := s.store.SOSSeen(me.ID, r.PathValue("id")); {
+	case errors.Is(err, ErrNoSOS):
+		writeError(w, http.StatusConflict, capitalize(err.Error()))
+	case err != nil:
+		writeError(w, http.StatusNotFound, "no such person")
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request, me *Member) {
+	var req struct {
+		To   string    `json:"to"`
+		Kind string    `json:"kind"`
+		Loc  *Location `json:"loc"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	switch err := s.store.Request(me.ID, req.To, req.Kind, optionalLocation(req.Loc)); {
+	case errors.Is(err, ErrBadRequest):
+		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+	case err != nil:
+		writeError(w, http.StatusNotFound, "no such person")
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) handleListReminders(w http.ResponseWriter, r *http.Request, me *Member) {
+	writeJSON(w, http.StatusOK, map[string]any{"reminders": s.store.RemindersFor(me.ID)})
+}
+
+func (s *Server) handleAddReminder(w http.ResponseWriter, r *http.Request, me *Member) {
+	var req struct {
+		PlaceID string `json:"placeId"`
+		Text    string `json:"text"`
+		OnLeave bool   `json:"onLeave"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	rem, err := s.store.AddReminder(me.ID, req.PlaceID, req.Text, req.OnLeave)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+		return
+	}
+	writeJSON(w, http.StatusOK, rem)
+}
+
+func (s *Server) handleDeleteReminder(w http.ResponseWriter, r *http.Request, me *Member) {
+	if err := s.store.DeleteReminder(me.ID, r.PathValue("id")); err != nil {
+		writeError(w, http.StatusNotFound, "no such reminder")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleIndexSettings returns the person's Index 01 ring webhook URLs (POST .../reset makes new ones).
+func (s *Server) handleIndexSettings(w http.ResponseWriter, r *http.Request, me *Member) {
+	token, secret, err := s.store.IndexSettings(me.ID, r.Method == http.MethodPost)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	base := s.baseURL(r) + "/api/index/" + token + "/"
+	writeJSON(w, http.StatusOK, map[string]string{
+		"sos": base + "sos", "checkin": base + "checkin", "remind": base + "remind", "signingSecret": secret,
+	})
 }
 
 // handleStatus: the phone reports its app version and anything that could stop it sharing.

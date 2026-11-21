@@ -181,6 +181,7 @@ func (s *Store) DeletePlace(byMember, id string) error {
 		return ErrNotFound
 	}
 	delete(s.d.Places, id)
+	s.deletePlaceRemindersLocked(id)
 	for _, m := range s.d.Members {
 		delete(m.Presence, id)
 	}
@@ -222,6 +223,7 @@ func (s *Store) checkPlacesLocked(m *Member, loc Location) {
 		case !pr.Inside && d <= p.Radius:
 			pr.Inside, pr.OutsideSince = true, 0
 			s.placeEventLocked(EventArrived, m, p)
+			s.fireRemindersLocked(m, p, false)
 		case pr.Inside && d > p.Radius+exitMargin(p.Radius):
 			clearlyOut := d-loc.Accuracy > p.Radius+2*exitMargin(p.Radius)
 			if pr.OutsideSince == 0 && !clearlyOut {
@@ -229,6 +231,7 @@ func (s *Store) checkPlacesLocked(m *Member, loc Location) {
 			} else if clearlyOut || now.Sub(time.UnixMilli(pr.OutsideSince)) >= departureDelay {
 				pr.Inside, pr.OutsideSince = false, 0
 				s.placeEventLocked(EventLeft, m, p)
+				s.fireRemindersLocked(m, p, true)
 			}
 		case pr.Inside:
 			pr.OutsideSince = 0 // back inside (or in the buffer zone): no departure

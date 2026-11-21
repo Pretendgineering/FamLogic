@@ -30,6 +30,8 @@ type Location struct {
 	Saving bool `json:"saving,omitempty"`
 	// The phone thinks its person is driving (sustained speed; see the app).
 	Driving bool `json:"driving,omitempty"`
+	// Their Pebble watch's battery (1-100), if one is connected.
+	Watch int `json:"watch,omitempty"`
 }
 
 // Member is one person (one phone) in the family.
@@ -88,6 +90,13 @@ type Member struct {
 	LastContact int64    `json:"lastContact,omitempty"`
 	SilentSince int64    `json:"silentSince,omitempty"`
 
+	// Who has seen their current SOS (member ids), see requests.go.
+	SOSSeenBy []string `json:"sosSeenBy,omitempty"`
+	// Index 01 ring webhooks (see index01.go): the secret in their URLs, and the
+	// optional signing secret.
+	IndexToken  string `json:"indexToken,omitempty"`
+	IndexSecret string `json:"indexSecret,omitempty"`
+
 	// When they last stopped driving (unix ms), so a short stop doesn't
 	// announce "started driving" again.
 	DriveEndedAt int64 `json:"driveEndedAt,omitempty"`
@@ -116,6 +125,8 @@ type data struct {
 	Invites map[string]*Invite `json:"invites"`
 	Circles map[string]*Circle `json:"circles"`
 	Places  map[string]*Place  `json:"places,omitempty"`
+	// Place reminders, by id (see requests.go).
+	Reminders map[string]*Reminder `json:"reminders,omitempty"`
 	// Trails, per member, oldest point first (see trails.go).
 	Trails map[string][]TrailPoint `json:"trails,omitempty"`
 
@@ -145,7 +156,7 @@ func OpenStore(path string) (*Store, error) {
 	b, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		s.d = data{Secret: randomString(32), Members: map[string]*Member{}, Invites: map[string]*Invite{}, Circles: map[string]*Circle{}, Places: map[string]*Place{}, Trails: map[string][]TrailPoint{}}
+		s.d = data{Secret: randomString(32), Members: map[string]*Member{}, Invites: map[string]*Invite{}, Circles: map[string]*Circle{}, Places: map[string]*Place{}, Trails: map[string][]TrailPoint{}, Reminders: map[string]*Reminder{}}
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return nil, err
 		}
@@ -170,6 +181,9 @@ func OpenStore(path string) (*Store, error) {
 	}
 	if s.d.Trails == nil {
 		s.d.Trails = map[string][]TrailPoint{}
+	}
+	if s.d.Reminders == nil {
+		s.d.Reminders = map[string]*Reminder{}
 	}
 	if s.d.Secret == "" {
 		s.d.Secret = randomString(32)

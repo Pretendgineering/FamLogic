@@ -30,6 +30,18 @@ func (s *Store) applyFixLocked(m *Member, loc *Location) {
 // un-pauses sharing: someone asking for help wants to be found. Pressing SOS
 // again while one is active re-sends the alert (e.g. if nobody reacted).
 func (s *Store) StartSOS(id string, loc *Location) (*Member, error) {
+	return s.StartSOSWith(id, loc, SOSDetails{})
+}
+
+// SOSDetails is extra information an SOS can carry.
+type SOSDetails struct {
+	Note      string // e.g. what was said into the ring
+	Source    string // "ring", "watch", "fall" or "" (the phone)
+	HeartRate int
+}
+
+// StartSOSWith is StartSOS with extra details.
+func (s *Store) StartSOSWith(id string, loc *Location, d SOSDetails) (*Member, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, ok := s.d.Members[id]
@@ -40,8 +52,12 @@ func (s *Store) StartSOS(id string, loc *Location) (*Member, error) {
 	s.applyFixLocked(m, loc)
 	if m.SOSSince == 0 {
 		m.SOSSince = time.Now().UnixMilli()
+		m.SOSSeenBy = nil
 	}
-	e := Event{Type: EventSOS, MemberID: m.ID, Name: m.Name}
+	e := Event{Type: EventSOS, MemberID: m.ID, Name: m.Name, Note: cleanNote(d.Note), Kind: d.Source}
+	if d.HeartRate > 20 && d.HeartRate < 250 {
+		e.HeartRate = d.HeartRate
+	}
 	if m.Loc != nil {
 		e.Lat, e.Lon, e.Acc = m.Loc.Lat, m.Loc.Lon, m.Loc.Accuracy
 	}
@@ -60,6 +76,7 @@ func (s *Store) EndSOS(id string) (*Member, error) {
 	}
 	if m.SOSSince != 0 {
 		m.SOSSince = 0
+		m.SOSSeenBy = nil
 		s.addEventLocked(Event{Type: EventSOSEnd, MemberID: m.ID, Name: m.Name})
 	}
 	cp := *m
