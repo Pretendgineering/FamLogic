@@ -76,6 +76,8 @@ data class ServerInfo(
     val tileUrl: String,
     val tileAttribution: String,
     val features: Set<String>? = null,
+    /** Tiles for dark mode; the same as [tileUrl] if the server has no dark style. */
+    val tileUrlDark: String = tileUrl,
     val version: String = "",
 )
 
@@ -453,6 +455,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
         name = o.optString("name", "Family"),
         tileUrl = o.optString("tileUrl", Prefs.DEFAULT_TILES),
         tileAttribution = o.optString("tileAttribution", Prefs.DEFAULT_ATTRIBUTION),
+        tileUrlDark = o.optString("tileUrlDark").ifEmpty { o.optString("tileUrl", Prefs.DEFAULT_TILES) },
         features = o.optJSONArray("features")?.let { arr -> (0 until arr.length()).map { arr.getString(it) }.toSet() },
         version = o.optString("version"),
     )

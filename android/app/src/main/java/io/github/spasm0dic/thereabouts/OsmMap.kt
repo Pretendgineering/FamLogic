@@ -37,18 +37,29 @@ sealed class CameraCommand {
     data class Center(val lat: Double, val lon: Double, override val seq: Int) : CameraCommand()
 }
 
-/** Tiles from a URL template like https://tile.openstreetmap.org/{z}/{x}/{y}.png */
-private class TemplateTileSource(private val template: String, attribution: String) :
-    OnlineTileSourceBase("t" + template.hashCode().toUInt(), 0, 19, 256, ".png", arrayOf(template), attribution) {
-    override fun getTileURLString(index: Long): String = template
-        .replace("{z}", MapTileIndex.getZoom(index).toString())
-        .replace("{x}", MapTileIndex.getX(index).toString())
-        .replace("{y}", MapTileIndex.getY(index).toString())
-        .replace("{s}", "a")
+/**
+ * Tiles from a URL template like https://tile.openstreetmap.org/{z}/{x}/{y}.png.
+ * {s} spreads requests over servers a/b/c; {r} asks for sharp "@2x" tiles (512 px).
+ */
+private class TemplateTileSource(private val template: String, attribution: String, maxZoom: Int) :
+    OnlineTileSourceBase(
+        "t" + template.hashCode().toUInt(), 0, maxZoom, if ("{r}" in template) 512 else 256, ".png", arrayOf(template), attribution,
+    ) {
+    override fun getTileURLString(index: Long): String {
+        val x = MapTileIndex.getX(index)
+        val y = MapTileIndex.getY(index)
+        return template
+            .replace("{z}", MapTileIndex.getZoom(index).toString())
+            .replace("{x}", x.toString())
+            .replace("{y}", y.toString())
+            .replace("{s}", "abc"[(x + y) % 3].toString())
+            .replace("{r}", "@2x")
+    }
 }
 
 private class MapState {
     var tileUrl: String? = null
+    var dark: Boolean? = null
     var appliedSeq = -1
     val markers = mutableMapOf<String, Marker>()
     val places = mutableMapOf<String, Pair<Polygon, Marker>>()
@@ -65,8 +76,7 @@ const val STALE_MS = 30 * 60 * 1000L
 @Composable
 fun OsmMap(
     members: List<Member>,
-    tileUrl: String,
-    attribution: String,
+    tiles: MapStyles.Tiles,
     camera: CameraCommand?,
     statusOf: (Member) -> String,
     modifier: Modifier = Modifier,
@@ -79,6 +89,7 @@ fun OsmMap(
 ) {
     val context = LocalContext.current
     val state = remember { MapState() }
+    val dark = androidx.compose.foundation.isSystemInDarkTheme()
     state.onLongPress = onLongPress
     state.onPlaceClick = onPlaceClick
     val mapView = remember {
@@ -121,13 +132,34 @@ fun OsmMap(
 
     // clipToBounds: osmdroid paints tiles past its edges, which would cover the banners above it.
     AndroidView(factory = { mapView }, modifier = modifier.clipToBounds()) { map ->
+        val tileUrl = tiles.url
         if (state.tileUrl != tileUrl) {
-            map.setTileSource(TemplateTileSource(tileUrl, attribution))
+            val source = TemplateTileSource(tileUrl, tiles.attribution, tiles.maxZoom)
+            map.maxZoomLevel = tiles.maxZoom.toDouble()
+            map.setTileSource(source)
+            // Sharp 512 px tiles are drawn at the size they were designed for (256 dp),
+            // instead of blowing 256 px tiles up to the screen's density (blurry).
+            val density = context.resources.displayMetrics.density
+            if (source.tileSizePixels == 512) {
+                map.isTilesScaledToDpi = false
+                map.tilesScaleFactor = density / 2f
+            } else {
+                map.isTilesScaledToDpi = true
+            }
             state.tileUrl = tileUrl
+        }
+        if (state.dark != dark) {
+            // While tiles load: a plain background in the theme, not a grey grid.
+            val bg = if (dark) Color.rgb(38, 39, 53) else Color.rgb(241, 236, 250)
+            map.overlayManager.tilesOverlay.loadingBackgroundColor = bg
+            map.overlayManager.tilesOverlay.loadingLineColor = bg
+            map.setBackgroundColor(bg)
+            state.dark = dark
+            state.drawnPlaces = null // redraw fences in the other style
         }
 
         if (state.drawnPlaces != places) {
-            drawPlaces(map, state, places)
+            drawPlaces(map, state, places, dark)
             state.drawnPlaces = places
         }
         if (state.drawnTrail != trail to trailColor) {
@@ -137,7 +169,7 @@ fun OsmMap(
                 val line = Polyline(map).apply {
                     setPoints(trail.map { GeoPoint(it.lat, it.lon) })
                     outlinePaint.color = parseColor(trailColor)
-                    outlinePaint.strokeWidth = 10f
+                    outlinePaint.strokeWidth = 4 * context.resources.displayMetrics.density
                     outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
                     outlinePaint.alpha = 200
                 }
@@ -173,16 +205,13 @@ fun OsmMap(
             map.post {
                 when (camera) {
                     is CameraCommand.Center -> {
-                        map.controller.setZoom(maxOf(map.zoomLevelDouble, 16.0))
-                        map.controller.animateTo(GeoPoint(camera.lat, camera.lon))
+                        // One smooth glide (pan and zoom together).
+                        map.controller.animateTo(GeoPoint(camera.lat, camera.lon), maxOf(map.zoomLevelDouble, 16.0), 700L)
                     }
                     is CameraCommand.FitAll -> {
                         val pts = located.map { GeoPoint(it.loc!!.lat, it.loc.lon) }
                         when {
-                            pts.size == 1 -> {
-                                map.controller.setZoom(15.0)
-                                map.controller.setCenter(pts[0])
-                            }
+                            pts.size == 1 -> map.controller.animateTo(pts[0], 15.0, 700L)
                             pts.size > 1 -> {
                                 val box = BoundingBox.fromGeoPointsSafe(pts)
                                 map.zoomToBoundingBox(box.increaseByScale(1.3f), true, 80, 16.0, null)
@@ -237,20 +266,24 @@ fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, 
 
 
 /** Places as shaded circles with their name, drawn under the people. */
-private fun drawPlaces(map: MapView, state: MapState, places: List<Place>) {
+private fun drawPlaces(map: MapView, state: MapState, places: List<Place>, dark: Boolean) {
     state.places.values.forEach { (poly, label) ->
         map.overlays.remove(poly)
         map.overlays.remove(label)
     }
     state.places.clear()
-    val accent = Color.rgb(110, 72, 214) // the theme purple
+    // The theme's purple: deeper on light maps, lilac on dark ones.
+    val accent = if (dark) Color.rgb(189, 147, 249) else Color.rgb(110, 72, 214)
+    val d = map.context.resources.displayMetrics.density
     places.forEachIndexed { i, p ->
         val center = GeoPoint(p.lat, p.lon)
         val poly = Polygon(map).apply {
             points = Polygon.pointsAsCircle(center, p.radius)
-            fillPaint.color = Color.argb(34, 110, 72, 214)
+            fillPaint.color = Color.argb(if (dark) 40 else 30, Color.red(accent), Color.green(accent), Color.blue(accent))
             outlinePaint.color = accent
-            outlinePaint.strokeWidth = 4f
+            outlinePaint.alpha = 200
+            outlinePaint.strokeWidth = 1.5f * d
+            outlinePaint.isAntiAlias = true
             title = p.name
             setOnClickListener { _, _, _ -> state.onPlaceClick(p); true }
         }
@@ -258,8 +291,8 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>) {
             position = center
             setTextIcon(p.name)
             textLabelForegroundColor = accent
-            textLabelBackgroundColor = Color.argb(200, 255, 255, 255)
-            textLabelFontSize = 34
+            textLabelBackgroundColor = if (dark) Color.argb(200, 38, 39, 53) else Color.argb(210, 255, 255, 255)
+            textLabelFontSize = (12 * d).toInt()
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             setOnMarkerClickListener { _, _ -> state.onPlaceClick(p); true }
         }

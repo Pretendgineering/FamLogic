@@ -198,6 +198,7 @@ func (s *Server) serverInfo() map[string]any {
 		"name":            s.cfg.FamilyName,
 		"version":         version,
 		"tileUrl":         s.cfg.TileURL,
+		"tileUrlDark":     s.cfg.TileURLDark,
 		"tileAttribution": s.cfg.TileAttribution,
 		"features":        features,
 	}

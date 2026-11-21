@@ -193,19 +193,54 @@ $("#logout-btn").addEventListener("click", async () => {
 
 // ---- map ----
 
+// Map styles anyone can pick (remembered in this browser). "Server default" is the admin's choice.
+const CARTO = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const CARTO_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const MAP_STYLES = [
+  { id: "server", title: "Server default" },
+  { id: "calm", title: "Calm", light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", dark: CARTO_DARK, attribution: CARTO },
+  { id: "minimal", title: "Minimal", light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", dark: CARTO_DARK, attribution: CARTO },
+  { id: "osm", title: "Classic OpenStreetMap", light: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+  { id: "topo", title: "Topographic", light: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", maxZoom: 17,
+    attribution: "&copy; OpenStreetMap contributors, SRTM &middot; &copy; OpenTopoMap (CC-BY-SA)" },
+];
+let mapStyle = "server";
+try { mapStyle = localStorage.getItem("mapStyle") || "server"; } catch (_) {}
+let serverTiles = null, tileLayer = null, appliedTiles = "";
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+
+function applyTiles() {
+  if (!map || !serverTiles) return;
+  const st = MAP_STYLES.find((s) => s.id === mapStyle) || MAP_STYLES[0];
+  const dark = darkQuery.matches;
+  const t = st.id === "server"
+    ? { url: dark ? (serverTiles.tileUrlDark || serverTiles.tileUrl) : serverTiles.tileUrl, attribution: serverTiles.tileAttribution, maxZoom: 19 }
+    : { url: dark && st.dark ? st.dark : st.light, attribution: st.attribution, maxZoom: st.maxZoom || 19 };
+  if (t.url === appliedTiles) return;
+  appliedTiles = t.url;
+  tileLayer?.remove();
+  // Tile servers (OpenStreetMap's in particular) require a Referer; send only our origin.
+  tileLayer = L.tileLayer(t.url, { maxZoom: t.maxZoom, attribution: t.attribution, referrerPolicy: "strict-origin-when-cross-origin" }).addTo(map);
+  map.setMaxZoom(t.maxZoom);
+}
+darkQuery.addEventListener("change", applyTiles);
+$("#map-style").replaceChildren(...MAP_STYLES.map((s) => el("option", { value: s.id }, s.title)));
+$("#map-style").value = MAP_STYLES.some((s) => s.id === mapStyle) ? mapStyle : "server";
+$("#map-style").addEventListener("change", (e) => {
+  mapStyle = e.target.value;
+  try { localStorage.setItem("mapStyle", mapStyle); } catch (_) {}
+  applyTiles();
+});
+
 function ensureMap(server) {
-  if (map) return;
+  serverTiles = server;
+  if (map) { applyTiles(); return; }
   map = L.map("map", { zoomControl: true }).setView([20, 0], 2);
   // Fence names only when zoomed in enough to read them without piling up.
   const labelsByZoom = () => document.body.classList.toggle("zoomed-out", map.getZoom() < 14);
   map.on("zoomend", labelsByZoom);
   labelsByZoom();
-  // Tile servers (OpenStreetMap's in particular) require a Referer; send only our origin.
-  L.tileLayer(server.tileUrl, {
-    maxZoom: 19,
-    attribution: server.tileAttribution,
-    referrerPolicy: "strict-origin-when-cross-origin",
-  }).addTo(map);
+  applyTiles();
 }
 
 function renderMembers(members) {

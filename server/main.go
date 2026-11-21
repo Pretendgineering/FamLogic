@@ -24,6 +24,13 @@ var webFS embed.FS
 
 var version = "dev"
 
+// CARTO's free basemaps, drawn from OpenStreetMap data: calm colours, with a
+// matching dark style. {s} is a server letter and {r} "@2x" on sharp screens.
+const (
+	defaultTiles     = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+	defaultTilesDark = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+)
+
 type Config struct {
 	Listen          string
 	DataDir         string
@@ -31,6 +38,7 @@ type Config struct {
 	PublicURL       string
 	FamilyName      string
 	TileURL         string
+	TileURLDark     string // tiles for apps and browsers in dark mode
 	TileAttribution string
 	GeocoderURL     string
 	InviteTTL       time.Duration
@@ -52,9 +60,22 @@ func loadConfig() (Config, error) {
 		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
 		PublicURL:       strings.TrimRight(env("PUBLIC_URL", ""), "/"),
 		FamilyName:      env("FAMILY_NAME", "Family"),
-		TileURL:         env("TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
-		TileAttribution: env("TILE_ATTRIBUTION", "© OpenStreetMap contributors"),
+		TileURL:         env("TILE_URL", defaultTiles),
+		TileAttribution: env("TILE_ATTRIBUTION", ""),
 		GeocoderURL:     env("GEOCODER_URL", "https://nominatim.openstreetmap.org/search"),
+	}
+	// The default tiles come in a light and a dark style. Anyone who sets
+	// TILE_URL gets that one map for both, unless they set TILE_URL_DARK too.
+	if c.TileURL == defaultTiles {
+		c.TileURLDark = env("TILE_URL_DARK", defaultTilesDark)
+		if c.TileAttribution == "" {
+			c.TileAttribution = "© OpenStreetMap contributors © CARTO"
+		}
+	} else {
+		c.TileURLDark = env("TILE_URL_DARK", c.TileURL)
+	}
+	if c.TileAttribution == "" {
+		c.TileAttribution = "© OpenStreetMap contributors"
 	}
 	hours, err := strconv.Atoi(env("INVITE_HOURS", "72"))
 	if err != nil || hours < 1 {

@@ -29,6 +29,16 @@ class Prefs(context: Context) {
         get() = sp.getString("tile_url", DEFAULT_TILES) ?: DEFAULT_TILES
         set(v) = sp.edit { putString("tile_url", v) }
 
+    /** The map style picked on this phone (see [MapStyles]). */
+    var mapStyle: String
+        get() = sp.getString("map_style", MapStyles.SERVER) ?: MapStyles.SERVER
+        set(v) = sp.edit { putString("map_style", v) }
+
+    /** Tiles for dark mode ("" = use [tileUrl]). */
+    var tileUrlDark: String
+        get() = sp.getString("tile_url_dark", "") ?: ""
+        set(v) = sp.edit { putString("tile_url_dark", v) }
+
     var tileAttribution: String
         get() = sp.getString("tile_attr", DEFAULT_ATTRIBUTION) ?: DEFAULT_ATTRIBUTION
         set(v) = sp.edit { putString("tile_attr", v) }

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
@@ -84,6 +85,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
     Fences("Fences", Icons.Filled.Place),
     Alerts("Alerts", Icons.Filled.Notifications),
     Trail("Trail", Icons.Filled.DateRange),
+    Map("Map", Icons.Filled.Edit),
     Account("Account", Icons.Filled.AccountCircle),
     Phone("Phone setup", Icons.Filled.Build),
     About("About", Icons.Filled.Info),
@@ -168,6 +170,7 @@ fun SettingsScreen(
                 SettingsPage.Fences -> FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
                 SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
                 SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange)
+                SettingsPage.Map -> MapPage(prefs)
                 SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved, members.find { it.id == myId },
                     supports("emoji"), onProfileChanged)
                 SettingsPage.Phone -> PhonePage(perms)
@@ -193,6 +196,7 @@ private fun menuSummary(
     SettingsPage.Groups -> circles.joinToString(", ") { it.name }.ifEmpty { "Who sees whom" }
     SettingsPage.Fences -> if (places.isEmpty()) "Alerts when people arrive or leave" else places.joinToString(", ") { it.name }
     SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, low battery, who you hear about" else "$it ${if (it == 1) "person" else "people"} muted" }
+    SettingsPage.Map -> MapStyles.byId(prefs.mapStyle).title
     SettingsPage.Trail -> when (trailHours) {
         null -> "Where you've been recently"
         0 -> "Off"
@@ -600,6 +604,29 @@ private fun TrailPage(prefs: Prefs, trailHours: Int?, onTrailHoursChange: (Int) 
             checked = showTrails,
             onChange = { showTrails = it; prefs.showTrails = it },
         )
+    }
+}
+
+@Composable
+private fun MapPage(prefs: Prefs) {
+    var style by remember { mutableStateOf(prefs.mapStyle) }
+    SettingsCard("Map style") {
+        Hint("Only changes this phone. All styles are free maps drawn from OpenStreetMap data.")
+        MapStyles.all.forEach { s ->
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = style == s.id) {
+                    style = s.id
+                    prefs.mapStyle = s.id
+                }.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = style == s.id, onClick = null)
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(s.title, style = MaterialTheme.typography.bodyLarge)
+                    Hint(s.description)
+                }
+            }
+        }
     }
 }
 

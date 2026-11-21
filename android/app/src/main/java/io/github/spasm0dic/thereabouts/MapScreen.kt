@@ -87,6 +87,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
@@ -131,6 +132,8 @@ fun MapScreen(
     var members by remember { mutableStateOf<List<Member>>(emptyList()) }
     var familyName by remember { mutableStateOf(prefs.familyName) }
     var tileUrl by remember { mutableStateOf(prefs.tileUrl) }
+    var tileUrlDark by remember { mutableStateOf(prefs.tileUrlDark.ifEmpty { prefs.tileUrl }) }
+    var mapStyle by remember { mutableStateOf(prefs.mapStyle) }
     var attribution by remember { mutableStateOf(prefs.tileAttribution) }
     var error by remember { mutableStateOf<String?>(null) }
     var sharing by remember { mutableStateOf(prefs.sharing) }
@@ -199,9 +202,11 @@ fun MapScreen(
             }
             familyName = res.server.name
             tileUrl = res.server.tileUrl
+            tileUrlDark = res.server.tileUrlDark
             attribution = res.server.tileAttribution
             prefs.familyName = res.server.name
             prefs.tileUrl = res.server.tileUrl
+            prefs.tileUrlDark = res.server.tileUrlDark
             prefs.tileAttribution = res.server.tileAttribution
             error = null
             // Keep the server in step with the pause switch (e.g. if pausing happened offline).
@@ -449,7 +454,7 @@ fun MapScreen(
                     }
                 }
             },
-            onBack = { showSettings = false; scope.launch { refresh() } },
+            onBack = { showSettings = false; mapStyle = prefs.mapStyle; scope.launch { refresh() } },
             members = members,
             myId = prefs.memberId,
             onProfileChanged = { scope.launch { refresh() } },
@@ -573,8 +578,7 @@ fun MapScreen(
                     onPlaceClick = { p -> placeEdit = PlaceEdit.Edit(p) },
                     trail = trail,
                     trailColor = members.find { it.id == selected }?.color ?: "#4363d8",
-                    tileUrl = tileUrl,
-                    attribution = attribution,
+                    tiles = MapStyles.resolve(mapStyle, isSystemInDarkTheme(), tileUrl, tileUrlDark, attribution),
                     camera = camera,
                     statusOf = statusOf,
                     modifier = Modifier.fillMaxSize(),

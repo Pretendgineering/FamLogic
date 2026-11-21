@@ -110,6 +110,7 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
         prefs.username = res.username
         prefs.familyName = res.server.name
         prefs.tileUrl = res.server.tileUrl
+        prefs.tileUrlDark = res.server.tileUrlDark
         prefs.tileAttribution = res.server.tileAttribution
         prefs.sharing = true
         prefs.signedOutReason = ""
