@@ -119,8 +119,17 @@ These are parked until we decide to pick them up. Each needs a short design pass
 
 ### 11. Google Find Hub trackers
 - Show Bluetooth trackers registered in Google's Find Hub network (keys, bags, pets) on the family map.
-- **Needs research first:** as far as we know, Find Hub has no public API that lets third-party apps read tracker locations, so this may not be possible (or only in a limited way, or via unofficial methods we'd want to avoid). Check what's officially available before designing anything.
-- If feasible, it would live in the Google Play services build only.
+- **Research (Nov 2026):**
+  - **No official API.** Google offers no supported way for a third-party app to read Find Hub tracker locations. Its developer docs cover only making certified tracker hardware (Fast Pair / Find Hub Network Accessory spec).
+  - **Official sharing** is limited to temporary share links, e.g. for an airline to find a bag. They're not continuous and not machine-readable for us.
+  - **Unofficial route:** GoogleFindMyTools (GPL-3.0) reverse-engineers the network and can fetch and decrypt your own trackers' locations. A Home Assistant integration (GoogleFindMy-HA) is built on it.
+    - Setup needs a Google sign-in through Chrome to produce a secrets file (account tokens plus the end-to-end encryption keys). Users report having to regenerate it after updates.
+    - It is experimental and may break whenever Google changes things.
+- **Options:**
+  - **A.** An opt-in, clearly-experimental "Find Hub bridge" on the server, using that approach and the admin's own Google account. It would only fetch on a schedule.
+  - **B.** Skip Google. Instead, family phones listen for the family's own cheap Bluetooth tags and report where they heard them. This is private and FOSS, but only works near family phones.
+  - **C.** Drop it.
+- Decision pending.
 
 ### 12. Pebble watch companion
 - A small watch app plus phone-side glue:
