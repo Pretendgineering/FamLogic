@@ -20,44 +20,55 @@
   </section>
 
   <section id="app" hidden>
-    <header>
-      <div><h1 id="family-name">Thereabouts</h1><div class="muted small" id="server-version"></div></div>
-      <div class="actions">
-        <button id="invite-btn">+ Invite someone</button>
-        <button id="logout-btn" class="secondary">Log out</button>
-      </div>
-    </header>
-    <div id="sos-banner" class="sos-banner" hidden></div>
     <div class="layout">
       <aside>
-        <section class="panel">
-          <h2>People</h2>
-          <label class="filter" id="filter-label" hidden>Show
-            <select id="circle-filter"><option value="">Everyone</option></select>
-          </label>
+        <div class="brand">
+          <img src="/icon.svg" alt="" class="brand-icon">
+          <div><h1 id="family-name">Thereabouts</h1><div class="muted small" id="server-version"></div></div>
+        </div>
+
+        <div id="sos-banner" class="sos-banner" hidden></div>
+
+        <label class="filter" id="filter-label" hidden>Map shows
+          <select id="circle-filter"><option value="">Everyone</option></select>
+        </label>
+
+        <nav class="tabs" role="tablist">
+          <button role="tab" data-tab="people">People <span class="count" id="count-people"></span></button>
+          <button role="tab" data-tab="fences">Fences <span class="count" id="count-fences"></span></button>
+          <button role="tab" data-tab="groups">Groups <span class="count" id="count-groups"></span></button>
+        </nav>
+
+        <section class="panel" data-panel="people">
+          <button id="invite-btn" class="tonal wide">+ Invite someone</button>
           <ul id="members" class="list"></ul>
           <p id="no-members" class="muted" hidden>Nobody has joined yet. Use <strong>Invite someone</strong> to add the first phone.</p>
+          <div id="invites-block" hidden>
+            <h2>Waiting to join</h2>
+            <ul id="invites" class="list"></ul>
+          </div>
         </section>
-        <section class="panel">
-          <h2>Open invites</h2>
-          <ul id="invites" class="list"></ul>
-          <p id="no-invites" class="muted">No open invites.</p>
-        </section>
-        <section class="panel">
-          <h2>Fences</h2>
+
+        <section class="panel" data-panel="fences" hidden>
+          <button id="new-place-btn" class="tonal wide">+ Add fence</button>
           <p class="muted small">Areas like Home or School. Everyone in the fence's group is told when someone arrives or leaves.</p>
           <ul id="places" class="list"></ul>
-          <button id="new-place-btn" class="tonal small-btn">+ Add fence</button>
+          <p id="no-places" class="muted" hidden>No fences yet.</p>
         </section>
-        <section class="panel">
-          <h2>Groups</h2>
+
+        <section class="panel" data-panel="groups" hidden>
+          <button id="new-circle-btn" class="tonal wide">+ New group</button>
           <p class="muted small">People who see each other, such as Family or Grandparents. Everyone only sees people they share a group with.</p>
           <ul id="circles" class="list"></ul>
-          <button id="new-circle-btn" class="tonal small-btn">+ New group</button>
         </section>
+
+        <div class="aside-foot">
+          <button id="logout-btn" class="secondary wide">Log out</button>
+        </div>
       </aside>
       <div id="map"></div>
     </div>
+    <div id="menu" class="menu" role="menu" hidden></div>
   </section>
 
   <dialog id="invite-dialog">

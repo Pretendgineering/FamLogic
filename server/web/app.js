@@ -10,10 +10,10 @@ let circles = [];       // all circles on the server
 let lastMembers = [];   // everyone, from the last refresh
 let places = [];        // all places
 const placeLayers = new Map(); // place id -> Leaflet layer group
-let trailLayer = null;
+let trailLayer = null;  // the clicked person's trail, if they keep one
 let serverFeatures = []; // what the server can do, e.g. "geocode"
 // The theme's accent colour (fences on the map use it).
-const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#8b5cf6";  // the clicked person's trail, if they keep one
+const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#8b5cf6";
 let circleFilter = "";  // "" = everyone, else a circle id
 try { circleFilter = localStorage.getItem("circleFilter") || ""; } catch (_) {}
 
@@ -51,6 +51,60 @@ function el(tag, attrs = {}, ...children) {
   return e;
 }
 
+// ---- the ⋯ menu on each row ----
+
+const menu = $("#menu");
+let menuAnchor = null;
+function closeMenu() {
+  menu.hidden = true;
+  menuAnchor?.setAttribute("aria-expanded", "false");
+  menuAnchor = null;
+}
+// A ⋯ button that opens a small menu. items: [label, onClick, "danger"?] or "-" for a divider.
+function moreButton(label, items) {
+  const b = el("button", { class: "more", title: label, "aria-label": label, "aria-haspopup": "menu", "aria-expanded": "false" }, "⋯");
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menuAnchor === b) return closeMenu();
+    closeMenu();
+    menu.replaceChildren(...items.map((it) => it === "-" ? el("hr") :
+      el("button", { role: "menuitem", class: it[2] || "", onclick: () => { closeMenu(); it[1](); } }, it[0])));
+    menu.hidden = false;
+    const r = b.getBoundingClientRect();
+    const w = menu.offsetWidth, h = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + "px";
+    menu.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4) + "px";
+    menuAnchor = b;
+    b.setAttribute("aria-expanded", "true");
+  });
+  return b;
+}
+document.addEventListener("click", (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+window.addEventListener("resize", closeMenu);
+document.querySelector("aside").addEventListener("scroll", closeMenu);
+
+// ---- tabs: People, Fences, Groups ----
+
+let tab = "people";
+try { tab = localStorage.getItem("tab") || "people"; } catch (_) {}
+function showTab(name) {
+  if (!document.querySelector(`[data-panel="${name}"]`)) name = "people";
+  tab = name;
+  try { localStorage.setItem("tab", name); } catch (_) {}
+  document.querySelectorAll(".tabs [data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+  document.querySelectorAll("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== name; });
+  closeMenu();
+}
+document.querySelectorAll(".tabs [data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+showTab(tab);
+
+function setCount(id, n, alert = false) {
+  const c = $(id);
+  c.textContent = n ? String(n) : "";
+  c.classList.toggle("alert", alert);
+}
+
 function initial(name) {
   return (name || "?").trim().charAt(0).toUpperCase();
 }
@@ -71,7 +125,7 @@ function account(m) {
   return `@${m.username}` + (m.lastSignIn ? ` · signed in ${ago(m.lastSignIn)}` : "");
 }
 
-// A red banner across the top while anyone has an SOS active. Click to zoom to them.
+// A red card at the top of the sidebar while anyone has an SOS active. Click to zoom to them.
 function renderSOS(list) {
   const banner = $("#sos-banner");
   banner.hidden = list.length === 0;
@@ -139,7 +193,10 @@ function ensureMap(server) {
 function renderMembers(members) {
   const list = $("#members");
   list.replaceChildren();
-  $("#no-members").hidden = members.length > 0;
+  const none = $("#no-members");
+  none.hidden = members.length > 0;
+  if (circleFilter) none.textContent = `Nobody is in ${circleName(circleFilter)} yet. Use Groups… on a person to add them, or invite someone into it.`;
+  else none.innerHTML = "Nobody has joined yet. Use <strong>Invite someone</strong> to add the first phone.";
   const seen = new Set();
   const bounds = [];
 
@@ -157,11 +214,15 @@ function renderMembers(members) {
             class: "chip" + ((m.hiddenFrom || []).includes(id) ? " hidden-from" : ""),
             title: (m.hiddenFrom || []).includes(id) ? `Not sharing their location with ${circleName(id)}` : "",
           }, circleName(id)))) : null,
-        el("div", { class: "row-actions" },
-          el("button", { class: "link", title: "Choose which groups they're in", onclick: (e) => { e.stopPropagation(); openCircles(m); } }, "Groups…"),
-          el("button", { class: "link", title: "Rename", onclick: (e) => { e.stopPropagation(); rename(m); } }, "Rename"),
-          el("button", { class: "link", title: "Let them choose a new password and sign in on a phone", onclick: (e) => { e.stopPropagation(); resetSignIn(m); } }, "Reset sign-in"),
-          el("button", { class: "link danger", title: "Remove", onclick: (e) => { e.stopPropagation(); removeMember(m); } }, "Remove"))),
+      ),
+      moreButton(`Options for ${m.name}`, [
+        ...(m.loc ? [["Show on map", () => { map.setView([m.loc.lat, m.loc.lon], Math.max(map.getZoom(), 15)); showTrail(m); }], "-"] : []),
+        ["Groups…", () => openCircles(m)],
+        ["Rename…", () => rename(m)],
+        ["Reset sign-in…", () => resetSignIn(m)],
+        "-",
+        ["Remove from server…", () => removeMember(m), "danger"],
+      ]),
     );
     if (m.loc) li.addEventListener("click", () => {
       map.setView([m.loc.lat, m.loc.lon], Math.max(map.getZoom(), 15));
@@ -211,15 +272,20 @@ function renderMembers(members) {
 function renderInvites(invites) {
   const list = $("#invites");
   list.replaceChildren();
-  $("#no-invites").hidden = invites.length > 0;
+  $("#invites-block").hidden = invites.length === 0;
   for (const inv of invites) {
     list.append(el("li", {},
       el("div", { class: "grow" },
         el("div", { class: "title" }, inv.memberId ? `Reset sign-in for ${inv.name}` : (inv.name || "Anyone")),
         el("div", { class: "sub" }, `${inv.code} · ` + (!inv.memberId && circles.length > 1 ? `joins ${circleName(inv.circleId)} · ` : "") +
           `expires ${new Date(inv.expiresAt).toLocaleDateString()}`)),
-      el("button", { class: "link", onclick: () => copy(inv.link) }, "Copy link"),
-      el("button", { class: "link danger", onclick: () => cancelInvite(inv) }, "Cancel"),
+      moreButton("Invite options", [
+        ["Show link and QR code", () => showLink(inv, inv.memberId ? `Sign-in reset for ${inv.name}` : "Invite",
+          "Send this link to their phone. It works once and expires in a few days.")],
+        ["Copy link", () => copy(inv.link)],
+        "-",
+        ["Cancel invite", () => cancelInvite(inv), "danger"],
+      ]),
     ));
   }
 }
@@ -241,6 +307,9 @@ async function refresh() {
     renderPlaces();
     renderMembers(visibleMembers());
     renderInvites(invites);
+    setCount("#count-people", lastMembers.length, sos.length > 0);
+    setCount("#count-fences", places.length);
+    setCount("#count-groups", circles.length > 1 ? circles.length : 0);
   } catch (err) {
     if (err.message !== "unauthorized") console.error(err);
   }
@@ -267,18 +336,23 @@ function renderCircles() {
       el("div", { class: "grow" },
         el("div", { class: "title" }, c.name),
         el("div", { class: "sub" }, count === 1 ? "1 person" : `${count} people`)),
-      el("button", { class: "link", onclick: () => renameCircle(c) }, "Rename"),
-      circles.length > 1 ? el("button", { class: "link danger", onclick: () => deleteCircle(c) }, "Delete") : null);
+      moreButton(`Options for ${c.name}`, [
+        ["Show only this group on the map", () => setFilter(c.id)],
+        ["Rename…", () => renameCircle(c)],
+        ...(circles.length > 1 ? ["-", ["Delete group…", () => deleteCircle(c), "danger"]] : []),
+      ]));
   }));
 }
 
-$("#circle-filter").addEventListener("change", (e) => {
-  circleFilter = e.target.value;
+$("#circle-filter").addEventListener("change", (e) => setFilter(e.target.value));
+function setFilter(id) {
+  circleFilter = id;
+  $("#circle-filter").value = id;
   try { localStorage.setItem("circleFilter", circleFilter); } catch (_) {}
   fittedOnce = false; // zoom to the people in this circle
   renderMembers(visibleMembers());
   renderPlaces();
-});
+}
 
 $("#new-circle-btn").addEventListener("click", async () => {
   const name = prompt("Name of the new group (e.g. Grandparents, Friends):");
@@ -348,8 +422,13 @@ function renderPlaces() {
     el("div", { class: "grow" },
       el("div", { class: "title" }, p.name),
       el("div", { class: "sub" }, `${Math.round(p.radius)} m` + (circles.length > 1 ? ` · ${circleName(p.circleId)}` : ""))),
-    el("button", { class: "link", onclick: (e) => { e.stopPropagation(); editPlace(p); } }, "Edit"),
-    el("button", { class: "link danger", onclick: (e) => { e.stopPropagation(); deletePlace(p); } }, "Delete"))));
+    moreButton(`Options for ${p.name}`, [
+      ["Show on map", () => map.setView([p.lat, p.lon], 16)],
+      ["Edit…", () => editPlace(p)],
+      "-",
+      ["Delete fence…", () => deletePlace(p), "danger"],
+    ]))));
+  $("#no-places").hidden = shown.length > 0;
 
   // On the map: a shaded circle with the name.
   if (!map) return;
