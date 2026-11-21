@@ -43,12 +43,12 @@ object MapStyles {
      */
     data class Tiles(val url: String, val attribution: String, val maxZoom: Int, val dim: Boolean)
 
-    fun resolve(id: String, dark: Boolean, serverUrl: String, serverDark: String, serverAttribution: String): Tiles {
+    fun resolve(id: String, dark: Boolean, serverUrl: String, serverDark: String, serverAttribution: String, dimAtNight: Boolean = true): Tiles {
         val s = byId(id)
         if (s.id == SERVER) {
             val hasDark = serverDark.isNotEmpty() && serverDark != serverUrl
-            return Tiles(if (dark && hasDark) serverDark else serverUrl, serverAttribution, 19, dim = dark && !hasDark)
+            return Tiles(if (dark && hasDark) serverDark else serverUrl, serverAttribution, 19, dim = dimAtNight && dark && !hasDark)
         }
-        return Tiles(s.url, s.attribution, s.maxZoom, dim = dark)
+        return Tiles(s.url, s.attribution, s.maxZoom, dim = dimAtNight && dark)
     }
 }

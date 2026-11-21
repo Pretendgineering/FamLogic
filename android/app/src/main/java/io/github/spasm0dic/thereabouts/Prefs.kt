@@ -29,6 +29,11 @@ class Prefs(context: Context) {
         get() = sp.getString("tile_url", DEFAULT_TILES) ?: DEFAULT_TILES
         set(v) = sp.edit { putString("tile_url", v) }
 
+    /** Dim light maps a little in dark mode. */
+    var dimMap: Boolean
+        get() = sp.getBoolean("dim_map", true)
+        set(v) = sp.edit { putBoolean("dim_map", v) }
+
     /** The map style picked on this phone (see [MapStyles]). */
     var mapStyle: String
         get() = sp.getString("map_style", MapStyles.SERVER) ?: MapStyles.SERVER

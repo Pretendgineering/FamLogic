@@ -244,11 +244,12 @@ fun OsmMap(
 
 private val DIM_FILTER = android.graphics.ColorMatrixColorFilter(
     android.graphics.ColorMatrix().apply {
-        setSaturation(0.75f)
+        // Just takes the edge off the white: streets and labels stay easy to read.
+        setSaturation(0.9f)
         postConcat(android.graphics.ColorMatrix(floatArrayOf(
-            0.62f, 0f, 0f, 0f, 8f,
-            0f, 0.62f, 0f, 0f, 8f,
-            0f, 0f, 0.66f, 0f, 14f,
+            0.84f, 0f, 0f, 0f, 0f,
+            0f, 0.84f, 0f, 0f, 0f,
+            0f, 0f, 0.86f, 0f, 4f,
             0f, 0f, 0f, 1f, 0f,
         )))
     },

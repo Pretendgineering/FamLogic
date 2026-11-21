@@ -204,6 +204,8 @@ const MAP_STYLES = [
     attribution: "&copy; OpenStreetMap contributors, SRTM &middot; &copy; OpenTopoMap (CC-BY-SA)" },
 ];
 let mapStyle = "server";
+let dimMap = true;
+try { dimMap = localStorage.getItem("dimMap") !== "0"; } catch (_) {}
 try { mapStyle = localStorage.getItem("mapStyle") || "server"; } catch (_) {}
 let serverTiles = null, tileLayer = null, appliedTiles = "";
 const darkQuery = matchMedia("(prefers-color-scheme: dark)");
@@ -216,7 +218,7 @@ function applyTiles() {
   const t = st.id === "server"
     ? { url: dark && serverDark ? serverDark : serverTiles.tileUrl, attribution: serverTiles.tileAttribution, maxZoom: 19, dim: dark && !serverDark }
     : { url: st.light, attribution: st.attribution, maxZoom: st.maxZoom || 19, dim: dark };
-  document.body.classList.toggle("dim-map", t.dim);
+  document.body.classList.toggle("dim-map", t.dim && dimMap);
   if (t.url === appliedTiles) return;
   appliedTiles = t.url;
   tileLayer?.remove();
@@ -227,6 +229,13 @@ function applyTiles() {
 darkQuery.addEventListener("change", applyTiles);
 $("#map-style").replaceChildren(...MAP_STYLES.map((s) => el("option", { value: s.id }, s.title)));
 $("#map-style").value = MAP_STYLES.some((s) => s.id === mapStyle) ? mapStyle : "server";
+$("#dim-map").checked = dimMap;
+$("#dim-map").addEventListener("change", (e) => {
+  dimMap = e.target.checked;
+  try { localStorage.setItem("dimMap", dimMap ? "1" : "0"); } catch (_) {}
+  appliedTiles = "";
+  applyTiles();
+});
 $("#map-style").addEventListener("change", (e) => {
   mapStyle = e.target.value;
   try { localStorage.setItem("mapStyle", mapStyle); } catch (_) {}

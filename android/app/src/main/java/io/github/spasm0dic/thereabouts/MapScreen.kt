@@ -136,6 +136,7 @@ fun MapScreen(
     var tileUrl by remember { mutableStateOf(prefs.tileUrl) }
     var tileUrlDark by remember { mutableStateOf(prefs.tileUrlDark) }
     var mapStyle by remember { mutableStateOf(prefs.mapStyle) }
+    var dimMap by remember { mutableStateOf(prefs.dimMap) }
     var attribution by remember { mutableStateOf(prefs.tileAttribution) }
     var error by remember { mutableStateOf<String?>(null) }
     var sharing by remember { mutableStateOf(prefs.sharing) }
@@ -477,6 +478,7 @@ fun MapScreen(
             },
             onBack = { showSettings = false; scope.launch { refresh() } },
             onMapStyleChange = { mapStyle = it },
+            onDimMapChange = { dimMap = it },
             members = members,
             myId = prefs.memberId,
             onProfileChanged = { scope.launch { refresh() } },
@@ -620,7 +622,7 @@ fun MapScreen(
                     onPlaceClick = { p -> placeEdit = PlaceEdit.Edit(p) },
                     trail = shownTrip?.points ?: trail,
                     trailColor = members.find { it.id == selected }?.color ?: "#4363d8",
-                    tiles = MapStyles.resolve(mapStyle, isSystemInDarkTheme(), tileUrl, tileUrlDark, attribution),
+                    tiles = MapStyles.resolve(mapStyle, isSystemInDarkTheme(), tileUrl, tileUrlDark, attribution, dimMap),
                     camera = camera,
                     statusOf = statusOf,
                     modifier = Modifier.fillMaxSize(),

@@ -124,6 +124,7 @@ fun SettingsScreen(
     myId: String = "",
     onProfileChanged: () -> Unit = {},
     onMapStyleChange: (String) -> Unit = {},
+    onDimMapChange: (Boolean) -> Unit = {},
     tripDays: Int? = null,
     onTripDaysChange: (Int) -> Unit = {},
 ) {
@@ -173,7 +174,7 @@ fun SettingsScreen(
                 SettingsPage.Fences -> FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
                 SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
                 SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange, tripDays, onTripDaysChange, supports("trips"))
-                SettingsPage.Map -> MapPage(prefs, onMapStyleChange)
+                SettingsPage.Map -> MapPage(prefs, onMapStyleChange, onDimMapChange)
                 SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved, members.find { it.id == myId },
                     supports("emoji"), onProfileChanged)
                 SettingsPage.About -> AboutPage(prefs, perms, serverVersion, onLeave)
@@ -656,11 +657,12 @@ private fun TrailPage(
 }
 
 @Composable
-private fun MapPage(prefs: Prefs, onChange: (String) -> Unit) {
+private fun MapPage(prefs: Prefs, onChange: (String) -> Unit, onDimChange: (Boolean) -> Unit) {
+    var dim by remember { mutableStateOf(prefs.dimMap) }
     val haptics = LocalHapticFeedback.current
     var style by remember { mutableStateOf(prefs.mapStyle) }
     SettingsCard("Map style") {
-        Hint("Only changes this phone. All are free maps from OpenStreetMap data. In dark mode they're dimmed a little so they don't glare.")
+        Hint("Only changes this phone. All are free maps from OpenStreetMap data.")
         MapStyles.all.forEach { s ->
             Row(
                 Modifier.fillMaxWidth().selectable(selected = style == s.id) {
@@ -678,6 +680,14 @@ private fun MapPage(prefs: Prefs, onChange: (String) -> Unit) {
                 }
             }
         }
+    }
+    SettingsCard {
+        SwitchRow(
+            title = "Soften the map in dark mode",
+            detail = "Takes the glare off the bright map at night.",
+            checked = dim,
+            onChange = { dim = it; prefs.dimMap = it; onDimChange(it) },
+        )
     }
 }
 
