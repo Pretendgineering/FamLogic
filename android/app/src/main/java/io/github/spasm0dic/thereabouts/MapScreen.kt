@@ -36,6 +36,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -685,16 +686,20 @@ fun MapScreen(
                             m = m,
                             isMe = m.id == prefs.memberId,
                             status = statusOf(m),
+                            // Tap: go to them on the map. Long-press: their card (directions, alerts, trips).
                             onClick = {
                                 haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 shownTrip = null
-                                sheetFor = m.id
                                 m.loc?.let { camera = CameraCommand.Center(it.lat, it.lon, ++cameraSeq) }
                                 selected = m.id
                                 trail = emptyList()
                                 if (m.trail && prefs.showTrails) scope.launch {
                                     trail = runCatching { Api(prefs.serverUrl, prefs.token).trail(m.id) }.getOrDefault(emptyList())
                                 }
+                            },
+                            onLongClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                sheetFor = m.id
                             },
                             onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
                         )
@@ -725,12 +730,15 @@ private fun Banner(text: String, action: String, onClick: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> Unit, onDirections: () -> Unit) {
+private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> Unit, onLongClick: () -> Unit, onDirections: () -> Unit) {
     val sos = m.sosSince > 0
     val stale = m.loc == null || m.paused || System.currentTimeMillis() - m.loc.time > STALE_MS
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClickLabel = "Show on map", onLongClickLabel = "More about ${m.name}", onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
