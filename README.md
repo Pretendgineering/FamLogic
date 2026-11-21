@@ -16,7 +16,7 @@ Thereabouts does one thing: each phone reports where it is to **your own server*
 
 | | |
 |---|---|
-| Map | OpenStreetMap data (osmdroid in the app, Leaflet on the web), in a calm style with a matching dark version. Everyone can pick a map style for themselves: Calm, Minimal, Classic OpenStreetMap or Topographic. |
+| Map | OpenStreetMap (osmdroid in the app, Leaflet on the web), gently dimmed in dark mode. Everyone can pick a map style for themselves: OpenStreetMap, Humanitarian or Topographic. |
 | Location | Android's own location service, so it works on de-Googled phones (GrapheneOS, LineageOS, /e/). Wi-Fi-only tablets can opt in to Wi-Fi positioning through [beaconDB](https://beacondb.net). |
 | Look | Purple Material You style, light or dark following the system, in the app and the dashboard. |
 | Privacy | Only the **latest** position is stored, unless someone chooses to keep a trail (off by default, 6 to 24 hours, deleted when turned off). Pausing wipes your position from the server. Removing a member deletes them. |
@@ -67,10 +67,10 @@ If the app says the server is out of date (for example SOS or Check in are missi
 | `ADMIN_PASSWORD` | *(required)* | Password for the web dashboard. At least 8 characters. |
 | `FAMILY_NAME` | `Family` | Shown in the app and dashboard. |
 | `PUBLIC_URL` | worked out from the request | The address phones use, e.g. `https://family.example.com`. Set it if invite links show the wrong address. |
-| `TILE_URL` | CARTO Voyager | The "Server default" map. Any `{z}/{x}/{y}` tile server works; `{s}` (server letter) and `{r}` (`@2x` on sharp screens) are filled in too. For plain OpenStreetMap use `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. |
-| `TILE_URL_DARK` | CARTO Dark Matter (or `TILE_URL` if you set that) | The "Server default" map in dark mode. |
+| `TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | The "Server default" map. Any `{z}/{x}/{y}` tile server works; `{s}` (server letter) and `{r}` (`@2x` on sharp screens) are filled in too, so keyed services work, e.g. CARTO with `?api_key=…`. |
+| `TILE_URL_DARK` | *(none)* | A separate "Server default" map for dark mode. Without one, the light map is dimmed at night. |
 | `GEOCODER_URL` | `https://nominatim.openstreetmap.org/search` | Address search when adding fences. Searches go from your server (never from phones) to OpenStreetMap's Nominatim, at most once a second and cached for a day. Point it at your own Nominatim, or set `off` to turn address search off. |
-| `TILE_ATTRIBUTION` | `© OpenStreetMap contributors © CARTO` (or without CARTO if you set `TILE_URL`) | Credit shown on the map. Keep it matching your tile server. |
+| `TILE_ATTRIBUTION` | `© OpenStreetMap contributors` | Credit shown on the map. Keep it matching your tile server. |
 | `INVITE_HOURS` | `72` | How long an invite link works. |
 | `LISTEN` | `:8080` | Address and port inside the container. |
 | `DATA_DIR` | `/data` | Where `thereabouts.json` is kept. Back up this one file. |
@@ -130,14 +130,14 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 - **Check in**: tap **Check in** to send "I'm here" with your location and an optional note ("Made it home").
 - **Choosing whose alerts you get**: Settings → Alerts → **Who you get alerts about** has a switch per person (covers arrivals, departures, check-ins, low battery and quiet-phone alerts; an SOS always gets through). Settings → Fences has a switch per group and per fence. An arrival or departure only reaches you if the person, the group and the fence are all switched on. These choices stay on your phone.
 - **Fence alert hours**: when adding or editing a fence (app or dashboard), turn on **Only alert at certain times** and choose days and hours, e.g. School on weekdays 07:00–17:00. Outside those hours nobody is notified, but the map still shows "At School".
-- **Your icon**: Settings → Account → **Your icon** puts an emoji on your map pin instead of your initial. The admin can also set it in the dashboard (**⋯ → Set emoji…**).
+- **Your icon**: Settings → Account → **Your icon** lets you pick a colour and an emoji for your map pin (or keep your initial). The admin can also change it in the dashboard (**⋯ → Icon and colour…**).
 - **Quiet phones**: if a phone that shares its location hasn't been in touch for 6 hours (`SILENCE_HOURS`), the people it shares with get one alert ("Sam's phone hasn't been in touch for a while"), with where it was last. Paused phones are left alone.
 - **Battery saver** (Settings → Sharing, on by default): below 20% and not charging, your phone updates every 15 minutes instead of more often. Others see "saving battery". An SOS still updates every 15 seconds.
 - **Phone health** (dashboard): under each person you see their app version, when their phone was last in touch, and warnings such as "Location not 'Allow all the time'" or "Battery restrictions on".
 - **Groups**: if you're in more than one group, chips at the top of the map show one group at a time. In Settings → Groups you choose per group whether to share your location (for example share with Family but not with Friends). Someone already signed in can tap another group's invite link (or use **Join another group…** in Settings → Groups) to join it as themselves.
 - **Wi-Fi positioning** (Settings → Sharing, off by default): for tablets and phones that can't find their own location. When there's no fix, the app sends the hardware addresses and signal strengths of nearby Wi-Fi networks to [beaconDB](https://beacondb.net), a free community service, and uses the rough location it answers with. Nothing about you or your account is sent, and networks named `…_nomap` are skipped.
 - **Settings** is split into pages: Sharing, Groups, Fences, Alerts, Trail, Account, Phone setup and About. Each feature has its own on/off switches, for example to hide the SOS bar or Check in button, or to stop a kind of alert.
-- **Map style** (Settings → Map in the app, bottom of the sidebar in the dashboard): Server default, **Calm** (CARTO Voyager), **Minimal** (CARTO Positron), **Classic OpenStreetMap** or **Topographic** (OpenTopoMap). Calm and Minimal switch to a dark map in dark mode. It only changes your own phone or browser. CARTO's free basemaps are for non-commercial use, which a family is.
+- **Map style** (Settings → Map in the app, bottom of the sidebar in the dashboard): Server default, **OpenStreetMap**, **Humanitarian** (softer colours) or **Topographic** (OpenTopoMap). All are free and need no key; in dark mode they're dimmed a little. It only changes your own phone or browser.
 - **Leave this server** (Settings → About): removes you from the server.
 
 ### Backups and restoring

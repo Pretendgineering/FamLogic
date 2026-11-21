@@ -16,7 +16,6 @@ services:
       # (for example behind some reverse proxies).
       # PUBLIC_URL: "https://family.example.com"
       # Map tiles. The default is the free OpenStreetMap server, which is fine for a family.
-      # Default map: CARTO Voyager (light) and Dark Matter (dark). For plain OpenStreetMap:
       # TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       # TILE_ATTRIBUTION: "© OpenStreetMap contributors"
       # How long an invite link works, in hours.

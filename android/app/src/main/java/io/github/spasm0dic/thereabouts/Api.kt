@@ -76,8 +76,8 @@ data class ServerInfo(
     val tileUrl: String,
     val tileAttribution: String,
     val features: Set<String>? = null,
-    /** Tiles for dark mode; the same as [tileUrl] if the server has no dark style. */
-    val tileUrlDark: String = tileUrl,
+    /** Tiles for dark mode; "" if the server has no dark style. */
+    val tileUrlDark: String = "",
     val version: String = "",
 )
 
@@ -326,6 +326,11 @@ class Api(private val baseUrl: String, private val token: String = "") {
         request("POST", "/api/me", JSONObject().put("name", name))
     }
 
+    /** Your map pin: an emoji ("" = your initial) on a colour like #6e48d6. */
+    suspend fun setIcon(emoji: String, color: String) {
+        request("POST", "/api/me", JSONObject().put("emoji", emoji).put("color", color))
+    }
+
     /** One emoji shown instead of your initial; "" goes back to the initial. */
     suspend fun setEmoji(emoji: String) {
         request("POST", "/api/me", JSONObject().put("emoji", emoji))
@@ -455,7 +460,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
         name = o.optString("name", "Family"),
         tileUrl = o.optString("tileUrl", Prefs.DEFAULT_TILES),
         tileAttribution = o.optString("tileAttribution", Prefs.DEFAULT_ATTRIBUTION),
-        tileUrlDark = o.optString("tileUrlDark").ifEmpty { o.optString("tileUrl", Prefs.DEFAULT_TILES) },
+        tileUrlDark = o.optString("tileUrlDark"),
         features = o.optJSONArray("features")?.let { arr -> (0 until arr.length()).map { arr.getString(it) }.toSet() },
         version = o.optString("version"),
     )

@@ -134,7 +134,7 @@ fun MapScreen(
     var members by remember { mutableStateOf<List<Member>>(emptyList()) }
     var familyName by remember { mutableStateOf(prefs.familyName) }
     var tileUrl by remember { mutableStateOf(prefs.tileUrl) }
-    var tileUrlDark by remember { mutableStateOf(prefs.tileUrlDark.ifEmpty { prefs.tileUrl }) }
+    var tileUrlDark by remember { mutableStateOf(prefs.tileUrlDark) }
     var mapStyle by remember { mutableStateOf(prefs.mapStyle) }
     var attribution by remember { mutableStateOf(prefs.tileAttribution) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -456,7 +456,8 @@ fun MapScreen(
                     }
                 }
             },
-            onBack = { showSettings = false; mapStyle = prefs.mapStyle; scope.launch { refresh() } },
+            onBack = { showSettings = false; scope.launch { refresh() } },
+            onMapStyleChange = { mapStyle = it },
             members = members,
             myId = prefs.memberId,
             onProfileChanged = { scope.launch { refresh() } },

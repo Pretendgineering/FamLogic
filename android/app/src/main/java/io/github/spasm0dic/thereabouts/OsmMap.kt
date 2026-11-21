@@ -60,6 +60,7 @@ private class TemplateTileSource(private val template: String, attribution: Stri
 private class MapState {
     var tileUrl: String? = null
     var dark: Boolean? = null
+    var dim: Boolean? = null
     var appliedSeq = -1
     val markers = mutableMapOf<String, Marker>()
     val places = mutableMapOf<String, Pair<Polygon, Marker>>()
@@ -147,6 +148,13 @@ fun OsmMap(
                 map.isTilesScaledToDpi = true
             }
             state.tileUrl = tileUrl
+            // Drop tiles of the previous style from memory so the new one shows at once.
+            map.tileProvider.clearTileCache()
+        }
+        if (state.dim != tiles.dim) {
+            // A light map in dark mode: darker and a little less saturated, so it doesn't glare.
+            map.overlayManager.tilesOverlay.setColorFilter(if (tiles.dim) DIM_FILTER else null)
+            state.dim = tiles.dim
         }
         if (state.dark != dark) {
             // While tiles load: a plain background in the theme, not a grey grid.
@@ -224,6 +232,18 @@ fun OsmMap(
         map.invalidate()
     }
 }
+
+private val DIM_FILTER = android.graphics.ColorMatrixColorFilter(
+    android.graphics.ColorMatrix().apply {
+        setSaturation(0.75f)
+        postConcat(android.graphics.ColorMatrix(floatArrayOf(
+            0.62f, 0f, 0f, 0f, 8f,
+            0f, 0.62f, 0f, 0f, 8f,
+            0f, 0f, 0.66f, 0f, 14f,
+            0f, 0f, 0f, 1f, 0f,
+        )))
+    },
+)
 
 fun parseColor(hex: String): Int = runCatching { Color.parseColor(hex) }.getOrDefault(Color.parseColor("#4363d8"))
 

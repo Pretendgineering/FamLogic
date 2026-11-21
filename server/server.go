@@ -55,6 +55,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/me/password", s.device(s.handleSetPassword))
 	mux.HandleFunc("POST /api/me/circles/join", s.device(s.handleJoinCircle))
 	mux.HandleFunc("GET /api/members/{id}/trail", s.device(s.handleTrail))
+	mux.HandleFunc("GET /api/members/{id}/trips", s.device(s.handleTrips))
 	mux.HandleFunc("GET /api/geocode", s.device(s.handleGeocode))
 	mux.HandleFunc("POST /api/places", s.device(s.handleCreatePlace))
 	mux.HandleFunc("PATCH /api/places/{id}", s.device(s.handleUpdatePlace))
@@ -81,6 +82,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
 	mux.HandleFunc("GET /api/admin/members/{id}/trail", s.admin(s.handleAdminTrail))
+	mux.HandleFunc("GET /api/admin/members/{id}/trips", s.admin(s.handleAdminTrips))
 	mux.HandleFunc("GET /api/admin/geocode", s.admin(s.handleAdminGeocode))
 	mux.HandleFunc("GET /api/admin/places", s.admin(s.handleAdminPlaces))
 	mux.HandleFunc("POST /api/admin/places", s.admin(s.handleAdminCreatePlace))
@@ -1068,6 +1070,25 @@ func (s *Server) handleAdminTrail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"points": points})
+}
+
+// Trips: the trail split into journeys between stops, newest first (see trips.go).
+func (s *Server) handleTrips(w http.ResponseWriter, r *http.Request, me *Member) {
+	trips, ok := s.store.TripsFor(me.ID, r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "no trips to show")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"trips": trips})
+}
+
+func (s *Server) handleAdminTrips(w http.ResponseWriter, r *http.Request) {
+	trips, ok := s.store.TripsFor("", r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "no such member")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"trips": trips})
 }
 
 // ---- places ----

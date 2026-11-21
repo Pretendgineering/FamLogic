@@ -199,3 +199,21 @@ dialog select { width: 100%; }
 .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 85%, transparent) !important; color: var(--muted); border-radius: 8px 0 0 0; }
 .leaflet-control-attribution a { color: var(--accent); }
 .leaflet-tooltip { background: var(--surface); color: var(--text); border: 0; border-radius: 10px; box-shadow: var(--shadow); }
+
+/* Light maps in dark mode: dimmed a little so they don't glare */
+.dim-map .leaflet-tile-pane { filter: brightness(.68) saturate(.75) contrast(1.05); }
+
+/* Icon picker */
+.icon-head { display: flex; align-items: center; gap: .9rem; margin-bottom: .6rem; }
+.icon-head h2 { margin: 0; }
+.avatar.big { width: 56px; height: 56px; font-size: 1.4rem; }
+.avatar.big.emoji { font-size: 1.8rem; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; margin: .3rem 0 .6rem; }
+.swatch { width: 32px; height: 32px; padding: 0; border-radius: 50%; box-shadow: none; border: 3px solid transparent; }
+.swatch.chosen { border-color: var(--text); }
+.emoji-scroll { max-height: 300px; overflow-y: auto; background: var(--surface-2); border-radius: 16px; padding: .3rem .6rem .6rem; }
+.emoji-group h3 { font-size: .78rem; color: var(--accent); margin: .6rem 0 .2rem; text-transform: uppercase; letter-spacing: .06em; }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; }
+.emoji-cell { background: transparent; color: var(--text); box-shadow: none; padding: 0; height: 40px; border-radius: 10px; font-size: 1.4rem; font-weight: 700; }
+.emoji-cell:hover { background: var(--surface); filter: none; box-shadow: none; }
+.emoji-cell.chosen { background: var(--accent-soft); }

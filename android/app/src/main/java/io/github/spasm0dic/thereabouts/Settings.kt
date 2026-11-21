@@ -28,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
@@ -82,14 +81,13 @@ import java.io.IOException
 
 /** The pages of Settings. */
 private enum class SettingsPage(val title: String, val icon: ImageVector) {
-    Sharing("Sharing", Icons.Filled.Share),
     Groups("Groups", Icons.Filled.Face),
     Fences("Fences", Icons.Filled.Place),
     Alerts("Alerts", Icons.Filled.Notifications),
     Trail("Trail", Icons.Filled.DateRange),
+    Sharing("Sharing", Icons.Filled.Share),
     Map("Map", Icons.Filled.Edit),
     Account("Account", Icons.Filled.AccountCircle),
-    Phone("Phone setup", Icons.Filled.Build),
     About("About", Icons.Filled.Info),
 }
 
@@ -125,6 +123,7 @@ fun SettingsScreen(
     members: List<Member> = emptyList(),
     myId: String = "",
     onProfileChanged: () -> Unit = {},
+    onMapStyleChange: (String) -> Unit = {},
 ) {
     var pageName by rememberSaveable { mutableStateOf<String?>(null) }
     val page = pageName?.let { SettingsPage.valueOf(it) }
@@ -172,11 +171,10 @@ fun SettingsScreen(
                 SettingsPage.Fences -> FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
                 SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
                 SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange)
-                SettingsPage.Map -> MapPage(prefs)
+                SettingsPage.Map -> MapPage(prefs, onMapStyleChange)
                 SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved, members.find { it.id == myId },
                     supports("emoji"), onProfileChanged)
-                SettingsPage.Phone -> PhonePage(perms)
-                SettingsPage.About -> AboutPage(prefs, serverVersion, onLeave)
+                SettingsPage.About -> AboutPage(prefs, perms, serverVersion, onLeave)
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -208,8 +206,11 @@ private fun menuSummary(
         false -> "No password yet: set one"
         else -> if (username.isNotEmpty()) "Signed in as $username" else "Username and password"
     }
-    SettingsPage.Phone -> if (perms.background && perms.batteryUnrestricted && perms.notifications) "All set" else "Needs attention"
-    SettingsPage.About -> "Version ${BuildConfig.VERSION_NAME}, server, leave"
+    SettingsPage.About -> if (perms.background && perms.batteryUnrestricted && perms.notifications) {
+        "Version ${BuildConfig.VERSION_NAME} · all set"
+    } else {
+        "Phone setup needs attention"
+    }
 }
 
 private fun plural(n: Int, word: String) = if (n == 1) "$n $word" else "$n ${word}s"
@@ -616,17 +617,18 @@ private fun TrailPage(prefs: Prefs, trailHours: Int?, onTrailHoursChange: (Int) 
 }
 
 @Composable
-private fun MapPage(prefs: Prefs) {
+private fun MapPage(prefs: Prefs, onChange: (String) -> Unit) {
     val haptics = LocalHapticFeedback.current
     var style by remember { mutableStateOf(prefs.mapStyle) }
     SettingsCard("Map style") {
-        Hint("Only changes this phone. All styles are free maps drawn from OpenStreetMap data.")
+        Hint("Only changes this phone. All are free maps from OpenStreetMap data. In dark mode they're dimmed a little so they don't glare.")
         MapStyles.all.forEach { s ->
             Row(
                 Modifier.fillMaxWidth().selectable(selected = style == s.id) {
                     if (style != s.id) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     style = s.id
                     prefs.mapStyle = s.id
+                    onChange(s.id) // the map switches right away, not when Settings closes
                 }.padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -653,16 +655,16 @@ private fun AccountPage(
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var nameMsg by remember { mutableStateOf<String?>(null) }
-    var emoji by remember(me?.emoji) { mutableStateOf(me?.emoji.orEmpty()) }
     var emojiMsg by remember { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
-    fun saveEmoji(value: String) {
+    var picking by remember { mutableStateOf(false) }
+    fun saveIcon(emoji: String, color: String) {
         scope.launch {
             emojiMsg = try {
-                Api(prefs.serverUrl, prefs.token).setEmoji(value)
+                Api(prefs.serverUrl, prefs.token).setIcon(emoji, color)
                 haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                 onProfileChanged()
-                if (value.isEmpty()) "Showing your initial" else "Saved"
+                "Saved"
             } catch (e: IOException) {
                 e.message ?: "Couldn't save"
             }
@@ -697,45 +699,28 @@ private fun AccountPage(
     }
     if (canEmoji && me != null) {
         SettingsCard("Your icon") {
-            Hint("Your map pin shows your initial. Pick an emoji to show instead: tap the box and use your keyboard's emoji key.")
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-                MiniAvatar(me.copy(emoji = emoji.trim()), size = 48)
-                OutlinedTextField(
-                    value = emoji,
-                    onValueChange = { v -> emoji = lastEmoji(v); emojiMsg = null },
-                    placeholder = { Text("🙂") },
-                    singleLine = true,
-                    modifier = Modifier.width(90.dp),
-                )
-                Button(enabled = emoji.isNotBlank() && emoji.trim() != me.emoji, onClick = { saveEmoji(emoji.trim()) }) { Text("Save") }
-            }
-            if (me.emoji.isNotEmpty()) {
-                TextButton(onClick = { emoji = ""; saveEmoji("") }) { Text("Use my initial instead") }
+            Row(
+                Modifier.fillMaxWidth().clickable { picking = true }.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Avatar(me.name, me.emoji, me.color, 56)
+                Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                    Text("Change your icon", style = MaterialTheme.typography.bodyLarge)
+                    Hint("Pick a colour and an emoji for your map pin.")
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             emojiMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
+        if (picking) {
+            IconPickerDialog(me.name, me.emoji, me.color, onSave = { e, c -> picking = false; saveIcon(e, c) }, onDismiss = { picking = false })
+        }
     }
-}
-
-/** Keeps only the last emoji typed (an emoji can be several code points, e.g. skin tones or flags). */
-private fun lastEmoji(v: String): String {
-    val it = java.text.BreakIterator.getCharacterInstance()
-    it.setText(v)
-    val end = it.last()
-    val start = it.previous()
-    return if (start == java.text.BreakIterator.DONE) v else v.substring(start, end)
 }
 
 /** A small coloured circle with someone's emoji or initial. */
 @Composable
-internal fun MiniAvatar(m: Member, size: Int = 36) {
-    Surface(shape = CircleShape, color = androidx.compose.ui.graphics.Color(parseColor(m.color)), modifier = Modifier.size(size.dp)) {
-        Box(contentAlignment = Alignment.Center) {
-            if (m.emoji.isNotEmpty()) Text(m.emoji, fontSize = (size * 0.5).sp)
-            else Text(initialOf(m.name), color = androidx.compose.ui.graphics.Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-        }
-    }
-}
+internal fun MiniAvatar(m: Member, size: Int = 36) = Avatar(m.name, m.emoji, m.color, size)
 
 /** "Mon–Fri 07:00–17:00" */
 fun scheduleSummary(sc: FenceSchedule): String {
@@ -750,10 +735,14 @@ fun scheduleSummary(sc: FenceSchedule): String {
 }
 
 @Composable
-private fun PhonePage(perms: PermissionState) {
+private fun PhoneChecks(perms: PermissionState) {
     val context = LocalContext.current
-    SettingsCard("So sharing keeps working") {
-        Hint("Android can stop apps in the background. Fix anything marked ✗.")
+    if (perms.background && perms.batteryUnrestricted && perms.notifications) {
+        Text("✓  All set: Thereabouts can keep sharing in the background.", style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+    Hint("Android can stop apps in the background. Fix anything marked ✗.")
+    run {
         CheckRow("Location access \"Allow all the time\"", perms.background) {
             context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
         }
@@ -767,8 +756,9 @@ private fun PhonePage(perms: PermissionState) {
 }
 
 @Composable
-private fun AboutPage(prefs: Prefs, serverVersion: String, onLeave: () -> Unit) {
+private fun AboutPage(prefs: Prefs, perms: PermissionState, serverVersion: String, onLeave: () -> Unit) {
     var confirmLeave by remember { mutableStateOf(false) }
+    SettingsCard("Phone setup") { PhoneChecks(perms) }
     SettingsCard("Server") {
         Text(prefs.serverUrl, style = MaterialTheme.typography.bodyMedium)
         if (serverVersion.isNotEmpty()) Hint("Server version $serverVersion")

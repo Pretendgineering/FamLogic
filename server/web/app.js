@@ -194,13 +194,12 @@ $("#logout-btn").addEventListener("click", async () => {
 // ---- map ----
 
 // Map styles anyone can pick (remembered in this browser). "Server default" is the admin's choice.
-const CARTO = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
-const CARTO_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+// All free, keyless tiles from OpenStreetMap data. In dark mode a light map is dimmed a little.
 const MAP_STYLES = [
   { id: "server", title: "Server default" },
-  { id: "calm", title: "Calm", light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", dark: CARTO_DARK, attribution: CARTO },
-  { id: "minimal", title: "Minimal", light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", dark: CARTO_DARK, attribution: CARTO },
-  { id: "osm", title: "Classic OpenStreetMap", light: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+  { id: "osm", title: "OpenStreetMap", light: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+  { id: "hot", title: "Humanitarian", light: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+    attribution: "&copy; OpenStreetMap contributors &middot; tiles by HOT, hosted by OSM France" },
   { id: "topo", title: "Topographic", light: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", maxZoom: 17,
     attribution: "&copy; OpenStreetMap contributors, SRTM &middot; &copy; OpenTopoMap (CC-BY-SA)" },
 ];
@@ -213,9 +212,11 @@ function applyTiles() {
   if (!map || !serverTiles) return;
   const st = MAP_STYLES.find((s) => s.id === mapStyle) || MAP_STYLES[0];
   const dark = darkQuery.matches;
+  const serverDark = serverTiles.tileUrlDark && serverTiles.tileUrlDark !== serverTiles.tileUrl ? serverTiles.tileUrlDark : "";
   const t = st.id === "server"
-    ? { url: dark ? (serverTiles.tileUrlDark || serverTiles.tileUrl) : serverTiles.tileUrl, attribution: serverTiles.tileAttribution, maxZoom: 19 }
-    : { url: dark && st.dark ? st.dark : st.light, attribution: st.attribution, maxZoom: st.maxZoom || 19 };
+    ? { url: dark && serverDark ? serverDark : serverTiles.tileUrl, attribution: serverTiles.tileAttribution, maxZoom: 19, dim: dark && !serverDark }
+    : { url: st.light, attribution: st.attribution, maxZoom: st.maxZoom || 19, dim: dark };
+  document.body.classList.toggle("dim-map", t.dim);
   if (t.url === appliedTiles) return;
   appliedTiles = t.url;
   tileLayer?.remove();
@@ -273,7 +274,7 @@ function renderMembers(members) {
         ...(m.loc ? [["Show on map", () => { map.setView([m.loc.lat, m.loc.lon], Math.max(map.getZoom(), 15)); showTrail(m); }], "-"] : []),
         ["Groups…", () => openCircles(m)],
         ["Rename…", () => rename(m)],
-        ["Set emoji…", () => setEmoji(m)],
+        ["Icon and colour…", () => openIconPicker(m)],
         ["Reset sign-in…", () => resetSignIn(m)],
         "-",
         ["Remove from server…", () => removeMember(m), "danger"],
@@ -679,12 +680,54 @@ async function rename(m) {
   catch (err) { alert(err.message); }
 }
 
-async function setEmoji(m) {
-  const v = prompt(`Emoji for ${m.name}'s map pin (leave empty to show their initial):`, m.emoji || "");
-  if (v === null) return;
-  try { await api("PATCH", `/api/admin/members/${encodeURIComponent(m.id)}`, { emoji: v.trim() }); refresh(); }
-  catch (err) { alert(err.message); }
+// ---- icon picker: an emoji (or the initial) on a colour ----
+
+const ICON_COLORS = ["#e6194b", "#f58231", "#e0a100", "#3cb44b", "#469990", "#0fa3c2",
+  "#4363d8", "#6e48d6", "#911eb4", "#f032e6", "#9a6324", "#607d8b"];
+const ICON_EMOJI = [
+  ["Faces", "😀 😎 🤓 🥳 😇 🤠 🙂 😺 👻 🤖 👽 🎃"],
+  ["People", "👩 👨 🧑 👧 👦 👶 👵 👴 🧔 👸 🤴 🦸"],
+  ["Animals", "🐶 🐱 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🦉 🦄 🐝 🦋 🐢 🐙 🐬 🐳 🦈 🦖"],
+  ["Nature", "🌸 🌻 🌵 🌲 🍀 🍁 🌈 ⭐ 🌙 ☀️ ⚡ ❄️ 🔥 🌊"],
+  ["Food", "🍎 🍓 🍉 🍕 🍔 🌮 🍩 🍪 🧁 ☕ 🍦 🥑"],
+  ["Activities", "⚽ 🏀 🏈 ⚾ 🎾 🏐 🎮 🎸 🎨 📚 🎣 🏄 🚴 🧗 🏕️ 🎯"],
+  ["Travel", "🚗 🚙 🏍️ 🚲 🛴 🚌 🚂 ✈️ 🚀 ⛵ 🏠 🏫"],
+  ["Symbols", "❤️ 🧡 💛 💚 💙 💜 🖤 💎 👑 🎵 🍄 🌟"],
+];
+const iconDialog = $("#icon-dialog");
+iconDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => iconDialog.close()));
+let iconTarget = null, pickedEmoji = "", pickedColor = "";
+function renderIconPreview() {
+  const p = $("#icon-preview");
+  p.style.background = pickedColor;
+  p.className = "avatar big" + (pickedEmoji ? " emoji" : "");
+  p.textContent = pickedEmoji || initial(iconTarget.name);
+  document.querySelectorAll("#icon-colors button").forEach((b) => b.classList.toggle("chosen", b.dataset.color === pickedColor));
+  document.querySelectorAll("#icon-emoji button").forEach((b) => b.classList.toggle("chosen", b.dataset.emoji === pickedEmoji));
 }
+function openIconPicker(m) {
+  iconTarget = m;
+  pickedEmoji = m.emoji || "";
+  pickedColor = (m.color || "").toLowerCase();
+  $("#icon-title").textContent = `Icon for ${m.name}`;
+  $("#icon-colors").replaceChildren(...ICON_COLORS.map((c) =>
+    el("button", { type: "button", class: "swatch", "data-color": c, style: `background:${c}`, "aria-label": `Colour ${c}`,
+      onclick: () => { pickedColor = c; renderIconPreview(); } })));
+  const cell = (e, label) => el("button", { type: "button", class: "emoji-cell", "data-emoji": e, onclick: () => { pickedEmoji = e; renderIconPreview(); } }, label);
+  $("#icon-emoji").replaceChildren(
+    el("div", { class: "emoji-group" }, el("h3", {}, "Icon"), el("div", { class: "emoji-grid" }, cell("", initial(m.name)))),
+    ...ICON_EMOJI.map(([title, list]) => el("div", { class: "emoji-group" }, el("h3", {}, title),
+      el("div", { class: "emoji-grid" }, ...list.split(" ").map((e) => cell(e, e))))));
+  renderIconPreview();
+  iconDialog.showModal();
+}
+$("#icon-save").addEventListener("click", async () => {
+  try {
+    await api("PATCH", `/api/admin/members/${encodeURIComponent(iconTarget.id)}`, { emoji: pickedEmoji, color: pickedColor });
+    iconDialog.close();
+    refresh();
+  } catch (err) { alert(err.message); }
+});
 
 async function resetSignIn(m) {
   if (!confirm(`Make a one-time link that lets ${m.name} choose a new password and sign in on a phone? Any older reset link for them stops working.`)) return;

@@ -102,6 +102,13 @@ class LocationService : Service() {
         val share = prefs.joined && prefs.sharing && hasLocationPermission(this) &&
             (!fromBackground || hasBackgroundPermission(this))
         if (!needed(this)) {
+            // Android requires every service started with startForegroundService() to call
+            // startForeground() promptly, even one that is about to stop; otherwise it crashes the app.
+            runCatching {
+                val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING else 0
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
+            }
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
