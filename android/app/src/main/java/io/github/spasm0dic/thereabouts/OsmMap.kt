@@ -216,7 +216,7 @@ fun OsmMap(
             }
             val stale = System.currentTimeMillis() - loc.time > STALE_MS
             marker.position = GeoPoint(loc.lat, loc.lon)
-            marker.icon = BitmapDrawable(context.resources, avatarBitmap(context, m.name, m.color, stale, sos = m.sosSince > 0, emoji = m.emoji))
+            marker.icon = BitmapDrawable(context.resources, avatarBitmap(context, m.name, m.color, stale, sos = m.sosSince > 0, emoji = m.emoji, driving = isDriving(m)))
             // No osmdroid pop-up: the app shows its own card for the person.
             marker.setInfoWindow(null)
             val id = m.id
@@ -365,7 +365,15 @@ fun parseColor(hex: String): Int = runCatching { Color.parseColor(hex) }.getOrDe
 fun initialOf(name: String) = name.trim().take(1).uppercase().ifEmpty { "?" }
 
 /** A coloured circle with the person's emoji or initial, used as their map pin. */
-fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, sos: Boolean = false, emoji: String = ""): Bitmap {
+fun avatarBitmap(
+    context: Context,
+    name: String,
+    color: String,
+    faded: Boolean,
+    sos: Boolean = false,
+    emoji: String = "",
+    driving: Boolean = false,
+): Bitmap {
     val d = context.resources.displayMetrics.density
     // An SOS pin is bigger, with a thick red ring, so it stands out on the map.
     val ring = if (sos) 7 * d else 0f
@@ -395,6 +403,19 @@ fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, 
         p.textSize = 17 * d
         p.typeface = Typeface.DEFAULT_BOLD
         c.drawText(initialOf(name), r, r - (p.descent() + p.ascent()) / 2, p)
+    }
+    if (driving) {
+        // A small car badge at the bottom right.
+        val br = 9 * d
+        val cx = size - br - 0.5f * d
+        val cy = size - br - 0.5f * d
+        val badge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = Color.WHITE
+            setShadowLayer(1.5f * d, 0f, 0.5f * d, Color.argb(90, 0, 0, 0))
+        }
+        c.drawCircle(cx, cy, br, badge)
+        val t = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 11 * d; textAlign = Paint.Align.CENTER }
+        c.drawText("🚗", cx, cy - (t.descent() + t.ascent()) / 2, t)
     }
     return bmp
 }

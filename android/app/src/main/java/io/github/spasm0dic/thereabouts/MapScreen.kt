@@ -808,6 +808,9 @@ private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> U
     }
 }
 
+/** Driving, as of a recent fix (an old "driving" fix means the phone went quiet mid-drive). */
+fun isDriving(m: Member) = m.loc?.driving == true && !m.paused && System.currentTimeMillis() - m.loc.time < 10 * 60_000
+
 /** "4 min ago · 82% · 1.3 km away" */
 @Suppress("UNUSED_PARAMETER") // tick only forces recomposition
 private fun statusLine(m: Member, me: Member?, tick: Int): String {
@@ -818,8 +821,8 @@ private fun statusLine(m: Member, me: Member?, tick: Int): String {
     if (m.paused) return "Location sharing paused"
     val loc = m.loc ?: return "No location yet"
     val parts = mutableListOf<String>()
-    if (m.place.isNotEmpty()) parts += "At ${m.place}"
     val age = System.currentTimeMillis() - loc.time
+    if (isDriving(m)) parts += "Driving" else if (m.place.isNotEmpty()) parts += "At ${m.place}"
     parts += if (age < 60_000) "Just now" else DateUtils.getRelativeTimeSpanString(loc.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
     if (loc.battery >= 0) parts += "${loc.battery}%" + when {
         loc.charging -> " charging"

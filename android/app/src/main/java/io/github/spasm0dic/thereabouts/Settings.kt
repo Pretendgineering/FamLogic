@@ -471,6 +471,17 @@ private fun AlertsPage(
             }
         }
     }
+    if (supports("driving")) {
+        var notifyDriving by remember { mutableStateOf(prefs.notifyDriving) }
+        SettingsCard("Driving") {
+            SwitchRow(
+                title = "Tell me when someone starts driving",
+                detail = "Driving is worked out from speed (over about 25 km/h / 15 mph). A short stop doesn't count as a new drive.",
+                checked = notifyDriving,
+                onChange = { notifyDriving = it; prefs.notifyDriving = it },
+            )
+        }
+    }
     if (supports("silence")) {
         SettingsCard("Quiet phones") {
             SwitchRow(

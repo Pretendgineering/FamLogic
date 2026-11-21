@@ -154,6 +154,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("notify_trips", false)
         set(v) = sp.edit { putBoolean("notify_trips", v) }
 
+    /** Feature: "Sam started driving". Off by default. */
+    var notifyDriving: Boolean
+        get() = sp.getBoolean("notify_driving", false)
+        set(v) = sp.edit { putBoolean("notify_driving", v) }
+
     /** Names of the fences this phone knows (id -> name), for trip alerts. */
     var fenceNames: Map<String, String>
         get() = sp.getStringSet("fence_names", emptySet())!!.mapNotNull { e ->

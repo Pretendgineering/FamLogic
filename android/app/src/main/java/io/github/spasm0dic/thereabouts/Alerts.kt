@@ -99,6 +99,10 @@ object Alerts {
                     "${Units.duration(e.duration)} · ${Units.distance(e.distance)}. Tap to see where.", e.memberId,
                 )
             }
+            "drive_start" -> {
+                if (!prefs.notifyDriving || e.memberId in prefs.mutedPeople) return
+                notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} started driving", "Tap to see where.", e.memberId)
+            }
             "silent" -> {
                 if (!prefs.notifySilent || e.memberId in prefs.mutedPeople) return
                 val battery = if (e.battery >= 0) " Their battery was at ${e.battery}%." else ""

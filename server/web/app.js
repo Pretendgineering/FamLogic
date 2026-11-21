@@ -153,7 +153,13 @@ function renderSOS(list) {
       (m.loc ? ` · last seen ${ago(m.loc.time)}, click to show` : " · no location yet"))));
 }
 
+// Driving, as of a recent fix (an old "driving" fix means the phone went quiet mid-drive).
+const isDriving = (m) => !!(m.loc && m.loc.driving && !m.paused && Date.now() - m.loc.time < 10 * 60 * 1000);
+
 function describe(m) {
+  if (isDriving(m) && !m.sosSince) {
+    return `Driving · ${ago(m.loc.time)}` + (m.loc.battery >= 0 ? ` · ${m.loc.battery}%${m.loc.charging ? " ⚡" : ""}` : "");
+  }
   if (m.place && !m.sosSince && !m.paused && m.loc) {
     return `At ${m.place} · ${ago(m.loc.time)}` + (m.loc.battery >= 0 ? ` · ${m.loc.battery}%${m.loc.charging ? " ⚡" : ""}` : "");
   }
@@ -267,7 +273,7 @@ function renderMembers(members) {
 
   for (const m of members) {
     const stale = !m.loc || Date.now() - m.loc.time > STALE_MS;
-    const avatar = el("div", { class: "avatar" + (stale ? " stale" : "") + (m.sosSince ? " sos" : "") + (m.emoji ? " emoji" : ""), style: `background:${m.color}` }, m.emoji || initial(m.name));
+    const avatar = el("div", { class: "avatar" + (stale ? " stale" : "") + (m.sosSince ? " sos" : "") + (m.emoji ? " emoji" : "") + (isDriving(m) ? " driving" : ""), style: `background:${m.color}` }, m.emoji || initial(m.name));
     const li = el("li", { class: m.loc ? "clickable" : "" },
       avatar,
       el("div", { class: "grow" },
@@ -304,7 +310,7 @@ function renderMembers(members) {
     bounds.push(pos);
     const icon = L.divIcon({
       className: "pin",
-      html: `<div class="avatar${stale ? " stale" : ""}${m.sosSince ? " sos" : ""}${m.emoji ? " emoji" : ""}" style="background:${m.color}"></div>`,
+      html: `<div class="avatar${stale ? " stale" : ""}${m.sosSince ? " sos" : ""}${m.emoji ? " emoji" : ""}${isDriving(m) ? " driving" : ""}" style="background:${m.color}"></div>`,
       iconSize: [38, 38],
       iconAnchor: [19, 19],
     });

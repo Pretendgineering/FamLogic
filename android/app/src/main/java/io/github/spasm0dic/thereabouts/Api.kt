@@ -16,6 +16,8 @@ data class MemberLocation(
     val time: Long,
     /** Their phone is updating less often to save its low battery. */
     val saving: Boolean = false,
+    /** Their phone thinks they're driving. */
+    val driving: Boolean = false,
 )
 
 data class Member(
@@ -364,13 +366,14 @@ class Api(private val baseUrl: String, private val token: String = "") {
     /** Sends a fix; the reply carries any alerts newer than [since]. */
     suspend fun sendLocation(
         lat: Double, lon: Double, accuracy: Float, speed: Float, time: Long, battery: Int, charging: Boolean,
-        since: Long, saving: Boolean = false,
+        since: Long, saving: Boolean = false, driving: Boolean = false,
     ): EventBatch? {
         val body = JSONObject()
             .put("lat", lat).put("lon", lon)
             .put("acc", accuracy.toDouble()).put("speed", speed.toDouble())
             .put("time", time).put("battery", battery).put("charging", charging)
         if (saving) body.put("saving", true)
+        if (driving) body.put("driving", true)
         return parseEvents(request("POST", "/api/location?since=$since", body), since)
     }
 
@@ -550,6 +553,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
                     charging = it.optBoolean("charging", false),
                     time = it.optLong("time", 0),
                     saving = it.optBoolean("saving", false),
+                    driving = it.optBoolean("driving", false),
                 )
             },
         )

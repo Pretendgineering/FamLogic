@@ -148,9 +148,13 @@ class LocationService : Service() {
 
     private fun intervalMs() = when {
         prefs.sosActive -> SOS_INTERVAL_MS
+        // While (maybe) driving: every minute so others can follow; less if the battery is low.
+        drive.driving || drive.candidate -> if (saving) 5 * 60_000L else minOf(prefs.intervalMinutes * 60_000L, DRIVING_INTERVAL_MS)
         saving -> maxOf(prefs.intervalMinutes, SAVER_INTERVAL_MIN) * 60_000L
         else -> prefs.intervalMinutes * 60_000L
     }
+
+    private val drive = DriveDetector()
 
     /** Updating less often because the battery is low (see [updateSaving]). */
     private var saving = false
@@ -164,8 +168,11 @@ class LocationService : Service() {
         if (locating) startUpdates() // re-request with the new interval, and tell the server right away
     }
 
+    /** Asks for fixes at a new interval (driving started or ended), without an extra upload. */
+    private fun restartForNewInterval() = startUpdates(sendNow = false)
+
     @SuppressLint("MissingPermission") // checked in onStartCommand
-    private fun startUpdates() {
+    private fun startUpdates(sendNow: Boolean = true) {
         runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
         locating = true
         val intervalMs = intervalMs()
@@ -197,11 +204,12 @@ class LocationService : Service() {
         }
 
         // Send something right away so others see us without waiting a whole interval.
-        newestLastKnown()?.let { onFix(it, force = true) }
+        if (sendNow) newestLastKnown()?.let { onFix(it, force = true) }
     }
 
     @SuppressLint("MissingPermission")
     private fun stopUpdates() {
+        drive.reset()
         if (!locating) return
         locating = false
         runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
@@ -216,6 +224,12 @@ class LocationService : Service() {
 
     private fun onFix(loc: Location, force: Boolean = false) {
         if (lastFix.let { it == null || loc.time >= it.time }) lastFix = loc
+        if (drive.onFix(loc)) {
+            Log.i(TAG, "Driving: ${drive.driving} (checking: ${drive.candidate})")
+            if (locating) restartForNewInterval()
+            upload(loc, waitForTurn = true) // others see "Driving" (or not) straight away
+            return
+        }
         val intervalMs = intervalMs()
         val sinceLast = SystemClock.elapsedRealtime() - lastSentElapsed
         val movedFar = lastSent?.let { it.distanceTo(loc) > 250 } ?: true
@@ -232,7 +246,7 @@ class LocationService : Service() {
             val (battery, charging) = batteryState()
             val alerts = Api(prefs.serverUrl, prefs.token).sendLocation(
                 loc.latitude, loc.longitude, loc.accuracy, loc.speed, loc.time, battery, charging,
-                since = prefs.eventCursor, saving = saving,
+                since = prefs.eventCursor, saving = saving, driving = drive.driving,
             )
             Alerts.handle(this@LocationService, alerts)
             lastSentElapsed = SystemClock.elapsedRealtime()
@@ -450,6 +464,7 @@ class LocationService : Service() {
         private const val CHANNEL_ID = "sharing"
         private const val NOTIFICATION_ID = 1
         private const val EXTRA_FROM_BACKGROUND = "from_background"
+        const val DRIVING_INTERVAL_MS = 60_000L
         const val SAVER_LEVEL = 20
         const val SAVER_INTERVAL_MIN = 15
         private const val SOS_INTERVAL_MS = 15_000L

@@ -28,6 +28,8 @@ type Location struct {
 	Received int64   `json:"received"` // when the server got it (unix ms)
 	// The phone is updating less often to save its low battery.
 	Saving bool `json:"saving,omitempty"`
+	// The phone thinks its person is driving (sustained speed; see the app).
+	Driving bool `json:"driving,omitempty"`
 }
 
 // Member is one person (one phone) in the family.
@@ -85,6 +87,10 @@ type Member struct {
 	StatusAt    int64    `json:"statusAt,omitempty"`
 	LastContact int64    `json:"lastContact,omitempty"`
 	SilentSince int64    `json:"silentSince,omitempty"`
+
+	// When they last stopped driving (unix ms), so a short stop doesn't
+	// announce "started driving" again.
+	DriveEndedAt int64 `json:"driveEndedAt,omitempty"`
 }
 
 // SharesLowBattery reports whether others get told when this person's battery is low.
@@ -334,7 +340,9 @@ func (s *Store) UpdateLocation(id string, loc Location) error {
 	if m.Paused || (m.Loc != nil && loc.Time < m.Loc.Time) {
 		return nil
 	}
+	wasDriving := m.Loc != nil && m.Loc.Driving
 	m.Loc = &loc
+	s.checkDrivingLocked(m, wasDriving, loc)
 	s.checkBatteryLocked(m, loc)
 	s.checkPlacesLocked(m, loc)
 	s.addTrailPointLocked(m, loc)
