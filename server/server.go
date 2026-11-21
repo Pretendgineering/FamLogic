@@ -67,6 +67,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/sos", s.device(s.handleSOS))
 	mux.HandleFunc("POST /api/sos/end", s.device(s.handleSOSEnd))
 	mux.HandleFunc("POST /api/checkin", s.device(s.handleCheckIn))
+	mux.HandleFunc("POST /api/me/status", s.device(s.handleStatus))
 	mux.HandleFunc("PATCH /api/me", s.device(s.handlePatchMe))
 	mux.HandleFunc("POST /api/me", s.device(s.handlePatchMe)) // for clients that can't send PATCH
 	mux.HandleFunc("DELETE /api/me", s.device(s.handleLeave))
@@ -75,6 +76,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/admin/login", s.handleLogin)
 	mux.HandleFunc("POST /api/admin/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/admin/members", s.admin(s.handleAdminMembers))
+	mux.HandleFunc("GET /api/admin/backup", s.admin(s.handleAdminBackup))
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
@@ -155,6 +157,7 @@ type publicMember struct {
 	ID     string    `json:"id"`
 	Name   string    `json:"name"`
 	Color  string    `json:"color"`
+	Emoji  string    `json:"emoji,omitempty"`
 	Paused bool      `json:"paused"`
 	Loc    *Location `json:"loc"`
 	// When this person's active SOS started (unix ms); absent if no SOS.
@@ -170,7 +173,7 @@ type publicMember struct {
 func toPublic(ms []Member) []publicMember {
 	out := make([]publicMember, len(ms))
 	for i, m := range ms {
-		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
+		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
 		if out[i].Circles == nil {
 			out[i].Circles = []string{}
 		}
@@ -180,12 +183,16 @@ func toPublic(ms []Member) []publicMember {
 
 // serverFeatures tells apps what this server can do, so a newer app talking to
 // an older server can hide what won't work instead of failing.
-var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails"}
+var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails",
+	"emoji", "status", "schedules"}
 
 func (s *Server) serverInfo() map[string]any {
-	features := serverFeatures
+	features := slices.Clone(serverFeatures)
 	if s.geo != nil && s.geo.enabled() {
-		features = append(slices.Clone(serverFeatures), "geocode")
+		features = append(features, "geocode")
+	}
+	if s.cfg.SilenceAfter > 0 {
+		features = append(features, "silence")
 	}
 	return map[string]any{
 		"name":            s.cfg.FamilyName,
@@ -235,6 +242,7 @@ func (s *Server) device(h deviceHandler) http.HandlerFunc {
 			}
 			return
 		}
+		s.store.Touch(me.ID)
 		h(w, r, me)
 	}
 }
@@ -642,6 +650,7 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 		Name            *string `json:"name"`
 		Paused          *bool   `json:"paused"`
 		Color           *string `json:"color"`
+		Emoji           *string `json:"emoji"`
 		ShareLowBattery *bool   `json:"shareLowBattery"`
 		ShareArrivals   *bool   `json:"shareArrivals"`
 		TrailHours      *int    `json:"trailHours"`
@@ -649,7 +658,7 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if !s.validatePatch(w, req.Name, req.Color) {
+	if !s.validatePatch(w, req.Name, req.Color, req.Emoji) {
 		return
 	}
 	if req.TrailHours != nil {
@@ -662,7 +671,7 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 			return
 		}
 	}
-	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, ShareLowBattery: req.ShareLowBattery, ShareArrivals: req.ShareArrivals})
+	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, Emoji: req.Emoji, ShareLowBattery: req.ShareLowBattery, ShareArrivals: req.ShareArrivals})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
@@ -670,7 +679,15 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 	writeJSON(w, http.StatusOK, toPublic([]Member{*m})[0])
 }
 
-func (s *Server) validatePatch(w http.ResponseWriter, name, color *string) bool {
+func (s *Server) validatePatch(w http.ResponseWriter, name, color, emoji *string) bool {
+	if emoji != nil {
+		e, ok := cleanEmoji(*emoji)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "Pick a single emoji (or leave it empty to show the initial)")
+			return false
+		}
+		*emoji = e
+	}
 	if name != nil {
 		n, ok := cleanName(*name)
 		if !ok {
@@ -684,6 +701,22 @@ func (s *Server) validatePatch(w http.ResponseWriter, name, color *string) bool 
 		return false
 	}
 	return true
+}
+
+// handleStatus: the phone reports its app version and anything that could stop it sharing.
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request, me *Member) {
+	var req struct {
+		App    string   `json:"app"`
+		Issues []string `json:"issues"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.store.SetStatus(me.ID, req.App, req.Issues); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, me *Member) {
@@ -766,6 +799,12 @@ type adminMember struct {
 	HasPassword bool     `json:"hasPassword"`
 	LastSignIn  int64    `json:"lastSignIn,omitempty"`
 	HiddenFrom  []string `json:"hiddenFrom"`
+	// Phone health
+	App         string   `json:"app,omitempty"`
+	Issues      []string `json:"issues"`
+	StatusAt    int64    `json:"statusAt,omitempty"`
+	LastContact int64    `json:"lastContact,omitempty"`
+	Silent      bool     `json:"silent,omitempty"`
 }
 
 func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
@@ -778,9 +817,23 @@ func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]adminMember, len(ms))
 	for i, m := range ms {
-		out[i] = adminMember{pub[i], m.Username, m.PasswordHash != "", m.LastSignIn, append([]string{}, m.HiddenFrom...)}
+		out[i] = adminMember{pub[i], m.Username, m.PasswordHash != "", m.LastSignIn, append([]string{}, m.HiddenFrom...),
+			m.App, append([]string{}, m.Issues...), m.StatusAt, m.LastContact, m.SilentSince != 0}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"members": out, "circles": s.store.Circles(), "places": s.store.AllPlaces(), "server": s.serverInfo()})
+}
+
+// handleAdminBackup downloads the whole data file. It holds password and token
+// hashes, so keep it as safe as the server itself.
+func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
+	b, err := s.store.Snapshot()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not make a backup")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="thereabouts-backup-`+time.Now().Format("2006-01-02")+`.json"`)
+	_, _ = w.Write(b)
 }
 
 // handleAdminResetSignIn makes a one-time link that lets a member who forgot
@@ -802,14 +855,15 @@ func (s *Server) handleAdminPatchMember(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		Name  *string `json:"name"`
 		Color *string `json:"color"`
+		Emoji *string `json:"emoji"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if !s.validatePatch(w, req.Name, req.Color) {
+	if !s.validatePatch(w, req.Name, req.Color, req.Emoji) {
 		return
 	}
-	m, err := s.store.UpdateMember(r.PathValue("id"), MemberPatch{Name: req.Name, Color: req.Color})
+	m, err := s.store.UpdateMember(r.PathValue("id"), MemberPatch{Name: req.Name, Color: req.Color, Emoji: req.Emoji})
 	if errors.Is(err, ErrNotFound) {
 		writeError(w, http.StatusNotFound, "no such member")
 		return
@@ -1023,6 +1077,23 @@ type placeRequest struct {
 	Lat      *float64 `json:"lat"`
 	Lon      *float64 `json:"lon"`
 	Radius   *float64 `json:"radius"`
+	// Absent: unchanged. null: always alert. Object: alert only at those times.
+	Schedule json.RawMessage `json:"schedule"`
+}
+
+// schedule reads the schedule field: whether it was sent, and what it says.
+func (req *placeRequest) schedule() (set bool, sc *Schedule, ok bool) {
+	if len(req.Schedule) == 0 {
+		return false, nil, true
+	}
+	if string(req.Schedule) == "null" {
+		return true, nil, true
+	}
+	sc = &Schedule{}
+	if err := json.Unmarshal(req.Schedule, sc); err != nil || !sc.valid() {
+		return true, nil, false
+	}
+	return true, sc, true
 }
 
 func (req *placeRequest) cleanName() bool {
@@ -1043,7 +1114,12 @@ func (s *Server) createPlace(w http.ResponseWriter, r *http.Request, byMember st
 		writeError(w, http.StatusBadRequest, capitalize(ErrBadPlace.Error()))
 		return
 	}
-	p, err := s.store.CreatePlace(byMember, Place{CircleID: req.CircleID, Name: *req.Name, Lat: *req.Lat, Lon: *req.Lon, Radius: *req.Radius})
+	_, sc, ok := req.schedule()
+	if !ok {
+		writeError(w, http.StatusBadRequest, capitalize(ErrBadSchedule.Error()))
+		return
+	}
+	p, err := s.store.CreatePlace(byMember, Place{CircleID: req.CircleID, Name: *req.Name, Lat: *req.Lat, Lon: *req.Lon, Radius: *req.Radius, Schedule: sc})
 	s.writePlaceResult(w, p, err)
 }
 
@@ -1056,13 +1132,18 @@ func (s *Server) updatePlace(w http.ResponseWriter, r *http.Request, byMember st
 		writeError(w, http.StatusBadRequest, capitalize(ErrBadPlace.Error()))
 		return
 	}
-	p, err := s.store.UpdatePlace(byMember, r.PathValue("id"), req.Name, req.Lat, req.Lon, req.Radius)
+	set, sc, ok := req.schedule()
+	if !ok {
+		writeError(w, http.StatusBadRequest, capitalize(ErrBadSchedule.Error()))
+		return
+	}
+	p, err := s.store.UpdatePlace(byMember, r.PathValue("id"), PlaceUpdate{Name: req.Name, Lat: req.Lat, Lon: req.Lon, Radius: req.Radius, SetSchedule: set, Schedule: sc})
 	s.writePlaceResult(w, p, err)
 }
 
 func (s *Server) writePlaceResult(w http.ResponseWriter, p *Place, err error) {
 	switch {
-	case errors.Is(err, ErrBadPlace):
+	case errors.Is(err, ErrBadPlace), errors.Is(err, ErrBadSchedule):
 		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
 	case err != nil:
 		writeError(w, http.StatusNotFound, "no such fence or group")

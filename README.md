@@ -27,8 +27,9 @@ Thereabouts does one thing: each phone reports where it is to **your own server*
 | Fences | Named areas like Home or School. Everyone in the fence's group is told "Sam arrived at School" or "Alex left Work", and people's status shows "At Home". Add them on the map, by address search, or where you're standing. |
 | SOS | Hold the SOS bar for 3 seconds. Everyone gets an alarm-style alert within seconds, and your location is shared every 15 seconds until you say you're OK. |
 | Check-in | One tap sends "I'm here" with your location and an optional note. |
-| Alerts | SOS, check-ins and low battery, each switchable in the app. They arrive **within seconds** over a connection the app keeps to your own server: no Google services, no push service, nothing extra to install. |
-| Reliability | Restarts after reboot. The app walks you through "Allow all the time" and the battery-saver exemption. |
+| Alerts | SOS, check-ins, low battery, arrivals and departures, each switchable in the app, and mutable per person, per group and per fence. They arrive **within seconds** over a connection the app keeps to your own server: no Google services, no push service, nothing extra to install. |
+| Reliability | Restarts after reboot. The app walks you through "Allow all the time" and the battery-saver exemption. The dashboard shows each phone's app version and anything that could stop it sharing, and others are told if a phone goes quiet for hours. Low battery? The phone updates less often so it lasts longer. |
+| Backups | The server keeps a daily copy of its data for a week, and the dashboard can download one any time. |
 | License | GPLv3. All dependencies are open source. |
 
 ## 1. Run the server
@@ -72,6 +73,8 @@ If the app says the server is out of date (for example SOS or Check in are missi
 | `INVITE_HOURS` | `72` | How long an invite link works. |
 | `LISTEN` | `:8080` | Address and port inside the container. |
 | `DATA_DIR` | `/data` | Where `thereabouts.json` is kept. Back up this one file. |
+| `BACKUP_DAYS` | `7` | Daily copies of the data file kept in `DATA_DIR/backups`. `0` turns them off. |
+| `SILENCE_HOURS` | `6` | Tell people when a phone that shares its location hasn't been in touch for this many hours. `0` turns it off. |
 
 ### Reaching it from phones (pick one)
 
@@ -124,10 +127,22 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 - **Fences**: long-press the map to add a fence, or use **Add a fence** in Settings → Fences and search for an address or use where you are. Tap a fence on the map or in Settings → Fences to change or delete it. The dashboard can add them too (Fences tab → **+ Add fence**: search for an address or pick a spot on the map). Arrivals are announced right away. Departures wait until someone is clearly outside, with a buffer zone, so GPS jitter at the edge doesn't cause false alerts. In Settings → Fences you choose whether your own arrivals are announced and which alerts you get, and can mute single fences.
 - **Trail** (opt-in): in Settings → Trail, choose to keep your trail for 6, 12 or 24 hours. When someone taps you in the list, they see where you've been as a line on the map. Only people who can see your location can see it, and choosing **Off** deletes it.
 - **Check in**: tap **Check in** to send "I'm here" with your location and an optional note ("Made it home").
+- **Choosing whose alerts you get**: Settings → Alerts → **Who you get alerts about** has a switch per person (covers arrivals, departures, check-ins, low battery and quiet-phone alerts; an SOS always gets through). Settings → Fences has a switch per group and per fence. An arrival or departure only reaches you if the person, the group and the fence are all switched on. These choices stay on your phone.
+- **Fence alert hours**: when adding or editing a fence (app or dashboard), turn on **Only alert at certain times** and choose days and hours, e.g. School on weekdays 07:00–17:00. Outside those hours nobody is notified, but the map still shows "At School".
+- **Your icon**: Settings → Account → **Your icon** puts an emoji on your map pin instead of your initial. The admin can also set it in the dashboard (**⋯ → Set emoji…**).
+- **Quiet phones**: if a phone that shares its location hasn't been in touch for 6 hours (`SILENCE_HOURS`), the people it shares with get one alert ("Sam's phone hasn't been in touch for a while"), with where it was last. Paused phones are left alone.
+- **Battery saver** (Settings → Sharing, on by default): below 20% and not charging, your phone updates every 15 minutes instead of more often. Others see "saving battery". An SOS still updates every 15 seconds.
+- **Phone health** (dashboard): under each person you see their app version, when their phone was last in touch, and warnings such as "Location not 'Allow all the time'" or "Battery restrictions on".
 - **Groups**: if you're in more than one group, chips at the top of the map show one group at a time. In Settings → Groups you choose per group whether to share your location (for example share with Family but not with Friends). Someone already signed in can tap another group's invite link (or use **Join another group…** in Settings → Groups) to join it as themselves.
 - **Wi-Fi positioning** (Settings → Sharing, off by default): for tablets and phones that can't find their own location. When there's no fix, the app sends the hardware addresses and signal strengths of nearby Wi-Fi networks to [beaconDB](https://beacondb.net), a free community service, and uses the rough location it answers with. Nothing about you or your account is sent, and networks named `…_nomap` are skipped.
 - **Settings** is split into pages: Sharing, Groups, Fences, Alerts, Trail, Account, Phone setup and About. Each feature has its own on/off switches, for example to hide the SOS bar or Check in button, or to stop a kind of alert.
 - **Leave this server** (Settings → About): removes you from the server.
+
+### Backups and restoring
+
+The server writes a copy of `thereabouts.json` to `DATA_DIR/backups` once a day and keeps the last 7. **Download backup** at the bottom of the dashboard gives you a copy right now. Backups contain password and device-token hashes (not the passwords themselves), so keep them as safe as the server.
+
+To restore: stop the container, replace `DATA_DIR/thereabouts.json` with the backup (rename it to `thereabouts.json`), and start it again.
 
 ## Upgrading from Libre360
 

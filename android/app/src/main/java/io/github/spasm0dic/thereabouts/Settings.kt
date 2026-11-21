@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -72,6 +73,7 @@ import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import java.io.IOException
 
@@ -116,6 +118,9 @@ fun SettingsScreen(
     onPasswordSaved: (String) -> Unit,
     onBack: () -> Unit,
     onLeave: () -> Unit,
+    members: List<Member> = emptyList(),
+    myId: String = "",
+    onProfileChanged: () -> Unit = {},
 ) {
     var pageName by rememberSaveable { mutableStateOf<String?>(null) }
     val page = pageName?.let { SettingsPage.valueOf(it) }
@@ -161,9 +166,10 @@ fun SettingsScreen(
                 SettingsPage.Sharing -> SharingPage(prefs, sharing, onSharingChange)
                 SettingsPage.Groups -> GroupsPage(prefs, sharing, circles, onCircleSharingChange, onCirclesChanged)
                 SettingsPage.Fences -> FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
-                SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange)
+                SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
                 SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange)
-                SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved)
+                SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved, members.find { it.id == myId },
+                    supports("emoji"), onProfileChanged)
                 SettingsPage.Phone -> PhonePage(perms)
                 SettingsPage.About -> AboutPage(prefs, serverVersion, onLeave)
             }
@@ -186,7 +192,7 @@ private fun menuSummary(
     SettingsPage.Sharing -> if (sharing) "On, every ${plural(prefs.intervalMinutes, "minute")}" else "Paused"
     SettingsPage.Groups -> circles.joinToString(", ") { it.name }.ifEmpty { "Who sees whom" }
     SettingsPage.Fences -> if (places.isEmpty()) "Alerts when people arrive or leave" else places.joinToString(", ") { it.name }
-    SettingsPage.Alerts -> "SOS, check-ins, low battery"
+    SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, low battery, who you hear about" else "$it ${if (it == 1) "person" else "people"} muted" }
     SettingsPage.Trail -> when (trailHours) {
         null -> "Where you've been recently"
         0 -> "Off"
@@ -234,6 +240,19 @@ private fun SharingPage(prefs: Prefs, sharing: Boolean, onSharingChange: (Boolea
                 Text(plural(minutes, "minute"), Modifier.padding(start = 12.dp))
             }
         }
+    }
+    SettingsCard("Battery") {
+        var saver by remember { mutableStateOf(prefs.batterySaver) }
+        SwitchRow(
+            title = "Update less often when my battery is low",
+            detail = "Below ${LocationService.SAVER_LEVEL}% and not charging, updates slow to every ${LocationService.SAVER_INTERVAL_MIN} minutes so your phone lasts longer. Others see \"saving battery\". An SOS always updates every 15 seconds.",
+            checked = saver,
+            onChange = {
+                saver = it
+                prefs.batterySaver = it
+                LocationService.start(context)
+            },
+        )
     }
     SettingsCard("Wi-Fi positioning") {
         SwitchRow(
@@ -344,7 +363,7 @@ private fun FencesPage(
                     Text(p.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val size = if (p.radius < 1000) "${p.radius.toInt()} m" else "${p.radius / 1000} km"
                     val group = if (circles.size > 1) groupName[p.circleId]?.let { " · $it" } ?: "" else ""
-                    Hint(size + group)
+                    Hint(size + group + (p.schedule?.let { " · " + scheduleSummary(it) } ?: ""))
                 }
                 Switch(
                     checked = p.id !in mutedPlaces,
@@ -357,6 +376,23 @@ private fun FencesPage(
         }
         FilledTonalButton(onClick = { onEditPlace(PlaceEdit.Add()) }, modifier = Modifier.padding(top = 8.dp)) { Text("Add a fence…") }
         Hint("You can also long-press the map to add one at that spot.")
+    }
+    if (circles.size > 1) {
+        var mutedGroups by remember { mutableStateOf(prefs.mutedGroups) }
+        SettingsCard("Fence alerts by group") {
+            Hint("Switch a group off to stop alerts about all of its fences on this phone.")
+            circles.forEach { c ->
+                SwitchRow(
+                    title = c.name,
+                    detail = "",
+                    checked = c.id !in mutedGroups,
+                    onChange = { on ->
+                        mutedGroups = if (on) mutedGroups - c.id else mutedGroups + c.id
+                        prefs.mutedGroups = mutedGroups
+                    },
+                )
+            }
+        }
     }
     SettingsCard("Fence alerts") {
         SwitchRow(
@@ -382,7 +418,13 @@ private fun FencesPage(
 }
 
 @Composable
-private fun AlertsPage(prefs: Prefs, features: Set<String>?, shareLowBattery: Boolean?, onShareLowBatteryChange: (Boolean) -> Unit) {
+private fun AlertsPage(
+    prefs: Prefs,
+    features: Set<String>?,
+    shareLowBattery: Boolean?,
+    onShareLowBatteryChange: (Boolean) -> Unit,
+    others: List<Member>,
+) {
     val context = LocalContext.current
     var notifyLowBattery by remember { mutableStateOf(prefs.notifyLowBattery) }
     var lowBatteryThreshold by remember { mutableIntStateOf(prefs.lowBatteryThreshold) }
@@ -393,6 +435,40 @@ private fun AlertsPage(prefs: Prefs, features: Set<String>?, shareLowBattery: Bo
     var showCheckIn by remember { mutableStateOf(prefs.showCheckInButton) }
     var notifyCheckIn by remember { mutableStateOf(prefs.notifyCheckIn) }
     fun supports(f: String) = features == null || f in features
+    var mutedPeople by remember { mutableStateOf(prefs.mutedPeople) }
+    var notifySilent by remember { mutableStateOf(prefs.notifySilent) }
+
+    if (others.isNotEmpty()) {
+        SettingsCard("Who you get alerts about") {
+            Hint("Switch someone off to stop their arrivals, departures, check-ins and battery alerts on this phone. Their SOS always gets through.")
+            others.forEach { m ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    MiniAvatar(m)
+                    Box(Modifier.weight(1f).padding(start = 12.dp)) {
+                        SwitchRow(
+                            title = m.name,
+                            detail = if (m.id in mutedPeople) "Muted (except SOS)" else "",
+                            checked = m.id !in mutedPeople,
+                            onChange = { on ->
+                                mutedPeople = if (on) mutedPeople - m.id else mutedPeople + m.id
+                                prefs.mutedPeople = mutedPeople
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (supports("silence")) {
+        SettingsCard("Quiet phones") {
+            SwitchRow(
+                title = "Tell me when someone's phone goes quiet",
+                detail = "If a phone that shares its location hasn't been in touch for several hours (switched off, flat battery, or the app was stopped).",
+                checked = notifySilent,
+                onChange = { notifySilent = it; prefs.notifySilent = it },
+            )
+        }
+    }
 
     if (supports("sos")) {
         SettingsCard("SOS") {
@@ -528,10 +604,31 @@ private fun TrailPage(prefs: Prefs, trailHours: Int?, onTrailHoursChange: (Int) 
 }
 
 @Composable
-private fun AccountPage(prefs: Prefs, username: String, hasPassword: Boolean?, onPasswordSaved: (String) -> Unit) {
+private fun AccountPage(
+    prefs: Prefs,
+    username: String,
+    hasPassword: Boolean?,
+    onPasswordSaved: (String) -> Unit,
+    me: Member?,
+    canEmoji: Boolean,
+    onProfileChanged: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var nameMsg by remember { mutableStateOf<String?>(null) }
+    var emoji by remember(me?.emoji) { mutableStateOf(me?.emoji.orEmpty()) }
+    var emojiMsg by remember { mutableStateOf<String?>(null) }
+    fun saveEmoji(value: String) {
+        scope.launch {
+            emojiMsg = try {
+                Api(prefs.serverUrl, prefs.token).setEmoji(value)
+                onProfileChanged()
+                if (value.isEmpty()) "Showing your initial" else "Saved"
+            } catch (e: IOException) {
+                e.message ?: "Couldn't save"
+            }
+        }
+    }
 
     SettingsCard("Sign-in") { AccountSection(prefs, username, hasPassword, onPasswordSaved) }
     SettingsCard("Your name") {
@@ -558,6 +655,58 @@ private fun AccountPage(prefs: Prefs, username: String, hasPassword: Boolean?, o
         }
         nameMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
+    if (canEmoji && me != null) {
+        SettingsCard("Your icon") {
+            Hint("Your map pin shows your initial. Pick an emoji to show instead: tap the box and use your keyboard's emoji key.")
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
+                MiniAvatar(me.copy(emoji = emoji.trim()), size = 48)
+                OutlinedTextField(
+                    value = emoji,
+                    onValueChange = { v -> emoji = lastEmoji(v); emojiMsg = null },
+                    placeholder = { Text("🙂") },
+                    singleLine = true,
+                    modifier = Modifier.width(90.dp),
+                )
+                Button(enabled = emoji.isNotBlank() && emoji.trim() != me.emoji, onClick = { saveEmoji(emoji.trim()) }) { Text("Save") }
+            }
+            if (me.emoji.isNotEmpty()) {
+                TextButton(onClick = { emoji = ""; saveEmoji("") }) { Text("Use my initial instead") }
+            }
+            emojiMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
+
+/** Keeps only the last emoji typed (an emoji can be several code points, e.g. skin tones or flags). */
+private fun lastEmoji(v: String): String {
+    val it = java.text.BreakIterator.getCharacterInstance()
+    it.setText(v)
+    val end = it.last()
+    val start = it.previous()
+    return if (start == java.text.BreakIterator.DONE) v else v.substring(start, end)
+}
+
+/** A small coloured circle with someone's emoji or initial. */
+@Composable
+internal fun MiniAvatar(m: Member, size: Int = 36) {
+    Surface(shape = CircleShape, color = androidx.compose.ui.graphics.Color(parseColor(m.color)), modifier = Modifier.size(size.dp)) {
+        Box(contentAlignment = Alignment.Center) {
+            if (m.emoji.isNotEmpty()) Text(m.emoji, fontSize = (size * 0.5).sp)
+            else Text(initialOf(m.name), color = androidx.compose.ui.graphics.Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
+    }
+}
+
+/** "Mon–Fri 07:00–17:00" */
+fun scheduleSummary(sc: FenceSchedule): String {
+    val names = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+    val days = when (sc.days) {
+        setOf(1, 2, 3, 4, 5) -> "Mon–Fri"
+        setOf(0, 6) -> "Weekends"
+        (0..6).toSet() -> "Every day"
+        else -> listOf(1, 2, 3, 4, 5, 6, 0).filter { it in sc.days }.joinToString(" ") { names[it] }
+    }
+    return if (sc.from == sc.to) "$days, all day" else "$days ${sc.from}–${sc.to}"
 }
 
 @Composable

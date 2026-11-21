@@ -34,6 +34,8 @@ type Config struct {
 	TileAttribution string
 	GeocoderURL     string
 	InviteTTL       time.Duration
+	SilenceAfter    time.Duration // 0 = no "hasn't been in touch" alerts
+	BackupDays      int           // daily backups kept; 0 = none
 }
 
 func env(key, def string) string {
@@ -59,6 +61,15 @@ func loadConfig() (Config, error) {
 		return c, errors.New("INVITE_HOURS must be a whole number of hours, at least 1")
 	}
 	c.InviteTTL = time.Duration(hours) * time.Hour
+	silence, err := strconv.Atoi(env("SILENCE_HOURS", "6"))
+	if err != nil || silence < 0 {
+		return c, errors.New("SILENCE_HOURS must be a whole number of hours (0 turns the alert off)")
+	}
+	c.SilenceAfter = time.Duration(silence) * time.Hour
+	c.BackupDays, err = strconv.Atoi(env("BACKUP_DAYS", "7"))
+	if err != nil || c.BackupDays < 0 {
+		return c, errors.New("BACKUP_DAYS must be a whole number (0 turns backups off)")
+	}
 	if len(c.AdminPassword) < 8 {
 		return c, errors.New("ADMIN_PASSWORD must be set and at least 8 characters long")
 	}
@@ -88,7 +99,7 @@ func main() {
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			log.Fatalf("can't write to %s (%v). The container runs as user %d; make sure that user owns the data folder, "+
-				"or run the container as the folder's owner (e.g. user: \"568:568\" on TrueNAS).", cfg.DataDir, err, os.Getuid())
+				"or run the container as the folder's owner (user: in docker-compose.yml).", cfg.DataDir, err, os.Getuid())
 		}
 		log.Fatalf("opening data file in %s: %v", cfg.DataDir, err)
 	}
@@ -102,6 +113,11 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+
+	bg, stopBg := context.WithCancel(context.Background())
+	defer stopBg()
+	go store.WatchSilence(bg, cfg.SilenceAfter)
+	go store.KeepBackups(bg, filepath.Join(cfg.DataDir, "backups"), cfg.BackupDays)
 
 	go func() {
 		log.Printf("Thereabouts %s listening on %s (data in %s)", version, cfg.Listen, cfg.DataDir)

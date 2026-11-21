@@ -163,7 +163,7 @@ fun OsmMap(
             }
             val stale = System.currentTimeMillis() - loc.time > STALE_MS
             marker.position = GeoPoint(loc.lat, loc.lon)
-            marker.icon = BitmapDrawable(context.resources, avatarBitmap(context, m.name, m.color, stale, sos = m.sosSince > 0))
+            marker.icon = BitmapDrawable(context.resources, avatarBitmap(context, m.name, m.color, stale, sos = m.sosSince > 0, emoji = m.emoji))
             marker.title = m.name
             marker.snippet = statusOf(m)
         }
@@ -200,8 +200,8 @@ fun parseColor(hex: String): Int = runCatching { Color.parseColor(hex) }.getOrDe
 
 fun initialOf(name: String) = name.trim().take(1).uppercase().ifEmpty { "?" }
 
-/** A coloured circle with the person's initial, used as their map pin. */
-fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, sos: Boolean = false): Bitmap {
+/** A coloured circle with the person's emoji or initial, used as their map pin. */
+fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, sos: Boolean = false, emoji: String = ""): Bitmap {
     val d = context.resources.displayMetrics.density
     // An SOS pin is bigger, with a thick red ring, so it stands out on the map.
     val ring = if (sos) 7 * d else 0f
@@ -223,10 +223,15 @@ fun avatarBitmap(context: Context, name: String, color: String, faded: Boolean, 
     p.color = parseColor(color); p.alpha = alpha
     c.drawCircle(r, r, inner - 5 * d, p)
     p.color = Color.WHITE; p.alpha = alpha
-    p.textSize = 17 * d
-    p.typeface = Typeface.DEFAULT_BOLD
     p.textAlign = Paint.Align.CENTER
-    c.drawText(initialOf(name), r, r - (p.descent() + p.ascent()) / 2, p)
+    if (emoji.isNotEmpty()) {
+        p.textSize = 19 * d
+        c.drawText(emoji, r, r - (p.descent() + p.ascent()) / 2, p)
+    } else {
+        p.textSize = 17 * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        c.drawText(initialOf(name), r, r - (p.descent() + p.ascent()) / 2, p)
+    }
     return bmp
 }
 

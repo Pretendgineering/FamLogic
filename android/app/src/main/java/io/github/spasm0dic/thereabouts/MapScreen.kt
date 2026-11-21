@@ -88,6 +88,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalAutofillManager
@@ -273,6 +274,7 @@ fun MapScreen(
             if (e == Lifecycle.Event.ON_RESUME) {
                 perms = PermissionState.read(context)
                 LocationService.start(context) // it decides what's needed (sharing, alerts, SOS)
+                scope.launch { Health.report(context, prefs) } // e.g. a permission was just fixed
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -365,7 +367,7 @@ fun MapScreen(
         CheckInDialog(prefs, onDone = { showCheckIn = false })
     }
     placeEdit?.let { edit ->
-        PlaceDialog(prefs, edit, circles, defaultCircle = circleFilter, canSearch = features?.contains("geocode") == true, onDone = { changed ->
+        PlaceDialog(prefs, edit, circles, defaultCircle = circleFilter, canSearch = features?.contains("geocode") == true, canSchedule = features?.contains("schedules") == true, onDone = { changed ->
             placeEdit = null
             if (changed) scope.launch { refresh() }
         })
@@ -448,6 +450,9 @@ fun MapScreen(
                 }
             },
             onBack = { showSettings = false; scope.launch { refresh() } },
+            members = members,
+            myId = prefs.memberId,
+            onProfileChanged = { scope.launch { refresh() } },
             onLeave = {
                 scope.launch {
                     runCatching { Api(prefs.serverUrl, prefs.token).leave() }
@@ -664,7 +669,10 @@ private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> U
         Box(
             Modifier.size(40.dp).clip(CircleShape).background(Color(parseColor(m.color)).copy(alpha = if (stale) 0.5f else 1f)),
             contentAlignment = Alignment.Center,
-        ) { Text(initialOf(m.name), color = Color.White, fontWeight = FontWeight.Bold) }
+        ) {
+            if (m.emoji.isNotEmpty()) Text(m.emoji, fontSize = 20.sp)
+            else Text(initialOf(m.name), color = Color.White, fontWeight = FontWeight.Bold)
+        }
         Column(Modifier.weight(1f)) {
             Text(if (isMe) "${m.name} (you)" else m.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
@@ -693,7 +701,11 @@ private fun statusLine(m: Member, me: Member?, tick: Int): String {
     if (m.place.isNotEmpty()) parts += "At ${m.place}"
     val age = System.currentTimeMillis() - loc.time
     parts += if (age < 60_000) "Just now" else DateUtils.getRelativeTimeSpanString(loc.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
-    if (loc.battery >= 0) parts += "${loc.battery}%" + if (loc.charging) " charging" else ""
+    if (loc.battery >= 0) parts += "${loc.battery}%" + when {
+        loc.charging -> " charging"
+        loc.saving -> " (saving battery)"
+        else -> ""
+    }
     val myLoc = me?.loc
     if (me != null && me.id != m.id && myLoc != null && !me.paused) {
         val out = FloatArray(1)

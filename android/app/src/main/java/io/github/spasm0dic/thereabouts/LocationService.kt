@@ -76,6 +76,7 @@ class LocationService : Service() {
             val (pct, charging) = batteryState(intent)
             val previous = lastBattery
             lastBattery = pct
+            updateSaving(pct, charging)
             if (pct < 0 || previous < 0 || charging) return
             val crossed = Prefs.LOW_BATTERY_CHOICES.any { level -> previous > level && pct <= level }
             if (crossed) lastFix?.let { upload(it, waitForTurn = true) }
@@ -118,7 +119,9 @@ class LocationService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        batteryState().let { (pct, charging) -> saving = prefs.batterySaver && !prefs.sosActive && !charging && pct in 0..SAVER_LEVEL }
         if (share) startUpdates() else stopUpdates()
+        startHealthLoop()
         if (share && prefs.wifiPositioning) startWifiLoop() else wifiJob?.cancel()
         if (prefs.instantAlerts) startAlertsLoop() else alertsJob?.cancel()
         startSosWork()
@@ -136,7 +139,23 @@ class LocationService : Service() {
 
     // ---- location sharing ----
 
-    private fun intervalMs() = if (prefs.sosActive) SOS_INTERVAL_MS else prefs.intervalMinutes * 60_000L
+    private fun intervalMs() = when {
+        prefs.sosActive -> SOS_INTERVAL_MS
+        saving -> maxOf(prefs.intervalMinutes, SAVER_INTERVAL_MIN) * 60_000L
+        else -> prefs.intervalMinutes * 60_000L
+    }
+
+    /** Updating less often because the battery is low (see [updateSaving]). */
+    private var saving = false
+
+    /** Below [SAVER_LEVEL]% and not charging, update every [SAVER_INTERVAL_MIN] minutes (unless SOS). */
+    private fun updateSaving(pct: Int, charging: Boolean) {
+        val now = prefs.batterySaver && !prefs.sosActive && !charging && pct in 0..SAVER_LEVEL
+        if (now == saving) return
+        saving = now
+        Log.i(TAG, if (now) "Battery low: updating less often" else "Battery saver off")
+        if (locating) startUpdates() // re-request with the new interval, and tell the server right away
+    }
 
     @SuppressLint("MissingPermission") // checked in onStartCommand
     private fun startUpdates() {
@@ -206,7 +225,7 @@ class LocationService : Service() {
             val (battery, charging) = batteryState()
             val alerts = Api(prefs.serverUrl, prefs.token).sendLocation(
                 loc.latitude, loc.longitude, loc.accuracy, loc.speed, loc.time, battery, charging,
-                since = prefs.eventCursor,
+                since = prefs.eventCursor, saving = saving,
             )
             Alerts.handle(this@LocationService, alerts)
             lastSentElapsed = SystemClock.elapsedRealtime()
@@ -218,6 +237,21 @@ class LocationService : Service() {
             Log.i(TAG, "Upload failed: ${e.message}")
         } finally {
             uploadLock.unlock()
+        }
+    }
+
+    // ---- phone health ----
+
+    private var healthJob: Job? = null
+
+    /** Reports app version and problems now and every few hours (only sent when changed or stale). */
+    private fun startHealthLoop() {
+        if (healthJob?.isActive == true) return
+        healthJob = scope.launch {
+            while (isActive) {
+                Health.report(this@LocationService, prefs)
+                delay(60 * 60_000L)
+            }
         }
     }
 
@@ -409,6 +443,8 @@ class LocationService : Service() {
         private const val CHANNEL_ID = "sharing"
         private const val NOTIFICATION_ID = 1
         private const val EXTRA_FROM_BACKGROUND = "from_background"
+        const val SAVER_LEVEL = 20
+        const val SAVER_INTERVAL_MIN = 15
         private const val SOS_INTERVAL_MS = 15_000L
         private const val WAIT_SECONDS = 50 // under the 60 s idle timeout of common reverse proxies
         private const val MIN_BACKOFF_MS = 5_000L

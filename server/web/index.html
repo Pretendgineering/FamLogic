@@ -63,6 +63,7 @@
         </section>
 
         <div class="aside-foot">
+          <a class="button secondary wide" id="backup-btn" href="/api/admin/backup" download title="The whole data file. It contains password hashes: keep it somewhere safe.">Download backup</a>
           <button id="logout-btn" class="secondary wide">Log out</button>
         </div>
       </aside>
@@ -103,6 +104,17 @@
       <label>Name <input id="place-name" maxlength="40" required placeholder="e.g. Home, School, Work"></label>
       <label>Size (radius in metres) <input id="place-radius" type="number" min="30" max="5000" step="10" value="150" required></label>
       <label id="place-circle-label">Group <select id="place-circle"></select></label>
+      <div class="schedule" id="place-schedule-box">
+        <label class="check"><input type="checkbox" id="place-sched-on"> Only alert at certain times</label>
+        <div id="place-sched" hidden>
+          <div class="days" id="place-days"></div>
+          <div class="times">
+            <label>From <input type="time" id="place-from" value="07:00"></label>
+            <label>To <input type="time" id="place-to" value="17:00"></label>
+          </div>
+          <p class="muted small">Where people are still shows on the map. Same start and end means all day; an earlier end time means overnight.</p>
+        </div>
+      </div>
       <div class="row"><button type="submit">Save</button><button type="button" class="secondary" data-close>Cancel</button></div>
     </form>
   </dialog>

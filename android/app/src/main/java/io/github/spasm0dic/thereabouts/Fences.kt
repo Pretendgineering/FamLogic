@@ -19,7 +19,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -60,6 +62,7 @@ fun PlaceDialog(
     defaultCircle: String,
     canSearch: Boolean,
     onDone: (changed: Boolean) -> Unit,
+    canSchedule: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -87,6 +90,17 @@ fun PlaceDialog(
     var searching by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    // Alert hours (optional).
+    var scheduleOn by remember { mutableStateOf(existing?.schedule != null) }
+    var days by remember { mutableStateOf(existing?.schedule?.days ?: setOf(1, 2, 3, 4, 5)) }
+    var from by remember { mutableStateOf(existing?.schedule?.from ?: "07:00") }
+    var to by remember { mutableStateOf(existing?.schedule?.to ?: "17:00") }
+    fun pickTime(current: String, set: (String) -> Unit) {
+        val (h, m) = current.split(":").map { it.toIntOrNull() ?: 0 }
+        android.app.TimePickerDialog(context, { _, hh, mm -> set("%02d:%02d".format(hh, mm)) }, h, m,
+            android.text.format.DateFormat.is24HourFormat(context)).show()
+    }
+    val schedule = if (scheduleOn) FenceSchedule(days, from, to, java.util.TimeZone.getDefault().id) else null
 
     fun run(block: suspend () -> Unit) {
         busy = true
@@ -211,6 +225,42 @@ fun PlaceDialog(
                         )
                     }
                 }
+                if (canSchedule) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Only alert at certain times", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "E.g. school days, 07:00–17:00. Where people are still shows on the map.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = scheduleOn, onCheckedChange = { scheduleOn = it })
+                    }
+                    if (scheduleOn) {
+                        val labels = listOf(1 to "M", 2 to "T", 3 to "W", 4 to "T", 5 to "F", 6 to "S", 0 to "S")
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            labels.forEach { (d, label) ->
+                                FilterChip(
+                                    selected = d in days,
+                                    onClick = { days = if (d in days) days - d else days + d },
+                                    label = { Text(label) },
+                                )
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("From")
+                            OutlinedButton(onClick = { pickTime(from) { from = it } }) { Text(from) }
+                            Text("to")
+                            OutlinedButton(onClick = { pickTime(to) { to = it } }) { Text(to) }
+                        }
+                        if (from == to) {
+                            Text("Same start and end: all day on those days.", style = MaterialTheme.typography.bodySmall)
+                        } else if (to < from) {
+                            Text("Overnight: from $from until $to the next morning.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
                 if (existing == null && circles.size > 1) {
                     Text("Group", style = MaterialTheme.typography.titleSmall)
                     circles.forEach { c ->
@@ -226,13 +276,13 @@ fun PlaceDialog(
             }
         },
         confirmButton = {
-            FilledTonalButton(enabled = !busy && name.isNotBlank() && circleId.isNotEmpty() && spot != null, onClick = {
+            FilledTonalButton(enabled = !busy && name.isNotBlank() && circleId.isNotEmpty() && spot != null && (!scheduleOn || days.isNotEmpty()), onClick = {
                 val (lat, lon) = spot ?: return@FilledTonalButton
                 run {
                     val api = Api(prefs.serverUrl, prefs.token)
                     when (edit) {
-                        is PlaceEdit.Add -> api.createPlace(circleId, name.trim(), lat, lon, radius)
-                        is PlaceEdit.Edit -> api.updatePlace(edit.place.id, name.trim(), radius, lat, lon)
+                        is PlaceEdit.Add -> api.createPlace(circleId, name.trim(), lat, lon, radius, schedule, canSchedule)
+                        is PlaceEdit.Edit -> api.updatePlace(edit.place.id, name.trim(), radius, lat, lon, schedule, canSchedule)
                     }
                 }
             }) { Text("Save") }

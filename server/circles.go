@@ -302,7 +302,7 @@ func (s *Store) eventVisibleLocked(e Event, viewer *Member) bool {
 		return slices.Contains(viewer.Circles, e.CircleID) && slices.Contains(sender.Circles, e.CircleID) &&
 			!sender.Paused && !slices.Contains(sender.HiddenFrom, e.CircleID)
 	}
-	if e.Type == EventBatteryLow {
+	if e.Type == EventBatteryLow || e.Type == EventSilent {
 		return sharesLocationWith(sender, viewer)
 	}
 	return len(sharedCircles(sender, viewer)) > 0

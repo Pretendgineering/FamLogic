@@ -26,6 +26,8 @@ type Location struct {
 	Charging bool    `json:"charging"`
 	Time     int64   `json:"time"`     // when the fix was taken (unix ms, from the phone)
 	Received int64   `json:"received"` // when the server got it (unix ms)
+	// The phone is updating less often to save its low battery.
+	Saving bool `json:"saving,omitempty"`
 }
 
 // Member is one person (one phone) in the family.
@@ -33,6 +35,7 @@ type Member struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Color     string    `json:"color"`
+	Emoji     string    `json:"emoji,omitempty"` // shown instead of the initial, if set
 	TokenHash string    `json:"tokenHash"`
 	CreatedAt int64     `json:"createdAt"`
 	Paused    bool      `json:"paused"`
@@ -69,6 +72,15 @@ type Member struct {
 	// Lowest low-battery level already announced in the current discharge
 	// (0 = none yet). Reset once the battery is back above batteryRearmLevel.
 	BatteryAlertedAt int `json:"batteryAlertedAt,omitempty"`
+
+	// Phone health (see health.go): app version and problems the phone reports,
+	// when it last reported them, when it was last in touch at all, and when a
+	// "hasn't been in touch" alert went out (0 = none for this silence).
+	App         string   `json:"app,omitempty"`
+	Issues      []string `json:"issues,omitempty"`
+	StatusAt    int64    `json:"statusAt,omitempty"`
+	LastContact int64    `json:"lastContact,omitempty"`
+	SilentSince int64    `json:"silentSince,omitempty"`
 }
 
 // SharesLowBattery reports whether others get told when this person's battery is low.
@@ -110,6 +122,8 @@ type Store struct {
 	path    string
 	d       data
 	changed chan struct{} // closed and replaced whenever an event is added
+	// When the silence watch started (unix ms; see health.go).
+	watchStart int64
 }
 
 var palette = []string{"#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6", "#9a6324", "#469990", "#808000"}
@@ -328,6 +342,7 @@ type MemberPatch struct {
 	Name            *string
 	Paused          *bool
 	Color           *string
+	Emoji           *string
 	ShareLowBattery *bool
 	ShareArrivals   *bool
 }
@@ -346,6 +361,9 @@ func (s *Store) UpdateMember(id string, p MemberPatch) (*Member, error) {
 	}
 	if p.Color != nil {
 		m.Color = *p.Color
+	}
+	if p.Emoji != nil {
+		m.Emoji = *p.Emoji
 	}
 	if p.Paused != nil {
 		m.Paused = *p.Paused

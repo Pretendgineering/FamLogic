@@ -54,7 +54,7 @@ object Alerts {
         when (e.type) {
             "battery_low" -> {
                 // The server raises one alert at 15% and one at 10%; show the one this phone asked for.
-                if (!prefs.notifyLowBattery || e.level != prefs.lowBatteryThreshold) return
+                if (!prefs.notifyLowBattery || e.level != prefs.lowBatteryThreshold || e.memberId in prefs.mutedPeople) return
                 val pct = if (e.battery >= 0) "${e.battery}%" else "low"
                 notify(context, CHANNEL_ALERTS, eventId(e), "${e.name}'s battery is at $pct", "Their phone may turn off soon.", e.memberId)
             }
@@ -72,16 +72,24 @@ object Alerts {
                 notify(context, CHANNEL_ALERTS, sosId(e.memberId), "${e.name} is OK", "They ended their SOS.", e.memberId)
             }
             "checkin" -> {
-                if (!prefs.notifyCheckIn) return
+                if (!prefs.notifyCheckIn || e.memberId in prefs.mutedPeople) return
                 val text = e.note.ifBlank { "Tap to see where." }
                 notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} checked in", text, e.memberId)
             }
             "arrived", "left" -> {
                 val arriving = e.type == "arrived"
                 if (arriving && !prefs.notifyArrivals || !arriving && !prefs.notifyDepartures) return
-                if (e.placeId in prefs.mutedPlaces) return
+                if (e.placeId in prefs.mutedPlaces || e.memberId in prefs.mutedPeople || e.circleId in prefs.mutedGroups) return
                 val title = if (arriving) "${e.name} arrived at ${e.place}" else "${e.name} left ${e.place}"
                 notify(context, CHANNEL_ALERTS, eventId(e), title, "Tap to see the map.", e.memberId)
+            }
+            "silent" -> {
+                if (!prefs.notifySilent || e.memberId in prefs.mutedPeople) return
+                val battery = if (e.battery >= 0) " Their battery was at ${e.battery}%." else ""
+                notify(
+                    context, CHANNEL_ALERTS, eventId(e), "${e.name}'s phone hasn't been in touch for a while",
+                    "It may be off, out of battery or offline, or Thereabouts was stopped.$battery Tap to see where it was last.", e.memberId,
+                )
             }
             // Unknown types come from a newer server: ignore them.
         }

@@ -119,6 +119,26 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("wifi_positioning", false)
         set(v) = sp.edit { putBoolean("wifi_positioning", v) }
 
+    /** People whose alerts (all but SOS) this phone doesn't show. */
+    var mutedPeople: Set<String>
+        get() = sp.getStringSet("muted_people", emptySet())?.toSet() ?: emptySet()
+        set(v) = sp.edit { putStringSet("muted_people", v) }
+
+    /** Groups whose fence alerts this phone doesn't show. */
+    var mutedGroups: Set<String>
+        get() = sp.getStringSet("muted_groups", emptySet())?.toSet() ?: emptySet()
+        set(v) = sp.edit { putStringSet("muted_groups", v) }
+
+    /** Feature: "Sam's phone hasn't been in touch for hours". */
+    var notifySilent: Boolean
+        get() = sp.getBoolean("notify_silent", true)
+        set(v) = sp.edit { putBoolean("notify_silent", v) }
+
+    /** Update less often while this phone's battery is low (and not charging). */
+    var batterySaver: Boolean
+        get() = sp.getBoolean("battery_saver", true)
+        set(v) = sp.edit { putBoolean("battery_saver", v) }
+
     /** Which circle the map shows: "" for everyone. */
     var circleFilter: String
         get() = sp.getString("circle_filter", "") ?: ""

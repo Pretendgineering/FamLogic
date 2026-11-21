@@ -20,7 +20,9 @@ type Place struct {
 	Lon       float64 `json:"lon"`
 	Radius    float64 `json:"radius"` // metres
 	CreatedBy string  `json:"createdBy,omitempty"`
-	CreatedAt int64   `json:"createdAt"`
+	// When alerts are on (nil = always). See schedule.go.
+	Schedule  *Schedule `json:"schedule,omitempty"`
+	CreatedAt int64     `json:"createdAt"`
 }
 
 // Presence is whether a member is inside a place, as last decided.
@@ -103,6 +105,9 @@ func (s *Store) CreatePlace(byMember string, p Place) (*Place, error) {
 	if !validPlace(&p) {
 		return nil, ErrBadPlace
 	}
+	if p.Schedule != nil && !p.Schedule.valid() {
+		return nil, ErrBadSchedule
+	}
 	if _, ok := s.d.Circles[p.CircleID]; !ok {
 		return nil, ErrNotFound
 	}
@@ -126,8 +131,18 @@ func (s *Store) CreatePlace(byMember string, p Place) (*Place, error) {
 	return &cp, s.saveLocked()
 }
 
-// UpdatePlace renames, moves or resizes a place. byMember must be in its circle.
-func (s *Store) UpdatePlace(byMember, id string, name *string, lat, lon, radius *float64) (*Place, error) {
+// PlaceUpdate lists what to change; nil fields stay as they are.
+type PlaceUpdate struct {
+	Name             *string
+	Lat, Lon, Radius *float64
+	// SetSchedule changes the schedule to Schedule (nil = always alert).
+	SetSchedule bool
+	Schedule    *Schedule
+}
+
+// UpdatePlace renames, moves, resizes or reschedules a place. byMember must be in its circle.
+func (s *Store) UpdatePlace(byMember, id string, u PlaceUpdate) (*Place, error) {
+	name, lat, lon, radius := u.Name, u.Lat, u.Lon, u.Radius
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, ok := s.d.Places[id]
@@ -143,6 +158,12 @@ func (s *Store) UpdatePlace(byMember, id string, name *string, lat, lon, radius 
 	}
 	if radius != nil {
 		next.Radius = *radius
+	}
+	if u.SetSchedule {
+		if u.Schedule != nil && !u.Schedule.valid() {
+			return nil, ErrBadSchedule
+		}
+		next.Schedule = u.Schedule
 	}
 	if !validPlace(&next) {
 		return nil, ErrBadPlace
@@ -218,6 +239,9 @@ func (s *Store) checkPlacesLocked(m *Member, loc Location) {
 func (s *Store) placeEventLocked(kind string, m *Member, p *Place) {
 	if !m.SharesArrivals() {
 		return
+	}
+	if p.Schedule != nil && !p.Schedule.Active(time.Now()) {
+		return // outside the fence's alert hours (where they are is still tracked)
 	}
 	s.addEventLocked(Event{
 		Type: kind, MemberID: m.ID, Name: m.Name,

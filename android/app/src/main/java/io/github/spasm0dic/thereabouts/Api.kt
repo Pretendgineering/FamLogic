@@ -14,6 +14,8 @@ data class MemberLocation(
     val battery: Int,
     val charging: Boolean,
     val time: Long,
+    /** Their phone is updating less often to save its low battery. */
+    val saving: Boolean = false,
 )
 
 data class Member(
@@ -22,6 +24,8 @@ data class Member(
     val color: String,
     val paused: Boolean,
     val loc: MemberLocation?,
+    /** Shown instead of their initial, if they picked one. */
+    val emoji: String = "",
     /** When this person's active SOS started (unix ms), or 0 if none. */
     val sosSince: Long = 0,
     /** Circles this person shares with you (for yourself: all of yours). */
@@ -46,7 +50,22 @@ data class Place(
     val lat: Double,
     val lon: Double,
     val radius: Double,
+    /** When it announces arrivals and departures; null = always. */
+    val schedule: FenceSchedule? = null,
 )
+
+/** Alert hours for a fence, e.g. weekdays 07:00-17:00. Days: 0 = Sunday ... 6 = Saturday. */
+data class FenceSchedule(val days: Set<Int>, val from: String, val to: String, val tz: String) {
+    fun toJson(): JSONObject = JSONObject().put("days", org.json.JSONArray(days.sorted())).put("from", from).put("to", to).put("tz", tz)
+
+    companion object {
+        fun parse(o: JSONObject?): FenceSchedule? {
+            if (o == null) return null
+            val arr = o.optJSONArray("days") ?: return null
+            return FenceSchedule((0 until arr.length()).map { arr.getInt(it) }.toSet(), o.optString("from"), o.optString("to"), o.optString("tz"))
+        }
+    }
+}
 
 /** A circle you're in, and whether you share your location with it. */
 data class CircleInfo(val id: String, val name: String, val sharing: Boolean)
@@ -71,9 +90,10 @@ data class AppEvent(
     val time: Long,
     /** Check-in note. */
     val note: String = "",
-    /** Place alerts: the place's name and id. */
+    /** Place alerts: the place's name and id, and the circle it belongs to. */
     val place: String = "",
     val placeId: String = "",
+    val circleId: String = "",
     /** Where it happened (SOS, check-in), or 0/0 if unknown. */
     val lat: Double = 0.0,
     val lon: Double = 0.0,
@@ -230,23 +250,21 @@ class Api(private val baseUrl: String, private val token: String = "") {
         lat = p.getDouble("lat"),
         lon = p.getDouble("lon"),
         radius = p.optDouble("radius", 150.0),
+        schedule = FenceSchedule.parse(p.optJSONObject("schedule")),
     )
 
-    suspend fun createPlace(circleId: String, name: String, lat: Double, lon: Double, radius: Double): Place =
-        parsePlace(
-            request(
-                "POST", "/api/places",
-                JSONObject().put("circleId", circleId).put("name", name).put("lat", lat).put("lon", lon).put("radius", radius),
-            ),
-        )
+    /** [withSchedule]: false for servers without fence schedules (the field is left out). */
+    suspend fun createPlace(circleId: String, name: String, lat: Double, lon: Double, radius: Double, schedule: FenceSchedule?, withSchedule: Boolean): Place {
+        val body = JSONObject().put("circleId", circleId).put("name", name).put("lat", lat).put("lon", lon).put("radius", radius)
+        if (withSchedule && schedule != null) body.put("schedule", schedule.toJson())
+        return parsePlace(request("POST", "/api/places", body))
+    }
 
-    suspend fun updatePlace(id: String, name: String, radius: Double, lat: Double, lon: Double): Place =
-        parsePlace(
-            request(
-                "POST", "/api/places/" + enc(id),
-                JSONObject().put("name", name).put("radius", radius).put("lat", lat).put("lon", lon),
-            ),
-        )
+    suspend fun updatePlace(id: String, name: String, radius: Double, lat: Double, lon: Double, schedule: FenceSchedule?, withSchedule: Boolean): Place {
+        val body = JSONObject().put("name", name).put("radius", radius).put("lat", lat).put("lon", lon)
+        if (withSchedule) body.put("schedule", schedule?.toJson() ?: JSONObject.NULL)
+        return parsePlace(request("POST", "/api/places/" + enc(id), body))
+    }
 
     /** Address search (if the server offers it): "123 Main St" -> places to choose from. */
     suspend fun geocode(query: String): List<GeoResult> {
@@ -284,12 +302,13 @@ class Api(private val baseUrl: String, private val token: String = "") {
     /** Sends a fix; the reply carries any alerts newer than [since]. */
     suspend fun sendLocation(
         lat: Double, lon: Double, accuracy: Float, speed: Float, time: Long, battery: Int, charging: Boolean,
-        since: Long,
+        since: Long, saving: Boolean = false,
     ): EventBatch? {
         val body = JSONObject()
             .put("lat", lat).put("lon", lon)
             .put("acc", accuracy.toDouble()).put("speed", speed.toDouble())
             .put("time", time).put("battery", battery).put("charging", charging)
+        if (saving) body.put("saving", true)
         return parseEvents(request("POST", "/api/location?since=$since", body), since)
     }
 
@@ -303,6 +322,16 @@ class Api(private val baseUrl: String, private val token: String = "") {
 
     suspend fun setName(name: String) {
         request("POST", "/api/me", JSONObject().put("name", name))
+    }
+
+    /** One emoji shown instead of your initial; "" goes back to the initial. */
+    suspend fun setEmoji(emoji: String) {
+        request("POST", "/api/me", JSONObject().put("emoji", emoji))
+    }
+
+    /** Tells the server this phone's app version and anything that could stop it sharing. */
+    suspend fun sendStatus(app: String, issues: List<String>) {
+        request("POST", "/api/me/status", JSONObject().put("app", app).put("issues", org.json.JSONArray(issues)))
     }
 
     suspend fun leave() {
@@ -412,6 +441,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 note = e.optString("note"),
                 place = e.optString("place"),
                 placeId = e.optString("placeId"),
+                circleId = e.optString("circleId"),
                 lat = e.optDouble("lat", 0.0),
                 lon = e.optDouble("lon", 0.0),
             )
@@ -434,6 +464,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             name = o.optString("name", "?"),
             color = o.optString("color", "#4363d8"),
             paused = o.optBoolean("paused", false),
+            emoji = o.optString("emoji"),
             sosSince = o.optLong("sosSince", 0),
             circles = o.optJSONArray("circles")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
             place = o.optString("place"),
@@ -446,6 +477,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
                     battery = it.optInt("battery", -1),
                     charging = it.optBoolean("charging", false),
                     time = it.optLong("time", 0),
+                    saving = it.optBoolean("saving", false),
                 )
             },
         )

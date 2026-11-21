@@ -119,6 +119,24 @@ function ago(ms) {
   return `${Math.round(h / 24)} d ago`;
 }
 
+const ISSUES = {
+  location: "No location permission",
+  background: "Location not 'Allow all the time'",
+  battery: "Battery restrictions on",
+  notifications: "Notifications off",
+  location_off: "Location off on the phone",
+};
+
+// "App 0.9.0 · in touch 2 min ago", plus warnings about anything that could stop sharing.
+function health(m) {
+  const line = [m.app ? `App ${m.app}` : null, m.lastContact ? `in touch ${ago(m.lastContact)}` : null].filter(Boolean).join(" · ");
+  const warns = (m.issues || []).map((i) => ISSUES[i] || i);
+  if (m.silent) warns.unshift(`Quiet since ${ago(m.lastContact)}`);
+  return el("div", {},
+    line ? el("div", { class: "sub" }, line) : null,
+    warns.length ? el("div", { class: "health" }, ...warns.map((w) => el("span", { class: "warn" }, w))) : null);
+}
+
 // "@taylor · signed in 2 h ago", or a hint when they haven't set a password yet.
 function account(m) {
   if (!m.hasPassword) return "No password yet (they can set one in the app)";
@@ -143,7 +161,7 @@ function describe(m) {
   if (m.paused) return "Sharing paused";
   if (!m.loc) return "No location yet";
   const parts = [ago(m.loc.time)];
-  if (m.loc.battery >= 0) parts.push(`${m.loc.battery}%${m.loc.charging ? " ⚡" : ""}`);
+  if (m.loc.battery >= 0) parts.push(`${m.loc.battery}%${m.loc.charging ? " ⚡" : m.loc.saving ? " (saving battery)" : ""}`);
   return parts.join(" · ");
 }
 
@@ -202,13 +220,14 @@ function renderMembers(members) {
 
   for (const m of members) {
     const stale = !m.loc || Date.now() - m.loc.time > STALE_MS;
-    const avatar = el("div", { class: "avatar" + (stale ? " stale" : "") + (m.sosSince ? " sos" : ""), style: `background:${m.color}` }, initial(m.name));
+    const avatar = el("div", { class: "avatar" + (stale ? " stale" : "") + (m.sosSince ? " sos" : "") + (m.emoji ? " emoji" : ""), style: `background:${m.color}` }, m.emoji || initial(m.name));
     const li = el("li", { class: m.loc ? "clickable" : "" },
       avatar,
       el("div", { class: "grow" },
         el("div", { class: "title" }, m.name),
         el("div", { class: "sub" }, describe(m)),
         el("div", { class: "sub" }, account(m)),
+        health(m),
         circles.length > 1 ? el("div", { class: "chips" }, ...(m.circles || []).map((id) =>
           el("span", {
             class: "chip" + ((m.hiddenFrom || []).includes(id) ? " hidden-from" : ""),
@@ -219,6 +238,7 @@ function renderMembers(members) {
         ...(m.loc ? [["Show on map", () => { map.setView([m.loc.lat, m.loc.lon], Math.max(map.getZoom(), 15)); showTrail(m); }], "-"] : []),
         ["Groups…", () => openCircles(m)],
         ["Rename…", () => rename(m)],
+        ["Set emoji…", () => setEmoji(m)],
         ["Reset sign-in…", () => resetSignIn(m)],
         "-",
         ["Remove from server…", () => removeMember(m), "danger"],
@@ -236,7 +256,7 @@ function renderMembers(members) {
     bounds.push(pos);
     const icon = L.divIcon({
       className: "pin",
-      html: `<div class="avatar${stale ? " stale" : ""}${m.sosSince ? " sos" : ""}" style="background:${m.color}"></div>`,
+      html: `<div class="avatar${stale ? " stale" : ""}${m.sosSince ? " sos" : ""}${m.emoji ? " emoji" : ""}" style="background:${m.color}"></div>`,
       iconSize: [38, 38],
       iconAnchor: [19, 19],
     });
@@ -250,7 +270,7 @@ function renderMembers(members) {
     }
     entry.marker.setLatLng(pos).setIcon(icon);
     // Set the letter with textContent so names can never inject HTML.
-    entry.marker.getElement()?.querySelector(".avatar")?.replaceChildren(initial(m.name));
+    entry.marker.getElement()?.querySelector(".avatar")?.replaceChildren(m.emoji || initial(m.name));
     entry.marker.bindTooltip(`${m.name} · ${describe(m)}`);
     entry.circle.setLatLng(pos).setRadius(m.loc.acc || 0).setStyle({ color: m.color });
   }
@@ -421,7 +441,8 @@ function renderPlaces() {
   $("#places").replaceChildren(...shown.map((p) => el("li", { class: "clickable", onclick: () => map.setView([p.lat, p.lon], 16) },
     el("div", { class: "grow" },
       el("div", { class: "title" }, p.name),
-      el("div", { class: "sub" }, `${Math.round(p.radius)} m` + (circles.length > 1 ? ` · ${circleName(p.circleId)}` : ""))),
+      el("div", { class: "sub" }, `${Math.round(p.radius)} m` + (circles.length > 1 ? ` · ${circleName(p.circleId)}` : "") +
+        (p.schedule ? ` · ${scheduleSummary(p.schedule)}` : ""))),
     moreButton(`Options for ${p.name}`, [
       ["Show on map", () => map.setView([p.lat, p.lon], 16)],
       ["Edit…", () => editPlace(p)],
@@ -451,6 +472,33 @@ function renderPlaces() {
   }
 }
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function scheduleSummary(sc) {
+  const d = [...sc.days].sort().join(",");
+  const days = d === "1,2,3,4,5" ? "Mon–Fri" : d === "0,6" ? "Weekends" : d === "0,1,2,3,4,5,6" ? "Every day"
+    : [1, 2, 3, 4, 5, 6, 0].filter((x) => sc.days.includes(x)).map((x) => DAY_NAMES[x]).join(" ");
+  return sc.from === sc.to ? `${days}, all day` : `${days} ${sc.from}–${sc.to}`;
+}
+// Day toggles in the fence dialog, Monday first.
+$("#place-days").replaceChildren(...[1, 2, 3, 4, 5, 6, 0].map((d) => {
+  const box = el("input", { type: "checkbox", value: String(d) });
+  return el("label", {}, box, el("span", {}, DAY_NAMES[d]));
+}));
+$("#place-sched-on").addEventListener("change", (e) => { $("#place-sched").hidden = !e.target.checked; });
+function setScheduleFields(sc) {
+  $("#place-sched-on").checked = !!sc;
+  $("#place-sched").hidden = !sc;
+  const days = sc ? sc.days : [1, 2, 3, 4, 5];
+  $("#place-days").querySelectorAll("input").forEach((b) => { b.checked = days.includes(Number(b.value)); });
+  $("#place-from").value = sc ? sc.from : "07:00";
+  $("#place-to").value = sc ? sc.to : "17:00";
+}
+function scheduleFromFields() {
+  if (!$("#place-sched-on").checked) return null;
+  const days = [...$("#place-days").querySelectorAll("input:checked")].map((b) => Number(b.value));
+  return { days, from: $("#place-from").value, to: $("#place-to").value, tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" };
+}
+
 const placeDialog = $("#place-dialog");
 placeDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => placeDialog.close()));
 // The fence being added or edited: { id?, name, radius, circleId, lat?, lon?, where? }
@@ -475,6 +523,8 @@ function openPlaceDialog(draft) {
   $("#place-search").value = "";
   $("#place-results").replaceChildren();
   $("#place-search-row").hidden = !serverFeatures.includes("geocode");
+  $("#place-schedule-box").hidden = !serverFeatures.includes("schedules");
+  if (!draft.keepSchedule) setScheduleFields(draft.schedule || null);
   if (!placeDialog.open) placeDialog.showModal();
   if (draft.lat == null && serverFeatures.includes("geocode")) $("#place-search").focus();
 }
@@ -519,6 +569,13 @@ $("#place-form").addEventListener("submit", async (e) => {
     return;
   }
   const body = { name: $("#place-name").value, radius: Number($("#place-radius").value), lat: placeDraft.lat, lon: placeDraft.lon };
+  if (serverFeatures.includes("schedules")) {
+    body.schedule = scheduleFromFields();
+    if (body.schedule && !body.schedule.days.length) {
+      alert("Choose at least one day for the alert hours, or untick \"Only alert at certain times\".");
+      return;
+    }
+  }
   try {
     if (placeDraft.id) {
       await api("PATCH", `/api/admin/places/${encodeURIComponent(placeDraft.id)}`, body);
@@ -555,6 +612,7 @@ $("#place-pick").addEventListener("click", () => {
   placeDraft.name = $("#place-name").value;
   placeDraft.radius = Number($("#place-radius").value);
   placeDraft.circleId = $("#place-circle").value;
+  placeDraft.keepSchedule = true; // the schedule fields keep what was chosen
   placeDialog.close();
   pickOnMap((lat, lon) => {
     if (lat != null) {
@@ -583,6 +641,13 @@ async function rename(m) {
   const name = prompt(`New name for ${m.name}:`, m.name);
   if (!name || name === m.name) return;
   try { await api("PATCH", `/api/admin/members/${encodeURIComponent(m.id)}`, { name }); refresh(); }
+  catch (err) { alert(err.message); }
+}
+
+async function setEmoji(m) {
+  const v = prompt(`Emoji for ${m.name}'s map pin (leave empty to show their initial):`, m.emoji || "");
+  if (v === null) return;
+  try { await api("PATCH", `/api/admin/members/${encodeURIComponent(m.id)}`, { emoji: v.trim() }); refresh(); }
   catch (err) { alert(err.message); }
 }
 
