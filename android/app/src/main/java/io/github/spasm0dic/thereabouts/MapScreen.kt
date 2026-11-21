@@ -128,6 +128,8 @@ fun MapScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
+    // Small buzzes for a few moments that matter (picking, long-press, success), not every tap.
+    val haptics = LocalHapticFeedback.current
 
     var members by remember { mutableStateOf<List<Member>>(emptyList()) }
     var familyName by remember { mutableStateOf(prefs.familyName) }
@@ -552,6 +554,7 @@ fun MapScreen(
                         FilterChip(
                             selected = circleFilter == id,
                             onClick = {
+                                if (circleFilter != id) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 circleFilter = id
                                 prefs.circleFilter = id
                                 camera = CameraCommand.FitAll(++cameraSeq)
@@ -572,6 +575,7 @@ fun MapScreen(
                     members = shown,
                     places = if (circleFilter.isEmpty()) places else places.filter { it.circleId == circleFilter },
                     onLongPress = { lat, lon ->
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         if (supports("places")) placeEdit = PlaceEdit.Add(lat, lon)
                         else Toast.makeText(context, OUTDATED_SERVER, Toast.LENGTH_LONG).show()
                     },
@@ -625,6 +629,7 @@ fun MapScreen(
                             isMe = m.id == prefs.memberId,
                             status = statusOf(m),
                             onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 m.loc?.let { camera = CameraCommand.Center(it.lat, it.lon, ++cameraSeq) }
                                 selected = m.id
                                 trail = emptyList()
@@ -824,9 +829,15 @@ private fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier
                     var triggered = false
                     val fill = scope.launch {
                         val start = SystemClock.uptimeMillis()
+                        var ticks = 0
                         while (true) {
                             val p = ((SystemClock.uptimeMillis() - start).toFloat() / SOS_HOLD_MS).coerceAtMost(1f)
                             progress.snapTo(p)
+                            // A soft tick at each second of the hold, like a countdown.
+                            if (p < 1f && (p * 3).toInt() > ticks) {
+                                ticks = (p * 3).toInt()
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            }
                             if (p >= 1f) break
                             delay(16)
                         }
@@ -862,6 +873,7 @@ private const val SOS_HOLD_MS = 3_000
 @Composable
 private fun CheckInDialog(prefs: Prefs, onDone: () -> Unit) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     var note by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -887,9 +899,11 @@ private fun CheckInDialog(prefs: Prefs, onDone: () -> Unit) {
                 scope.launch {
                     try {
                         Api(prefs.serverUrl, prefs.token).checkIn(note.trim(), currentLocation(context))
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                         Toast.makeText(context, "Checked in", Toast.LENGTH_SHORT).show()
                         onDone()
                     } catch (e: IOException) {
+                        haptics.performHapticFeedback(HapticFeedbackType.Reject)
                         Toast.makeText(context, "Couldn't check in: ${e.message}", Toast.LENGTH_LONG).show()
                         busy = false
                     }
@@ -937,6 +951,7 @@ suspend fun currentLocation(context: Context): Location? {
 @Composable
 fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean) -> Unit) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     var code by remember { mutableStateOf(initialCode) }
     var circleName by remember { mutableStateOf<String?>(null) } // known once the code is checked
@@ -991,6 +1006,7 @@ fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean
                 scope.launch {
                     try {
                         val name = Api(prefs.serverUrl, prefs.token).joinCircle(code)
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                         Toast.makeText(context, "You joined $name", Toast.LENGTH_SHORT).show()
                         onDone(true)
                     } catch (e: IOException) {

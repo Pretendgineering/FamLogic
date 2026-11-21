@@ -70,6 +70,8 @@ import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalAutofillManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -217,6 +219,7 @@ private fun plural(n: Int, word: String) = if (n == 1) "$n $word" else "$n ${wor
 @Composable
 private fun SharingPage(prefs: Prefs, sharing: Boolean, onSharingChange: (Boolean) -> Unit) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     var interval by remember { mutableIntStateOf(prefs.intervalMinutes) }
     var wifi by remember { mutableStateOf(prefs.wifiPositioning) }
     var confirmWifi by remember { mutableStateOf(false) }
@@ -234,6 +237,7 @@ private fun SharingPage(prefs: Prefs, sharing: Boolean, onSharingChange: (Boolea
         Prefs.INTERVAL_CHOICES.forEach { minutes ->
             Row(
                 Modifier.fillMaxWidth().selectable(selected = interval == minutes) {
+                    if (interval != minutes) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     interval = minutes
                     prefs.intervalMinutes = minutes
                     LocationService.start(context) // restarts with the new interval
@@ -580,6 +584,7 @@ private fun AlertsPage(
 
 @Composable
 private fun TrailPage(prefs: Prefs, trailHours: Int?, onTrailHoursChange: (Int) -> Unit) {
+    val haptics = LocalHapticFeedback.current
     var showTrails by remember { mutableStateOf(prefs.showTrails) }
     SettingsCard("Keep my trail") {
         Hint(
@@ -591,7 +596,10 @@ private fun TrailPage(prefs: Prefs, trailHours: Int?, onTrailHoursChange: (Int) 
                 FilterChip(
                     selected = trailHours == h,
                     enabled = trailHours != null,
-                    onClick = { onTrailHoursChange(h) },
+                    onClick = {
+                        if (trailHours != h) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        onTrailHoursChange(h)
+                    },
                     label = { Text(label) },
                 )
             }
@@ -609,12 +617,14 @@ private fun TrailPage(prefs: Prefs, trailHours: Int?, onTrailHoursChange: (Int) 
 
 @Composable
 private fun MapPage(prefs: Prefs) {
+    val haptics = LocalHapticFeedback.current
     var style by remember { mutableStateOf(prefs.mapStyle) }
     SettingsCard("Map style") {
         Hint("Only changes this phone. All styles are free maps drawn from OpenStreetMap data.")
         MapStyles.all.forEach { s ->
             Row(
                 Modifier.fillMaxWidth().selectable(selected = style == s.id) {
+                    if (style != s.id) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     style = s.id
                     prefs.mapStyle = s.id
                 }.padding(vertical = 8.dp),
@@ -645,10 +655,12 @@ private fun AccountPage(
     var nameMsg by remember { mutableStateOf<String?>(null) }
     var emoji by remember(me?.emoji) { mutableStateOf(me?.emoji.orEmpty()) }
     var emojiMsg by remember { mutableStateOf<String?>(null) }
+    val haptics = LocalHapticFeedback.current
     fun saveEmoji(value: String) {
         scope.launch {
             emojiMsg = try {
                 Api(prefs.serverUrl, prefs.token).setEmoji(value)
+                haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                 onProfileChanged()
                 if (value.isEmpty()) "Showing your initial" else "Saved"
             } catch (e: IOException) {
@@ -672,6 +684,7 @@ private fun AccountPage(
                 scope.launch {
                     nameMsg = try {
                         Api(prefs.serverUrl, prefs.token).setName(name.trim())
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                         name = ""
                         "Saved"
                     } catch (e: IOException) {
@@ -837,6 +850,7 @@ private fun AccountSection(prefs: Prefs, username: String, hasPassword: Boolean?
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val autofill = LocalAutofillManager.current
+    val haptics = LocalHapticFeedback.current
     var open by remember { mutableStateOf(false) }
     var newUsername by remember { mutableStateOf("") }
     var current by remember { mutableStateOf("") }
@@ -894,6 +908,7 @@ private fun AccountSection(prefs: Prefs, username: String, hasPassword: Boolean?
                         onSaved(u)
                         open = false
                         current = ""; password = ""; confirm = ""
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                         Toast.makeText(context, "Password saved", Toast.LENGTH_SHORT).show()
                     } catch (e: IOException) {
                         error = e.message ?: "Couldn't save"
@@ -909,6 +924,7 @@ private fun AccountSection(prefs: Prefs, username: String, hasPassword: Boolean?
 
 @Composable
 internal fun SwitchRow(title: String, detail: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    val haptics = LocalHapticFeedback.current
     Row(
         Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -919,7 +935,10 @@ internal fun SwitchRow(title: String, detail: String, checked: Boolean, enabled:
                 Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = { on ->
+            haptics.performHapticFeedback(if (on) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+            onChange(on)
+        })
     }
 }
 

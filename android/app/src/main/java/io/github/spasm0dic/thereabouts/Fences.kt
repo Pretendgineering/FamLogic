@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -66,6 +68,7 @@ fun PlaceDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     val existing = (edit as? PlaceEdit.Edit)?.place
     var name by remember { mutableStateOf(existing?.name ?: "") }
     var radius by remember { mutableDoubleStateOf(existing?.radius ?: 150.0) }
@@ -107,8 +110,10 @@ fun PlaceDialog(
         scope.launch {
             try {
                 block()
+                haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                 onDone(true)
             } catch (e: IOException) {
+                haptics.performHapticFeedback(HapticFeedbackType.Reject)
                 Toast.makeText(context, e.message ?: "Couldn't save", Toast.LENGTH_LONG).show()
                 busy = false
             }
@@ -177,6 +182,7 @@ fun PlaceDialog(
                                             r.name,
                                             style = MaterialTheme.typography.bodySmall,
                                             modifier = Modifier.fillMaxWidth().clickable {
+                                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                                 spot = r.lat to r.lon
                                                 where = r.name
                                                 if (name.isBlank()) name = r.name.substringBefore(",").take(40)
@@ -220,7 +226,7 @@ fun PlaceDialog(
                     RADIUS_CHOICES.forEach { r ->
                         FilterChip(
                             selected = radius == r,
-                            onClick = { radius = r },
+                            onClick = { if (radius != r) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); radius = r },
                             label = { Text(if (r < 1000) "${r.toInt()} m" else "${r / 1000} km") },
                         )
                     }
@@ -243,7 +249,10 @@ fun PlaceDialog(
                             labels.forEach { (d, label) ->
                                 FilterChip(
                                     selected = d in days,
-                                    onClick = { days = if (d in days) days - d else days + d },
+                                    onClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                        days = if (d in days) days - d else days + d
+                                    },
                                     label = { Text(label) },
                                 )
                             }
