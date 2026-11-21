@@ -132,15 +132,9 @@ These are parked until we decide to pick them up. Each needs a short design pass
 - Decision: parked for now (Nov 2026). Revisit with options A/B above.
 
 ### 12. Pebble watch companion
-- A small watch app plus phone-side glue:
-  - See everyone's status at a glance (name, "At Home" / "Driving", how long ago, battery).
-  - Check in from the wrist.
-  - Hold a button for SOS, with the same 3-second hold and the same confirmation.
-  - SOS and other alerts buzz the watch.
-- Research first:
-  - The current Pebble landscape: the new Pebble hardware and open-source PebbleOS, the Rebble services, the companion app on Android, and PebbleKit (AppMessage) for talking to the phone app.
-  - Which SDK and watch models to target.
-- Likely shape: the Thereabouts phone app relays to the watch, and the watch never talks to the server directly. Works in both builds.
+- **Research done (Nov 2026):** see [docs/PEBBLE.md](docs/PEBBLE.md) for the hardware (Pebble 2 Duo, Time 2, Round 2, Index 01 ring), the software stack (C watchapp + PebbleKit Android 2, FOSS-friendly), feature ideas and open questions.
+- Shape: a C watchapp for all platforms, with the Thereabouts phone app as the bridge, plus a webhook on the server for the Index 01 ring.
+- Not started.
 
 ## Build order
 
