@@ -45,39 +45,17 @@ Open `http://<server>:8080` and log in with your admin password.
 
 To build the image yourself instead of pulling it, swap the `image:` line for `build: ./server` in `docker-compose.yml` and run it from a clone of this repo.
 
-### TrueNAS SCALE (24.10 "Electric Eel" or newer)
-
-1. **Datasets → Add Dataset** under your apps pool, e.g. `tank/apps/thereabouts`, with the **Apps** preset. The preset makes the `apps` user (568) the owner.
-2. **Apps → Discover Apps → ⋮ → Install via YAML**, name it `thereabouts`, and paste this. Change the password, name and dataset path:
-   ```yaml
-   services:
-     thereabouts:
-       image: ghcr.io/spasm0dic/thereabouts:latest
-       restart: unless-stopped
-       user: "568:568"            # TrueNAS "apps" user, which owns the dataset
-       ports:
-         - "8080:8080"            # change the left number if 8080 is taken
-       environment:
-         ADMIN_PASSWORD: "change-me-please"
-         FAMILY_NAME: "Our Family"
-       volumes:
-         - /mnt/tank/apps/thereabouts:/data
-   ```
-3. Open `http://<truenas-ip>:8080`.
-
-If the app logs say `can't write to /data`, the dataset isn't owned by user 568. Fix it with **Edit Permissions** on the dataset, or change `user:` to match the owner.
-
-Phones also need to reach it from outside your home. Tailscale is available as a TrueNAS app and is the simplest option (see below).
+If the logs say `can't write to /data`, the container's user can't write to the data folder. Change the folder's owner, or set `user:` in `docker-compose.yml` to its owner.
 
 ### Updating the server
 
-New versions are published as `ghcr.io/spasm0dic/thereabouts:latest`. **Restarting the app does not download a newer `latest`**, so pull it first:
+New versions are published as `ghcr.io/spasm0dic/thereabouts:latest`. **Restarting the container does not download a newer `latest`**, so pull it first:
 
 ```sh
-sudo docker pull ghcr.io/spasm0dic/thereabouts:latest
+docker compose pull && docker compose up -d
 ```
 
-Then redeploy the app (on TrueNAS: **Apps → thereabouts → Stop**, then **Start**, or edit the app and save). To check which version is running, look under the family name at the top of the dashboard, or in the app under **Settings → Server**.
+(On a NAS or other app platform, pull the image again, then redeploy the app.) To check which version is running, look under the family name in the dashboard, or in the app under **Settings → About**.
 
 If the app says the server is out of date (for example SOS or Check in are missing, or adding a fence doesn't work), this is the fix.
 
