@@ -168,8 +168,9 @@ type publicMember struct {
 	Circles []string `json:"circles"`
 	// The place they're at (e.g. "Home"), if any.
 	Place string `json:"place,omitempty"`
-	// Whether they keep a trail you can look at.
+	// Whether they keep a trail you can look at, and trips.
 	Trail bool `json:"trail,omitempty"`
+	Trips bool `json:"trips,omitempty"`
 }
 
 func toPublic(ms []Member) []publicMember {
@@ -186,7 +187,7 @@ func toPublic(ms []Member) []publicMember {
 // serverFeatures tells apps what this server can do, so a newer app talking to
 // an older server can hide what won't work instead of failing.
 var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails",
-	"emoji", "status", "schedules"}
+	"emoji", "status", "schedules", "trips"}
 
 func (s *Server) serverInfo() map[string]any {
 	features := slices.Clone(serverFeatures)
@@ -502,6 +503,7 @@ func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Membe
 		members[i] = toPublic([]Member{m})[0]
 		members[i].Place = v.Place
 		members[i].Trail = v.TrailHours > 0 && v.Loc != nil
+		members[i].Trips = v.TripDays > 0
 	}
 	myCircles := make([]map[string]any, len(circles))
 	for i, c := range circles {
@@ -517,6 +519,7 @@ func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Membe
 			"shareLowBattery": me.SharesLowBattery(),
 			"shareArrivals":   me.SharesArrivals(),
 			"trailHours":      me.TrailHours,
+			"tripDays":        me.TripDays,
 			"username":        me.Username,
 			"hasPassword":     me.PasswordHash != "",
 		},
@@ -657,6 +660,7 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 		ShareLowBattery *bool   `json:"shareLowBattery"`
 		ShareArrivals   *bool   `json:"shareArrivals"`
 		TrailHours      *int    `json:"trailHours"`
+		TripDays        *int    `json:"tripDays"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -670,6 +674,16 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 			return
 		}
 		if err := s.store.SetTrailHours(me.ID, *req.TrailHours); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not save")
+			return
+		}
+	}
+	if req.TripDays != nil {
+		if !validTripDays(*req.TripDays) {
+			writeError(w, http.StatusBadRequest, "tripDays must be 0, 1, 3 or 7")
+			return
+		}
+		if err := s.store.SetTripDays(me.ID, *req.TripDays); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not save")
 			return
 		}
@@ -817,6 +831,7 @@ func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
 	for i := range pub {
 		pub[i].Place = at[pub[i].ID]
 		pub[i].Trail = ms[i].TrailHours > 0 && !ms[i].Paused
+		pub[i].Trips = ms[i].TripDays > 0
 	}
 	out := make([]adminMember, len(ms))
 	for i, m := range ms {
@@ -1079,7 +1094,24 @@ func (s *Server) handleTrips(w http.ResponseWriter, r *http.Request, me *Member)
 		writeError(w, http.StatusNotFound, "no trips to show")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"trips": trips})
+	writeJSON(w, http.StatusOK, map[string]any{"trips": s.nameTripEnds(trips)})
+}
+
+// nameTripEnds adds the nearest street to trip ends that aren't in a fence, when
+// the server's geocoder already knows it (unknown ones are looked up in the
+// background, one per second, and show next time).
+func (s *Server) nameTripEnds(trips []Trip) []Trip {
+	for i := range trips {
+		t := &trips[i]
+		if t.From == "" {
+			t.FromNear = s.geo.NearName(t.Points[0].Lat, t.Points[0].Lon)
+		}
+		if t.To == "" && !t.Ongoing {
+			last := t.Points[len(t.Points)-1]
+			t.ToNear = s.geo.NearName(last.Lat, last.Lon)
+		}
+	}
+	return trips
 }
 
 func (s *Server) handleAdminTrips(w http.ResponseWriter, r *http.Request) {
@@ -1088,7 +1120,7 @@ func (s *Server) handleAdminTrips(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such member")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"trips": trips})
+	writeJSON(w, http.StatusOK, map[string]any{"trips": s.nameTripEnds(trips)})
 }
 
 // ---- places ----

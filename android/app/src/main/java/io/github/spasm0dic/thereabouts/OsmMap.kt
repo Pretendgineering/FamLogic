@@ -35,6 +35,8 @@ sealed class CameraCommand {
     abstract val seq: Int
     data class FitAll(override val seq: Int) : CameraCommand()
     data class Center(val lat: Double, val lon: Double, override val seq: Int) : CameraCommand()
+    /** Show a whole route (a trip). */
+    data class FitPoints(val points: List<TrailPoint>, override val seq: Int) : CameraCommand()
 }
 
 /**
@@ -216,13 +218,20 @@ fun OsmMap(
                         // One smooth glide (pan and zoom together).
                         map.controller.animateTo(GeoPoint(camera.lat, camera.lon), maxOf(map.zoomLevelDouble, 16.0), 700L)
                     }
+                    is CameraCommand.FitPoints -> {
+                        val pts = camera.points.map { GeoPoint(it.lat, it.lon) }
+                        if (pts.size >= 2) {
+                            val box = boxAround(pts, 1.25f)
+                            // Room around the route for the pins and the trip summary on top.
+                            map.zoomToBoundingBox(box, true, (56 * context.resources.displayMetrics.density).toInt(), 17.0, 700L)
+                        }
+                    }
                     is CameraCommand.FitAll -> {
                         val pts = located.map { GeoPoint(it.loc!!.lat, it.loc.lon) }
                         when {
                             pts.size == 1 -> map.controller.animateTo(pts[0], 15.0, 700L)
                             pts.size > 1 -> {
-                                val box = BoundingBox.fromGeoPointsSafe(pts)
-                                map.zoomToBoundingBox(box.increaseByScale(1.3f), true, 80, 16.0, null)
+                                map.zoomToBoundingBox(boxAround(pts, 1.3f), true, 80, 16.0, null)
                             }
                         }
                     }
@@ -244,6 +253,29 @@ private val DIM_FILTER = android.graphics.ColorMatrixColorFilter(
         )))
     },
 )
+
+/**
+ * A box around some points with a little margin. Never zero-sized: a route
+ * straight north (or two points on the same spot) would otherwise give osmdroid
+ * an impossible zoom.
+ */
+private fun boxAround(pts: List<GeoPoint>, scale: Float): BoundingBox {
+    // Worked out here rather than with osmdroid's helpers, which turn a zero-width
+    // box into one that wraps the other way round the world.
+    val minSpan = 0.004 // degrees, roughly 400 m
+    val north = pts.maxOf { it.latitude }
+    val south = pts.minOf { it.latitude }
+    val east = pts.maxOf { it.longitude }
+    val west = pts.minOf { it.longitude }
+    val latHalf = maxOf((north - south) * scale, minSpan) / 2
+    val lonHalf = maxOf((east - west) * scale, minSpan) / 2
+    val lat = (north + south) / 2
+    val lon = (east + west) / 2
+    return BoundingBox(
+        (lat + latHalf).coerceAtMost(85.0), (lon + lonHalf).coerceAtMost(180.0),
+        (lat - latHalf).coerceAtLeast(-85.0), (lon - lonHalf).coerceAtLeast(-180.0),
+    )
+}
 
 fun parseColor(hex: String): Int = runCatching { Color.parseColor(hex) }.getOrDefault(Color.parseColor("#4363d8"))
 
@@ -309,10 +341,11 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>, dark:
         }
         val label = Marker(map).apply {
             position = center
-            setTextIcon(p.name)
+            // Colours first: osmdroid draws the label when the text is set.
             textLabelForegroundColor = accent
             textLabelBackgroundColor = if (dark) Color.argb(200, 38, 39, 53) else Color.argb(210, 255, 255, 255)
             textLabelFontSize = (12 * d).toInt()
+            setTextIcon(p.name)
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             setOnMarkerClickListener { _, _ -> state.onPlaceClick(p); true }
         }

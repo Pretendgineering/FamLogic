@@ -84,7 +84,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
     Groups("Groups", Icons.Filled.Face),
     Fences("Fences", Icons.Filled.Place),
     Alerts("Alerts", Icons.Filled.Notifications),
-    Trail("Trail", Icons.Filled.DateRange),
+    Trail("Trail & trips", Icons.Filled.DateRange),
     Sharing("Sharing", Icons.Filled.Share),
     Map("Map", Icons.Filled.Edit),
     Account("Account", Icons.Filled.AccountCircle),
@@ -124,6 +124,8 @@ fun SettingsScreen(
     myId: String = "",
     onProfileChanged: () -> Unit = {},
     onMapStyleChange: (String) -> Unit = {},
+    tripDays: Int? = null,
+    onTripDaysChange: (Int) -> Unit = {},
 ) {
     var pageName by rememberSaveable { mutableStateOf<String?>(null) }
     val page = pageName?.let { SettingsPage.valueOf(it) }
@@ -160,7 +162,7 @@ fun SettingsScreen(
                     SettingsCard {
                         pages.forEachIndexed { i, p ->
                             if (i > 0) HorizontalDivider(Modifier.padding(start = 56.dp))
-                            MenuRow(p.icon, p.title, menuSummary(p, prefs, sharing, circles, places, trailHours, username, hasPassword, perms)) {
+                            MenuRow(p.icon, p.title, menuSummary(p, prefs, sharing, circles, places, trailHours, username, hasPassword, perms, tripDays)) {
                                 pageName = p.name
                             }
                         }
@@ -170,7 +172,7 @@ fun SettingsScreen(
                 SettingsPage.Groups -> GroupsPage(prefs, sharing, circles, onCircleSharingChange, onCirclesChanged)
                 SettingsPage.Fences -> FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
                 SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
-                SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange)
+                SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange, tripDays, onTripDaysChange, supports("trips"))
                 SettingsPage.Map -> MapPage(prefs, onMapStyleChange)
                 SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved, members.find { it.id == myId },
                     supports("emoji"), onProfileChanged)
@@ -191,17 +193,17 @@ private fun menuSummary(
     username: String,
     hasPassword: Boolean?,
     perms: PermissionState,
+    tripDays: Int?,
 ): String = when (p) {
     SettingsPage.Sharing -> if (sharing) "On, every ${plural(prefs.intervalMinutes, "minute")}" else "Paused"
     SettingsPage.Groups -> circles.joinToString(", ") { it.name }.ifEmpty { "Who sees whom" }
     SettingsPage.Fences -> if (places.isEmpty()) "Alerts when people arrive or leave" else places.joinToString(", ") { it.name }
     SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, low battery, who you hear about" else "$it ${if (it == 1) "person" else "people"} muted" }
     SettingsPage.Map -> MapStyles.byId(prefs.mapStyle).title
-    SettingsPage.Trail -> when (trailHours) {
-        null -> "Where you've been recently"
-        0 -> "Off"
-        else -> "Kept for $trailHours hours"
-    }
+    SettingsPage.Trail -> listOfNotNull(
+        trailHours?.takeIf { it > 0 }?.let { "Trail $it h" },
+        tripDays?.takeIf { it > 0 }?.let { "trips ${if (it == 1) "1 day" else "$it days"}" },
+    ).joinToString(", ").ifEmpty { "Off" }
     SettingsPage.Account -> when (hasPassword) {
         false -> "No password yet: set one"
         else -> if (username.isNotEmpty()) "Signed in as $username" else "Username and password"
@@ -584,7 +586,14 @@ private fun AlertsPage(
 }
 
 @Composable
-private fun TrailPage(prefs: Prefs, trailHours: Int?, onTrailHoursChange: (Int) -> Unit) {
+private fun TrailPage(
+    prefs: Prefs,
+    trailHours: Int?,
+    onTrailHoursChange: (Int) -> Unit,
+    tripDays: Int?,
+    onTripDaysChange: (Int) -> Unit,
+    canTrips: Boolean,
+) {
     val haptics = LocalHapticFeedback.current
     var showTrails by remember { mutableStateOf(prefs.showTrails) }
     SettingsCard("Keep my trail") {
@@ -613,6 +622,36 @@ private fun TrailPage(prefs: Prefs, trailHours: Int?, onTrailHoursChange: (Int) 
             checked = showTrails,
             onChange = { showTrails = it; prefs.showTrails = it },
         )
+    }
+    if (canTrips) {
+        var notifyTrips by remember { mutableStateOf(prefs.notifyTrips) }
+        SettingsCard("Keep my trips") {
+            Hint(
+                "Your journeys between stops, like \"Home → School, 12 min, 4.2 km\", each with its route. " +
+                    "The same people who can see your location can look through them. Turning it off deletes them.",
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 6.dp)) {
+                listOf(0 to "Off", 1 to "1 day", 3 to "3 days", 7 to "7 days").forEach { (d, label) ->
+                    FilterChip(
+                        selected = tripDays == d,
+                        enabled = tripDays != null,
+                        onClick = {
+                            if (tripDays != d) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            onTripDaysChange(d)
+                        },
+                        label = { Text(label) },
+                    )
+                }
+            }
+        }
+        SettingsCard {
+            SwitchRow(
+                title = "Notify me when someone finishes a trip",
+                detail = "E.g. \"Sam finished Home → School\". Off by default; fence alerts often say enough.",
+                checked = notifyTrips,
+                onChange = { notifyTrips = it; prefs.notifyTrips = it },
+            )
+        }
     }
 }
 

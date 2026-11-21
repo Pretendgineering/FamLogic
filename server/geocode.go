@@ -30,6 +30,12 @@ type geocoder struct {
 	mu       sync.Mutex // one upstream request at a time
 	lastCall time.Time
 	cache    map[string]geoCacheEntry
+
+	// Reverse lookups ("near Main Street") for trip ends, done in the background.
+	nearMu      sync.Mutex
+	near        map[string]string // "lat,lon" rounded to ~100 m -> name ("" = nothing there)
+	nearPending map[string]bool
+	nearQueue   chan [2]float64
 }
 
 type geoCacheEntry struct {
@@ -49,7 +55,112 @@ func newGeocoder(u string) *geocoder {
 	if strings.EqualFold(u, "off") {
 		u = ""
 	}
-	return &geocoder{url: u, client: &http.Client{Timeout: 10 * time.Second}, cache: map[string]geoCacheEntry{}}
+	g := &geocoder{url: u, client: &http.Client{Timeout: 10 * time.Second}, cache: map[string]geoCacheEntry{},
+		near: map[string]string{}, nearPending: map[string]bool{}, nearQueue: make(chan [2]float64, 200)}
+	if g.reverseURL() != "" {
+		go g.nearWorker()
+	}
+	return g
+}
+
+// reverseURL is the reverse-lookup address of a Nominatim-style geocoder ("" if unknown).
+func (g *geocoder) reverseURL() string {
+	if base, ok := strings.CutSuffix(g.url, "/search"); ok {
+		return base + "/reverse"
+	}
+	return ""
+}
+
+func nearKey(lat, lon float64) string {
+	return strconv.FormatFloat(lat, 'f', 3, 64) + "," + strconv.FormatFloat(lon, 'f', 3, 64)
+}
+
+// NearName returns a short name for the street at a spot if it's known, and
+// otherwise queues a lookup and returns "".
+func (g *geocoder) NearName(lat, lon float64) string {
+	if g == nil || g.reverseURL() == "" {
+		return ""
+	}
+	k := nearKey(lat, lon)
+	g.nearMu.Lock()
+	defer g.nearMu.Unlock()
+	if name, ok := g.near[k]; ok {
+		return name
+	}
+	if !g.nearPending[k] {
+		select {
+		case g.nearQueue <- [2]float64{lat, lon}:
+			g.nearPending[k] = true
+		default: // queue full: try again next time
+		}
+	}
+	return ""
+}
+
+func (g *geocoder) nearWorker() {
+	for p := range g.nearQueue {
+		name, err := g.reverse(p[0], p[1])
+		k := nearKey(p[0], p[1])
+		g.nearMu.Lock()
+		delete(g.nearPending, k)
+		if err == nil {
+			if len(g.near) >= 5000 {
+				g.near = map[string]string{}
+			}
+			g.near[k] = name
+		}
+		g.nearMu.Unlock()
+	}
+}
+
+// reverse asks the geocoder what's at a spot: "Main Street, Springfield".
+func (g *geocoder) reverse(lat, lon float64) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if wait := geoMinGap - time.Since(g.lastCall); wait > 0 {
+		time.Sleep(wait)
+	}
+	g.lastCall = time.Now()
+	u, err := url.Parse(g.reverseURL())
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	q.Set("lat", strconv.FormatFloat(lat, 'f', 5, 64))
+	q.Set("lon", strconv.FormatFloat(lon, 'f', 5, 64))
+	q.Set("format", "jsonv2")
+	q.Set("zoom", "17")
+	u.RawQuery = q.Encode()
+	req, _ := http.NewRequest(http.MethodGet, u.String(), nil)
+	req.Header.Set("User-Agent", "Thereabouts/"+version+" (self-hosted family locator; https://github.com/Spasm0dic/Thereabouts)")
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New(resp.Status)
+	}
+	var r struct {
+		Name    string            `json:"name"`
+		Address map[string]string `json:"address"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(nil, resp.Body, 1<<20)).Decode(&r); err != nil {
+		return "", err
+	}
+	street := r.Address["road"]
+	if street == "" {
+		street = r.Name
+	}
+	for _, k := range []string{"suburb", "village", "town", "city"} {
+		if v := r.Address[k]; v != "" && v != street {
+			if street == "" {
+				return v, nil
+			}
+			return street + ", " + v, nil
+		}
+	}
+	return street, nil
 }
 
 func (g *geocoder) enabled() bool { return g.url != "" }

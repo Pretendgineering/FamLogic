@@ -32,8 +32,9 @@ data class Member(
     val circles: List<String> = emptyList(),
     /** The place they're at (e.g. "Home"), if any. */
     val place: String = "",
-    /** Whether they keep a trail you can look at. */
+    /** Whether they keep a trail you can look at, and trips. */
     val trail: Boolean = false,
+    val trips: Boolean = false,
 )
 
 /** An address search result. */
@@ -41,6 +42,33 @@ data class GeoResult(val name: String, val lat: Double, val lon: Double)
 
 /** One spot on someone's trail. */
 data class TrailPoint(val lat: Double, val lon: Double, val time: Long)
+
+/** One journey between two stops. [from]/[to] are fence names; [fromNear]/[toNear] the nearest street. */
+data class Trip(
+    val start: Long,
+    val end: Long,
+    val distance: Double,
+    val from: String,
+    val to: String,
+    val fromNear: String,
+    val toNear: String,
+    val avgSpeed: Double,
+    val topSpeed: Double,
+    val ongoing: Boolean,
+    val points: List<TrailPoint>,
+) {
+    /** "Home → School", "Home → near Main Street", "Somewhere → …" */
+    fun title(): String {
+        val a = from.ifEmpty { fromNear.ifEmpty { "Start" }.let { if (fromNear.isNotEmpty()) "near $it" else it } }
+        val b = when {
+            ongoing -> "on the way"
+            to.isNotEmpty() -> to
+            toNear.isNotEmpty() -> "near $toNear"
+            else -> "a stop"
+        }
+        return "$a → $b"
+    }
+}
 
 /** A named area (Home, School...) in one of your circles. */
 data class Place(
@@ -96,6 +124,10 @@ data class AppEvent(
     val place: String = "",
     val placeId: String = "",
     val circleId: String = "",
+    /** Trip alerts: where it started (a fence id), how far (m) and how long (ms). */
+    val fromPlaceId: String = "",
+    val distance: Double = 0.0,
+    val duration: Long = 0,
     /** Where it happened (SOS, check-in), or 0/0 if unknown. */
     val lat: Double = 0.0,
     val lon: Double = 0.0,
@@ -123,6 +155,8 @@ data class MembersResponse(
     val features: Set<String> = emptySet(),
     /** How many hours of trail you keep for others (0 = off). */
     val trailHours: Int = 0,
+    /** How many days of trips you keep (0 = off). */
+    val tripDays: Int = 0,
 )
 
 /** What join, sign-in and password resets return: this phone is now signed in as [member]. */
@@ -226,6 +260,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             shareArrivals = settings?.optBoolean("shareArrivals", true) ?: true,
             features = inferFeatures(o),
             trailHours = settings?.optInt("trailHours", 0) ?: 0,
+            tripDays = settings?.optInt("tripDays", 0) ?: 0,
         )
     }
 
@@ -288,6 +323,31 @@ class Api(private val baseUrl: String, private val token: String = "") {
             val p = arr.getJSONObject(it)
             TrailPoint(p.getDouble("lat"), p.getDouble("lon"), p.optLong("time"))
         }
+    }
+
+    /** Someone's trips, newest first. */
+    suspend fun trips(memberId: String): List<Trip> {
+        val arr = request("GET", "/api/members/" + enc(memberId) + "/trips").optJSONArray("trips") ?: return emptyList()
+        return (0 until arr.length()).map { i ->
+            val t = arr.getJSONObject(i)
+            val pts = t.optJSONArray("points")
+            Trip(
+                start = t.optLong("start"), end = t.optLong("end"), distance = t.optDouble("distance", 0.0),
+                from = t.optString("from"), to = t.optString("to"),
+                fromNear = t.optString("fromNear"), toNear = t.optString("toNear"),
+                avgSpeed = t.optDouble("avgSpeed", 0.0), topSpeed = t.optDouble("topSpeed", 0.0),
+                ongoing = t.optBoolean("ongoing", false),
+                points = (0 until (pts?.length() ?: 0)).map {
+                    val p = pts!!.getJSONObject(it)
+                    TrailPoint(p.getDouble("lat"), p.getDouble("lon"), p.optLong("time"))
+                },
+            )
+        }
+    }
+
+    /** Keep your trips for 1, 3 or 7 days, or 0 to turn them off (and delete them). */
+    suspend fun setTripDays(days: Int) {
+        request("POST", "/api/me", JSONObject().put("tripDays", days))
     }
 
     /** Keep a trail of your own for 6, 12 or 24 hours, or 0 to turn it off (and delete it). */
@@ -449,6 +509,9 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 place = e.optString("place"),
                 placeId = e.optString("placeId"),
                 circleId = e.optString("circleId"),
+                fromPlaceId = e.optString("fromPlaceId"),
+                distance = e.optDouble("distance", 0.0),
+                duration = e.optLong("duration", 0),
                 lat = e.optDouble("lat", 0.0),
                 lon = e.optDouble("lon", 0.0),
             )
@@ -477,6 +540,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             circles = o.optJSONArray("circles")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
             place = o.optString("place"),
             trail = o.optBoolean("trail", false),
+            trips = o.optBoolean("trips", false),
             loc = l?.let {
                 MemberLocation(
                     lat = it.getDouble("lat"),

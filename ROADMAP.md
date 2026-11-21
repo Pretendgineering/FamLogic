@@ -115,5 +115,6 @@ Make adding someone a single copy-paste. The dashboard's **Copy invite** button 
 7. ✅ **Trail / history** (opt-in, 0.7.0).
 7a. ✅ **0.8.0:** places renamed **Fences** for users; address search for fences (through the server, to Nominatim); opt-in Wi-Fi positioning through beaconDB; Settings split into pages; purple Material You look; Check in and Show everyone in one row and a **Hold for SOS** bar.
 7b. ✅ **0.9.0:** per-person, per-group and per-fence alert switches; emoji icons instead of the initial; phone health in the dashboard and "phone went quiet" alerts; daily server backups and a download button; fence alert hours; battery saver.
+7c. ✅ **0.10.0:** trips: journeys between stops (kept 1, 3 or 7 days, opt-in), with fence or street names, distance, average and top speed, route on the map, optional "finished a trip" alerts, in the app (tap a person) and dashboard. Also: colour and emoji picker, keyless map styles, Settings reordered.
 8. **Profile pictures** (later; emoji icons cover the simple case).
 9. **Shareable invite message** with an app download link (once the app is on F-Droid or IzzyOnDroid).

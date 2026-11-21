@@ -91,3 +91,29 @@ func TestGeocodeOverHTTP(t *testing.T) {
 		t.Fatalf("phone search: %v %v", err, resp)
 	}
 }
+
+func TestNearNames(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/reverse" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `{"name":"","address":{"road":"Main Street","city":"Springfield"}}`)
+	}))
+	defer upstream.Close()
+	g := newGeocoder(upstream.URL + "/search")
+	if n := g.NearName(40.1, -75.2); n != "" {
+		t.Fatalf("first ask should queue, got %q", n)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if n := g.NearName(40.1001, -75.2001); n != "" { // same ~100 m spot
+			if n != "Main Street, Springfield" {
+				t.Fatalf("got %q", n)
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("name never arrived")
+}

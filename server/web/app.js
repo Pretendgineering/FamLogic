@@ -275,6 +275,7 @@ function renderMembers(members) {
         ["Groups…", () => openCircles(m)],
         ["Rename…", () => rename(m)],
         ["Icon and colour…", () => openIconPicker(m)],
+        ...(m.trips ? [["Trips…", () => openTrips(m)]] : []),
         ["Reset sign-in…", () => resetSignIn(m)],
         "-",
         ["Remove from server…", () => removeMember(m), "danger"],
@@ -678,6 +679,73 @@ async function rename(m) {
   if (!name || name === m.name) return;
   try { await api("PATCH", `/api/admin/members/${encodeURIComponent(m.id)}`, { name }); refresh(); }
   catch (err) { alert(err.message); }
+}
+
+// ---- trips ----
+
+const IMPERIAL = /-(US|GB|LR|MM)$/i.test(navigator.language || "");
+function fmtDistance(m) {
+  if (IMPERIAL) { const mi = m / 1609.344; return mi < 0.1 ? `${Math.round(m * 3.28084 / 10) * 10} ft` : mi < 10 ? `${mi.toFixed(1)} mi` : `${Math.round(mi)} mi`; }
+  return m < 1000 ? `${Math.round(m / 10) * 10} m` : m < 10000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 1000)} km`;
+}
+const fmtSpeed = (mps) => IMPERIAL ? `${Math.round(mps * 2.23694)} mph` : `${Math.round(mps * 3.6)} km/h`;
+function fmtDuration(ms) { const min = Math.max(1, Math.round(ms / 60000)); return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`; }
+function tripTitle(t) {
+  const a = t.from || (t.fromNear ? `near ${t.fromNear}` : "Start");
+  const b = t.ongoing ? "on the way" : t.to || (t.toNear ? `near ${t.toNear}` : "a stop");
+  return `${a} → ${b}`;
+}
+const hm = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function dayOf(ms) {
+  const d = new Date(ms), today = new Date();
+  const y = new Date(); y.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+}
+
+const tripsDialog = $("#trips-dialog");
+tripsDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => tripsDialog.close()));
+let tripLayer = null, tripPill = null;
+function clearTrip() { tripLayer?.remove(); tripLayer = null; tripPill?.remove(); tripPill = null; }
+
+async function openTrips(m, again = false) {
+  $("#trips-title").textContent = `${m.name}'s trips`;
+  const list = $("#trips-list");
+  if (!again) {
+    list.replaceChildren(el("li", { class: "muted" }, "Loading…"));
+    tripsDialog.showModal();
+  }
+  try {
+    const { trips } = await api("GET", `/api/admin/members/${encodeURIComponent(m.id)}/trips`);
+    if (!trips.length) { list.replaceChildren(el("li", { class: "muted" }, "No trips yet.")); return; }
+    list.replaceChildren(...trips.map((t) => el("li", { class: "clickable", onclick: () => { tripsDialog.close(); showTrip(m, t); } },
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, tripTitle(t), t.ongoing ? el("span", { class: "chip" }, "Under way") : null),
+        el("div", { class: "sub" }, `${dayOf(t.start)} ${hm(t.start)}${t.ongoing ? "" : "–" + hm(t.end)} · ${fmtDuration(t.end - t.start)} · ${fmtDistance(t.distance)}`),
+        el("div", { class: "sub" }, `Average ${fmtSpeed(t.avgSpeed)} · top ${fmtSpeed(t.topSpeed)}`)))));
+    // Street names are looked up on the server in the background: ask once more shortly.
+    const unnamed = trips.some((t) => (!t.from && !t.fromNear) || (!t.ongoing && !t.to && !t.toNear));
+    if (unnamed && !again) setTimeout(() => { if (tripsDialog.open) openTrips(m, true); }, 4000);
+  } catch (err) {
+    list.replaceChildren(el("li", { class: "muted" }, err.message));
+  }
+}
+
+function showTrip(m, t) {
+  clearTrip();
+  trailLayer?.remove();
+  const pts = t.points.map((p) => [p.lat, p.lon]);
+  tripLayer = L.layerGroup([
+    L.polyline(pts, { color: m.color, weight: 5, opacity: 0.85 }),
+    L.circleMarker(pts[0], { radius: 6, color: m.color, fillColor: "#fff", fillOpacity: 1, weight: 3 }),
+    L.circleMarker(pts[pts.length - 1], { radius: 6, color: "#fff", fillColor: m.color, fillOpacity: 1, weight: 3 }),
+  ]).addTo(map);
+  map.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 17 });
+  tripPill = el("div", { class: "pick-hint trip-pill" },
+    `${m.name}: ${tripTitle(t)} · ${fmtDuration(t.end - t.start)} · ${fmtDistance(t.distance)}`,
+    el("button", { type: "button", class: "link", onclick: clearTrip }, "Close"));
+  $("#map").append(tripPill);
 }
 
 // ---- icon picker: an emoji (or the initial) on a colour ----

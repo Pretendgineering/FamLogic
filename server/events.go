@@ -38,7 +38,11 @@ type Event struct {
 	Note     string `json:"note,omitempty"`     // checkin: optional message
 	CircleID string `json:"circleId,omitempty"` // place alerts: the circle the place belongs to
 	PlaceID  string `json:"placeId,omitempty"`
-	Place    string `json:"place,omitempty"` // place name, for "Sam arrived at School"
+	// trip: where it started (a fence id, if any), how far and how long.
+	FromPlaceID string  `json:"fromPlaceId,omitempty"`
+	Distance    float64 `json:"distance,omitempty"` // metres
+	Duration    int64   `json:"duration,omitempty"` // ms
+	Place       string  `json:"place,omitempty"`    // place name, for "Sam arrived at School"
 	// Where it happened (sos, checkin), when the phone knew.
 	Lat float64 `json:"lat,omitempty"`
 	Lon float64 `json:"lon,omitempty"`

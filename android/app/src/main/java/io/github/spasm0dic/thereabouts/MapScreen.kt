@@ -166,6 +166,10 @@ fun MapScreen(
     // The person you tapped, whose trail (if they keep one) is drawn on the map.
     var selected by remember { mutableStateOf<String?>(null) }
     var trail by remember { mutableStateOf<List<TrailPoint>>(emptyList()) }
+    var tripDays by remember { mutableStateOf<Int?>(null) }
+    // The person whose sheet (directions, alerts, trips) is open, and a trip drawn on the map.
+    var sheetFor by remember { mutableStateOf<String?>(null) }
+    var shownTrip by remember { mutableStateOf<Trip?>(null) }
     // Bumped every minute so "5 min ago" labels stay current.
     var tick by remember { mutableIntStateOf(0) }
 
@@ -182,6 +186,8 @@ fun MapScreen(
             Alerts.handle(context, res.events)
             shareLowBattery = res.shareLowBattery
             places = res.places
+            prefs.fenceNames = res.places.associate { it.id to it.name } // for trip alerts
+            tripDays = res.tripDays
             shareArrivals = res.shareArrivals
             features = res.features
             serverVersion = res.server.version
@@ -415,6 +421,19 @@ fun MapScreen(
             shareArrivals = shareArrivals,
             serverVersion = serverVersion,
             trailHours = trailHours,
+            tripDays = tripDays,
+            onTripDaysChange = { d ->
+                val before = tripDays
+                tripDays = d
+                scope.launch {
+                    try {
+                        Api(prefs.serverUrl, prefs.token).setTripDays(d)
+                    } catch (e: IOException) {
+                        tripDays = before
+                        Toast.makeText(context, "Couldn't save: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
             onTrailHoursChange = { h ->
                 val before = trailHours
                 trailHours = h
@@ -476,6 +495,24 @@ fun MapScreen(
     val shown = if (circleFilter.isEmpty()) members
     else members.filter { it.id == prefs.memberId || circleFilter in it.circles }
     val statusOf: (Member) -> String = { m -> statusLine(m, me, tick) }
+
+    members.find { it.id == sheetFor }?.let { m ->
+        PersonSheet(
+            prefs = prefs,
+            m = m,
+            isMe = m.id == prefs.memberId,
+            status = statusOf(m),
+            canTrips = supports("trips"),
+            onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
+            onShowTrip = { t ->
+                sheetFor = null
+                selected = m.id
+                shownTrip = t
+                camera = CameraCommand.FitPoints(t.points, ++cameraSeq)
+            },
+            onDismiss = { sheetFor = null },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -581,13 +618,29 @@ fun MapScreen(
                         else Toast.makeText(context, OUTDATED_SERVER, Toast.LENGTH_LONG).show()
                     },
                     onPlaceClick = { p -> placeEdit = PlaceEdit.Edit(p) },
-                    trail = trail,
+                    trail = shownTrip?.points ?: trail,
                     trailColor = members.find { it.id == selected }?.color ?: "#4363d8",
                     tiles = MapStyles.resolve(mapStyle, isSystemInDarkTheme(), tileUrl, tileUrlDark, attribution),
                     camera = camera,
                     statusOf = statusOf,
                     modifier = Modifier.fillMaxSize(),
                 )
+                shownTrip?.let { t ->
+                    Box(Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.TopCenter) {
+                        Surface(shape = RoundedCornerShape(50), tonalElevation = 6.dp, shadowElevation = 4.dp) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp)) {
+                                Text(
+                                    t.title() + " · " + Units.duration(t.end - t.start),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                TextButton(onClick = { shownTrip = null }) { Text("Close") }
+                            }
+                        }
+                    }
+                }
             }
 
             // Actions, all in one row under the map.
@@ -605,6 +658,7 @@ fun MapScreen(
                     onClick = {
                         selected = null
                         trail = emptyList()
+                        shownTrip = null
                         camera = CameraCommand.FitAll(++cameraSeq)
                     },
                     modifier = Modifier.weight(1f),
@@ -631,6 +685,8 @@ fun MapScreen(
                             status = statusOf(m),
                             onClick = {
                                 haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                shownTrip = null
+                                sheetFor = m.id
                                 m.loc?.let { camera = CameraCommand.Center(it.lat, it.lon, ++cameraSeq) }
                                 selected = m.id
                                 trail = emptyList()
@@ -672,7 +728,7 @@ private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> U
     val sos = m.sosSince > 0
     val stale = m.loc == null || m.paused || System.currentTimeMillis() - m.loc.time > STALE_MS
     Row(
-        Modifier.fillMaxWidth().clickable(enabled = m.loc != null, onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -720,16 +776,9 @@ private fun statusLine(m: Member, me: Member?, tick: Int): String {
     if (me != null && me.id != m.id && myLoc != null && !me.paused) {
         val out = FloatArray(1)
         Location.distanceBetween(myLoc.lat, myLoc.lon, loc.lat, loc.lon, out)
-        parts += if (out[0] < 100) "nearby" else formatDistance(out[0]) + " away"
+        parts += if (out[0] < 100) "nearby" else Units.distance(out[0].toDouble()) + " away"
     }
     return parts.joinToString(" · ")
-}
-
-private fun formatDistance(m: Float) = when {
-    m < 100 -> "nearby"
-    m < 1000 -> "${(m / 10).toInt() * 10} m"
-    m < 10_000 -> "%.1f km".format(m / 1000)
-    else -> "${(m / 1000).toInt()} km"
 }
 
 /** Opens whatever maps app the person has (OsmAnd, Organic Maps, Google Maps, ...). */

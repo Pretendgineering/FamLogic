@@ -83,6 +83,22 @@ object Alerts {
                 val title = if (arriving) "${e.name} arrived at ${e.place}" else "${e.name} left ${e.place}"
                 notify(context, CHANNEL_ALERTS, eventId(e), title, "Tap to see the map.", e.memberId)
             }
+            "trip" -> {
+                if (!prefs.notifyTrips || e.memberId in prefs.mutedPeople) return
+                val names = prefs.fenceNames
+                val from = names[e.fromPlaceId]
+                val to = names[e.placeId]
+                val route = when {
+                    from != null && to != null -> "$from → $to"
+                    to != null -> "to $to"
+                    from != null -> "from $from"
+                    else -> "a trip"
+                }
+                notify(
+                    context, CHANNEL_ALERTS, eventId(e), "${e.name} finished $route",
+                    "${Units.duration(e.duration)} · ${Units.distance(e.distance)}. Tap to see where.", e.memberId,
+                )
+            }
             "silent" -> {
                 if (!prefs.notifySilent || e.memberId in prefs.mutedPeople) return
                 val battery = if (e.battery >= 0) " Their battery was at ${e.battery}%." else ""

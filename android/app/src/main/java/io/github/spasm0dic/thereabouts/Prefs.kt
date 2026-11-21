@@ -144,6 +144,18 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("notify_silent", true)
         set(v) = sp.edit { putBoolean("notify_silent", v) }
 
+    /** Feature: "Sam: Home → School, 12 min" when someone finishes a trip. Off by default. */
+    var notifyTrips: Boolean
+        get() = sp.getBoolean("notify_trips", false)
+        set(v) = sp.edit { putBoolean("notify_trips", v) }
+
+    /** Names of the fences this phone knows (id -> name), for trip alerts. */
+    var fenceNames: Map<String, String>
+        get() = sp.getStringSet("fence_names", emptySet())!!.mapNotNull { e ->
+            e.split('\t', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] }
+        }.toMap()
+        set(v) = sp.edit { putStringSet("fence_names", v.map { (id, name) -> "$id\t$name" }.toSet()) }
+
     /** Update less often while this phone's battery is low (and not charging). */
     var batterySaver: Boolean
         get() = sp.getBoolean("battery_saver", true)

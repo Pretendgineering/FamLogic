@@ -54,6 +54,10 @@ type Member struct {
 
 	// How many hours of trail this person keeps for others to see (0 = none, the default).
 	TrailHours int `json:"trailHours,omitempty"`
+	// How many days of trips they keep (0 = none), and when the last trip they
+	// were alerted about ended (see trips.go).
+	TripDays    int   `json:"tripDays,omitempty"`
+	LastTripEnd int64 `json:"lastTripEnd,omitempty"`
 
 	// SOS: set while this person has an SOS active, until they say they're OK.
 	SOSSince int64 `json:"sosSince,omitempty"`
