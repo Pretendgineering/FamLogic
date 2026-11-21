@@ -72,6 +72,8 @@ private class MapState {
     // The latest callbacks, read by long-lived osmdroid listeners.
     var onLongPress: (Double, Double) -> Unit = { _, _ -> }
     var onPlaceClick: (Place) -> Unit = {}
+    var onMemberClick: (String) -> Unit = {}
+    var onMapTap: () -> Unit = {}
 }
 
 const val STALE_MS = 30 * 60 * 1000L
@@ -89,12 +91,18 @@ fun OsmMap(
     trailColor: String = "#4363d8",
     onLongPress: (lat: Double, lon: Double) -> Unit = { _, _ -> },
     onPlaceClick: (Place) -> Unit = {},
+    /** A person's pin was tapped (their id). */
+    onMemberClick: (String) -> Unit = {},
+    /** The map itself was tapped (not a pin or fence). */
+    onMapTap: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val state = remember { MapState() }
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
     state.onLongPress = onLongPress
     state.onPlaceClick = onPlaceClick
+    state.onMemberClick = onMemberClick
+    state.onMapTap = onMapTap
     val mapView = remember {
         MapView(context).apply {
             setMultiTouchControls(true)
@@ -105,7 +113,10 @@ fun OsmMap(
             // First overlay = last to see touches, so markers and places get theirs first.
             overlays.add(
                 MapEventsOverlay(object : MapEventsReceiver {
-                    override fun singleTapConfirmedHelper(p: GeoPoint?) = false
+                    override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                        state.onMapTap()
+                        return false
+                    }
                     override fun longPressHelper(p: GeoPoint?): Boolean {
                         p?.let { state.onLongPress(it.latitude, it.longitude) }
                         return p != null
@@ -206,8 +217,10 @@ fun OsmMap(
             val stale = System.currentTimeMillis() - loc.time > STALE_MS
             marker.position = GeoPoint(loc.lat, loc.lon)
             marker.icon = BitmapDrawable(context.resources, avatarBitmap(context, m.name, m.color, stale, sos = m.sosSince > 0, emoji = m.emoji))
-            marker.title = m.name
-            marker.snippet = statusOf(m)
+            // No osmdroid pop-up: the app shows its own card for the person.
+            marker.setInfoWindow(null)
+            val id = m.id
+            marker.setOnMarkerClickListener { _, _ -> state.onMemberClick(id); true }
         }
 
         if (camera != null && camera.seq != state.appliedSeq) {

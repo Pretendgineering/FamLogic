@@ -172,6 +172,15 @@ fun MapScreen(
     // The person whose sheet (directions, alerts, trips) is open, and a trip drawn on the map.
     var sheetFor by remember { mutableStateOf<String?>(null) }
     var shownTrip by remember { mutableStateOf<Trip?>(null) }
+    // A short-lived card at the top of the map for the pin you tapped.
+    var bubbleFor by remember { mutableStateOf<String?>(null) }
+    var bubbleSeq by remember { mutableIntStateOf(0) }
+    LaunchedEffect(bubbleFor, bubbleSeq) {
+        if (bubbleFor != null) {
+            delay(5_000)
+            bubbleFor = null
+        }
+    }
     // Bumped every minute so "5 min ago" labels stay current.
     var tick by remember { mutableIntStateOf(0) }
 
@@ -621,6 +630,21 @@ fun MapScreen(
                         else Toast.makeText(context, OUTDATED_SERVER, Toast.LENGTH_LONG).show()
                     },
                     onPlaceClick = { p -> placeEdit = PlaceEdit.Edit(p) },
+                    onMemberClick = { id ->
+                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        shownTrip = null
+                        bubbleFor = id
+                        bubbleSeq++
+                        val m = members.find { it.id == id }
+                        if (m != null && selected != id) {
+                            selected = id
+                            trail = emptyList()
+                            if (m.trail && prefs.showTrails) scope.launch {
+                                trail = runCatching { Api(prefs.serverUrl, prefs.token).trail(id) }.getOrDefault(emptyList())
+                            }
+                        }
+                    },
+                    onMapTap = { bubbleFor = null },
                     trail = shownTrip?.points ?: trail,
                     trailColor = members.find { it.id == selected }?.color ?: "#4363d8",
                     tiles = MapStyles.resolve(mapStyle, isSystemInDarkTheme(), tileUrl, tileUrlDark, attribution, dimMap),
@@ -628,6 +652,24 @@ fun MapScreen(
                     statusOf = statusOf,
                     modifier = Modifier.fillMaxSize(),
                 )
+                members.find { it.id == bubbleFor }?.takeIf { shownTrip == null }?.let { m ->
+                    Box(Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.TopCenter) {
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            tonalElevation = 6.dp,
+                            shadowElevation = 4.dp,
+                            onClick = { bubbleFor = null; sheetFor = m.id }, // more about them
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 6.dp, end = 16.dp, top = 6.dp, bottom = 6.dp)) {
+                                Avatar(m.name, m.emoji, m.color, 36)
+                                Column(Modifier.padding(start = 10.dp)) {
+                                    Text(if (m.id == prefs.memberId) "${m.name} (you)" else m.name, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                    Text(statusOf(m), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                }
+                            }
+                        }
+                    }
+                }
                 shownTrip?.let { t ->
                     Box(Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.TopCenter) {
                         Surface(shape = RoundedCornerShape(50), tonalElevation = 6.dp, shadowElevation = 4.dp) {
@@ -662,6 +704,7 @@ fun MapScreen(
                         selected = null
                         trail = emptyList()
                         shownTrip = null
+                        bubbleFor = null
                         camera = CameraCommand.FitAll(++cameraSeq)
                     },
                     modifier = Modifier.weight(1f),
@@ -690,6 +733,7 @@ fun MapScreen(
                             onClick = {
                                 haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 shownTrip = null
+                                bubbleFor = null
                                 m.loc?.let { camera = CameraCommand.Center(it.lat, it.lon, ++cameraSeq) }
                                 selected = m.id
                                 trail = emptyList()
