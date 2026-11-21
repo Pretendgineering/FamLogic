@@ -94,7 +94,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     // Plus build only: Google's fused location and activity recognition.
-    "plusImplementation"("com.google.android.gms:play-services-location:21.4.0")
+    "plusImplementation"("com.google.android.gms:play-services-location:21.3.0")
 
     // OpenStreetMap map view (Apache 2.0).
     implementation("org.osmdroid:osmdroid-android:6.1.20")
