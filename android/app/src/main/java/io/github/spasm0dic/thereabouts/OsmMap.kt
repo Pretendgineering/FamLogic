@@ -66,7 +66,6 @@ private class MapState {
     var appliedSeq = -1
     val markers = mutableMapOf<String, Marker>()
     val places = mutableMapOf<String, Pair<Polygon, Marker>>()
-    val labels = mutableListOf<Marker>()
     var drawnPlaces: List<Place>? = null
     var trailLine: Polyline? = null
     var drawnTrail: Any? = null
@@ -114,15 +113,6 @@ fun OsmMap(
                 }),
             )
             overlays.add(CopyrightOverlay(context))
-            // Fence names only when zoomed in enough to read them without piling up.
-            addMapListener(object : org.osmdroid.events.MapListener {
-                override fun onScroll(event: org.osmdroid.events.ScrollEvent?) = false
-                override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
-                    val show = zoomLevelDouble >= LABEL_MIN_ZOOM
-                    state.labels.forEach { it.isEnabled = show }
-                    return false
-                }
-            })
         }
     }
 
@@ -290,6 +280,40 @@ private fun boxAround(pts: List<GeoPoint>, scale: Float): BoundingBox {
 
 private const val LABEL_MIN_ZOOM = 14.0
 
+/**
+ * A fence's marker: its name when zoomed in enough to read it, a small dot
+ * when zoomed out (so names don't pile up). Chosen each time the map draws,
+ * so it switches the moment you cross the zoom level.
+ */
+private class FenceMarker(map: MapView, private val label: android.graphics.drawable.Drawable, private val dot: android.graphics.drawable.Drawable) :
+    Marker(map) {
+    init {
+        icon = label
+    }
+
+    override fun draw(canvas: Canvas, pj: org.osmdroid.views.Projection) {
+        val want = if (pj.zoomLevel >= LABEL_MIN_ZOOM) label else dot
+        if (icon !== want) icon = want
+        super.draw(canvas, pj)
+    }
+}
+
+/** The small, quiet dot that marks a fence when zoomed out. */
+private fun fenceDotBitmap(context: Context, accent: Int, dark: Boolean): Bitmap {
+    val d = context.resources.displayMetrics.density
+    val size = (16 * d).toInt()
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val r = size / 2f
+    val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (dark) Color.rgb(38, 39, 53) else Color.WHITE
+        setShadowLayer(1.5f * d, 0f, 0.5f * d, Color.argb(if (dark) 120 else 70, 0, 0, 0))
+    }
+    c.drawCircle(r, r, r - 2.5f * d, ring)
+    c.drawCircle(r, r, r - 4.5f * d, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent })
+    return bmp
+}
+
 /** A fence's name as a small rounded pill in the theme's colours, with a soft shadow. */
 private fun fenceLabelBitmap(context: Context, text: String, accent: Int, dark: Boolean): Bitmap {
     val d = context.resources.displayMetrics.density
@@ -370,7 +394,6 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>, dark:
         map.overlays.remove(label)
     }
     state.places.clear()
-    state.labels.clear()
     // The theme's purple: deeper on light maps, lilac on dark ones.
     val accent = if (dark) Color.rgb(189, 147, 249) else Color.rgb(110, 72, 214)
     val d = map.context.resources.displayMetrics.density
@@ -386,15 +409,16 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>, dark:
             title = p.name
             setOnClickListener { _, _, _ -> state.onPlaceClick(p); true }
         }
-        val label = Marker(map).apply {
+        val label = FenceMarker(
+            map,
+            BitmapDrawable(map.context.resources, fenceLabelBitmap(map.context, p.name, accent, dark)),
+            BitmapDrawable(map.context.resources, fenceDotBitmap(map.context, accent, dark)),
+        ).apply {
             position = center
-            icon = BitmapDrawable(map.context.resources, fenceLabelBitmap(map.context, p.name, accent, dark))
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             setInfoWindow(null) // no pop-up; tapping opens the fence instead
-            isEnabled = map.zoomLevelDouble >= LABEL_MIN_ZOOM
             setOnMarkerClickListener { _, _ -> state.onPlaceClick(p); true }
         }
-        state.labels += label
         // Just above the touch overlay (index 0), below everything else.
         map.overlays.add(1 + 2 * i, poly)
         map.overlays.add(2 + 2 * i, label)

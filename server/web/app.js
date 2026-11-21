@@ -247,8 +247,10 @@ function ensureMap(server) {
   if (map) { applyTiles(); return; }
   map = L.map("map", { zoomControl: true }).setView([20, 0], 2);
   // Fence names only when zoomed in enough to read them without piling up.
-  const labelsByZoom = () => document.body.classList.toggle("zoomed-out", map.getZoom() < 14);
-  map.on("zoomend", labelsByZoom);
+  const labelsByZoom = (z) => document.body.classList.toggle("zoomed-out", (typeof z === "number" ? z : map.getZoom()) < 14);
+  // zoomanim says where an animated zoom is heading, so the switch happens as it starts, not after.
+  map.on("zoomanim", (e) => labelsByZoom(e.zoom));
+  map.on("zoom zoomend", () => labelsByZoom());
   labelsByZoom();
   applyTiles();
 }
