@@ -10,7 +10,7 @@ import android.location.Location
  * every minute to check. A second fast fix at least 20 s later confirms it.
  * It stays "driving" through stops of up to 3 minutes (lights, traffic).
  *
- * In the Plus build, Google's activity recognition can take over ([useMotion]):
+ * In the Google edition, Google's activity recognition can take over ([useMotion]):
  * then "in a vehicle" from the phone's motion sensors decides, and GPS speed is ignored.
  */
 class DriveDetector {
@@ -22,7 +22,7 @@ class DriveDetector {
     private var lastFastAt = 0L
     private var prev: Location? = null
 
-    /** True while Google's activity recognition decides (Plus build); GPS speed is then ignored. */
+    /** True while Google's activity recognition decides (Google edition); GPS speed is then ignored. */
     var useMotion = false
         set(v) {
             if (field != v) { driving = false; candidate = false }

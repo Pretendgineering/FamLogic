@@ -21,9 +21,9 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 
-/** The Plus build: Google Play services extras, used only when Play services works. */
+/** The Google edition: Google Play services extras, used only when Play services works. */
 object Flavor {
-    const val PLUS = true
+    const val GOOGLE = true
 
     fun playServicesAvailable(context: Context) = runCatching {
         GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
@@ -36,7 +36,7 @@ object Flavor {
         if (playServicesAvailable(context) && Motion.permitted(context)) PlayMotion(context.applicationContext) else null
 }
 
-private const val TAG = "ThereaboutsPlus"
+private const val TAG = "ThereaboutsGoogle"
 
 private class PlayFusedLocation(context: Context) : FusedLocation {
     private val client = LocationServices.getFusedLocationProviderClient(context)

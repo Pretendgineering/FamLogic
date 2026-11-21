@@ -14,9 +14,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 
-/** Settings → Sharing, Plus build only: what Google Play services is used for. */
+/** Settings → Sharing, Google edition only: what Google Play services is used for. */
 @Composable
-internal fun PlusCard(prefs: Prefs) {
+internal fun GoogleCard(prefs: Prefs) {
     val context = LocalContext.current
     val play = remember { Flavor.playServicesAvailable(context) }
     var motionOn by remember { mutableStateOf(prefs.motionDriving) }

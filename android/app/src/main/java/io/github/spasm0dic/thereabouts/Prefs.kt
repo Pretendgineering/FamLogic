@@ -200,12 +200,12 @@ class Prefs(context: Context) {
         set(v) = sp.edit { putStringSet("fence_names", v.map { (id, name) -> "$id\t$name" }.toSet()) }
 
     /** Update less often while this phone's battery is low (and not charging). */
-    /** Plus build: detect driving with Google's activity recognition (when permitted). */
+    /** Google edition: detect driving with Google's activity recognition (when permitted). */
     var motionDriving: Boolean
         get() = sp.getBoolean("motion_driving", true)
         set(v) = sp.edit { putBoolean("motion_driving", v) }
 
-    /** Plus build: whether we've asked for the "Physical activity" permission once already. */
+    /** Google edition: whether we've asked for the "Physical activity" permission once already. */
     var motionAsked: Boolean
         get() = sp.getBoolean("motion_asked", false)
         set(v) = sp.edit { putBoolean("motion_asked", v) }

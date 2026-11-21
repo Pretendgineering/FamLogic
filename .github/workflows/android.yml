@@ -84,14 +84,14 @@ jobs:
           THEREABOUTS_KEYSTORE_PASSWORD: ${{ secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
           THEREABOUTS_KEY_PASSWORD: ${{ secrets.THEREABOUTS_KEY_PASSWORD || secrets.LIBRE360_KEY_PASSWORD }}
           # THEREABOUTS_KEY_ALIAS comes from the "Check signing key" step.
-        run: ./gradlew --no-daemon assembleFossRelease assemblePlusRelease lintFossDebug lintPlusDebug
+        run: ./gradlew --no-daemon assembleFossRelease assembleGoogleRelease lintFossDebug lintGoogleDebug
 
       - name: Show signing certificate
         id: cert
         run: |
-          # thereabouts.apk is the FOSS build (no Google); thereabouts-plus.apk adds Google Play services.
+          # thereabouts.apk is the FOSS build (no Google); thereabouts-google.apk adds Google Play services.
           mv app/build/outputs/apk/foss/release/app-foss-release.apk thereabouts.apk
-          mv app/build/outputs/apk/plus/release/app-plus-release.apk thereabouts-plus.apk
+          mv app/build/outputs/apk/google/release/app-google-release.apk thereabouts-google.apk
           apksigner="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
           "$apksigner" verify --print-certs thereabouts.apk | tee certs.txt
           sha=$(sed -n 's/.*certificate SHA-256 digest: //p' certs.txt | head -1)
@@ -103,7 +103,7 @@ jobs:
           name: thereabouts-apk
           path: |
             android/thereabouts.apk
-            android/thereabouts-plus.apk
+            android/thereabouts-google.apk
 
       # Every build on main whose versionName has no release yet becomes a GitHub release
       # (e.g. v0.1.1) with the APK attached, but only when signed with the release key.
@@ -121,12 +121,12 @@ jobs:
             exit 0
           fi
           cat > notes.md <<NOTES
-          Install \`thereabouts.apk\` on your Android phone. \`thereabouts-plus.apk\` is the same app with Google Play services for quicker location fixes and driving detection from motion sensors; either installs over the other as an update. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/thereabouts:latest\`. See the README for setup.
+          Install \`thereabouts.apk\` on your Android phone. \`thereabouts-google.apk\` is the same app with Google Play services for quicker location fixes and driving detection from motion sensors; either installs over the other as an update. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/thereabouts:latest\`. See the README for setup.
 
           Signing certificate SHA-256 (every official Thereabouts APK has this same fingerprint):
           \`$CERT_SHA256\`
           NOTES
-          gh release create "$tag" thereabouts.apk thereabouts-plus.apk --target "$GITHUB_SHA" --title "Thereabouts $version" --notes-file notes.md
+          gh release create "$tag" thereabouts.apk thereabouts-google.apk --target "$GITHUB_SHA" --title "Thereabouts $version" --notes-file notes.md
 
   # The Pebble watchapp and watchface (.pbw files), attached to the same release.
   # Kept separate from the APK so a Pebble SDK hiccup never blocks a phone release.

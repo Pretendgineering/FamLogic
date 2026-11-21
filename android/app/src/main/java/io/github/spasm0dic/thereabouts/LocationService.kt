@@ -156,7 +156,7 @@ class LocationService : Service() {
 
     private val drive = DriveDetector()
 
-    // Plus build extras (null in the FOSS build, or when Google Play services isn't working).
+    // Google edition extras (null in the FOSS build, or when Google Play services isn't working).
     private var fused: FusedLocation? = null
     private var motion: MotionSensing? = null
     private var fusedFailed = false
@@ -196,7 +196,7 @@ class LocationService : Service() {
             .build()
 
         startMotion()
-        // Plus build: Google's fused location when Play services works; otherwise Android's own below.
+        // Google edition: Google's fused location when Play services works; otherwise Android's own below.
         if (fused == null && !fusedFailed) fused = Flavor.fusedLocation(this)
         val f = fused
         if (f != null && f.start(intervalMs, highAccuracy = prefs.sosActive, onFix = { onFix(it) }, onFailed = {
@@ -243,7 +243,7 @@ class LocationService : Service() {
         runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
     }
 
-    /** Plus build: driving from Google's activity recognition, if switched on and permitted. */
+    /** Google edition: driving from Google's activity recognition, if switched on and permitted. */
     private fun startMotion() {
         if (!prefs.motionDriving || motionFailed) { stopMotion(); return }
         if (motion != null) return
@@ -538,7 +538,7 @@ class LocationService : Service() {
         var isRunning = false
             private set
 
-        /** Plus build: what's in use right now, for Settings. */
+        /** Google edition: what's in use right now, for Settings. */
         @Volatile
         var usingFused = false
             private set

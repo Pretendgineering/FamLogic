@@ -305,14 +305,14 @@ fun MapScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
-    // Plus build: ask once for "Physical activity" (driving from motion sensors), after location.
+    // Google edition: ask once for "Physical activity" (driving from motion sensors), after location.
     val askMotion = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         LocationService.start(context)
     }
     val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         perms = PermissionState.read(context)
         LocationService.start(context)
-        if (Flavor.PLUS && perms.location && prefs.motionDriving && !prefs.motionAsked &&
+        if (Flavor.GOOGLE && perms.location && prefs.motionDriving && !prefs.motionAsked &&
             !Motion.permitted(context) && Flavor.playServicesAvailable(context)
         ) {
             prefs.motionAsked = true
@@ -325,7 +325,7 @@ fun MapScreen(
     // First time on this screen: ask for location straight away.
     LaunchedEffect(Unit) {
         if (!perms.location) askLocation.launch(PermissionState.foregroundPermissions())
-        else if (Flavor.PLUS && prefs.motionDriving && !prefs.motionAsked && !Motion.permitted(context) &&
+        else if (Flavor.GOOGLE && prefs.motionDriving && !prefs.motionAsked && !Motion.permitted(context) &&
             Flavor.playServicesAvailable(context)
         ) {
             prefs.motionAsked = true

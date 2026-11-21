@@ -7,9 +7,9 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 
 /*
- * Google Play services extras. The Plus build (src/plus) provides them; the FOSS
+ * Google Play services extras. The Google edition (src/google) provides them; the FOSS
  * build (src/foss) has none, and the app uses Android's own location and GPS speed.
- * The Plus build also falls back to those whenever Google Play services is missing
+ * The Google edition also falls back to those whenever Google Play services is missing
  * or something fails, so it always works.
  */
 
