@@ -142,6 +142,30 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 - **Settings** is split into pages: Sharing, Groups, Fences, Alerts, Trail, Account, Phone setup and About. Each feature has its own on/off switches, for example to hide the SOS bar or Check in button, or to stop a kind of alert.
 - **Map style** (Settings → Map in the app, bottom of the sidebar in the dashboard): Server default, **OpenStreetMap**, **Humanitarian** (softer colours) or **Topographic** (OpenTopoMap). All are free and need no key. In dark mode the map is softened a little; turn that off with **Soften the map in dark mode**. It only changes your own phone or browser.
 - **Leave this server** (Settings → About): removes you from the server.
+- **SOS "seen"**: when someone has an SOS, their banner (and the alert) has a **Seen** button. The person in trouble then sees "Seen by Mom, Sam", so they know help knows.
+- **Pick me up / Call me**: long-press a person and tap **Pick me up** (sends them your location) or **Call me**. Only that person gets it.
+- **Place reminders** (Settings → Fences → Reminders): "When I get to School, remind me to sign the form". A reminder is for you only, fires once when you arrive at (or leave) that fence, then disappears.
+
+### Pebble watches and the Index 01 ring
+
+Optional extras, all running through the Thereabouts phone app (no Google services needed). Settings → **Pebble & Index** has the switches.
+
+**Pebble watchapp** (`thereabouts-watch.pbw` on the [releases page](../../releases)): open the file on your phone and the Pebble app installs it. It works on every Pebble, old and new (Pebble 2 Duo, Time 2 and Round 2 included).
+- **Your family at a glance**: everyone with their status ("At Home", "Driving", "12 min ago"). Select a person for **Pick me up**, **Call me** or **I've seen your SOS**.
+- **You** (top row): **Check in** with a preset ("Made it", "On my way", "Running late", "All good") or by speaking on watches with a microphone; **Pause/Resume sharing**; and **SOS**: hold Select for 3 seconds (the watch counts down with buzzes). Holding again for 2 seconds ends it.
+- **SOS from others** opens the watchapp full screen with a repeating buzz, plus a siren on watches with a speaker (Duo, Time 2), until you press Select (which also sends "seen") or Back.
+- **Timeline pins** for arrivals, departures, check-ins, trips, reminders and requests (on by default).
+- **Heart rate in SOS** (off by default, Time 2 and other heart-rate watches): your SOS includes your latest heart rate.
+- **Fall detection** (off by default, experimental): a hard fall starts a 30-second countdown on the watch; press any button to cancel, otherwise it sends an SOS. False alarms are possible, so try it before relying on it.
+- Your watch battery shows in your status ("watch 40%") so others know if it's about to die.
+
+**Family watchface** (`thereabouts-face.pbw`): the time, the date, and a row of family dots: filled at a fence, hollow when out, grey when not heard from for a while, a white ring while driving and a red ring during an SOS.
+
+**Index 01 ring**: Settings → Pebble & Index → **Index 01 ring** gives you three private links: **SOS**, **Check in** and **Remind**. In the Pebble app, set a ring gesture's webhook to one of them (for example "double-click and hold" → SOS, "hold and talk" → Check in), and paste the **signing secret** if the app asks for one.
+- **SOS** starts a silent SOS: your family is alerted as usual (with what you said, if anything) but your phone doesn't ring.
+- **Check in** sends what you said as a check-in.
+- **Remind** turns "When I get home, remind me to take the bins out" into a place reminder. Say "leave" or "leaving" for a reminder when you leave instead. The fence's name has to be in what you say.
+- Anyone with a link can act as you, so keep them private; **Make new links** replaces them.
 
 ### Backups and restoring
 

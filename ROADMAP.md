@@ -131,11 +131,6 @@ These are parked until we decide to pick them up. Each needs a short design pass
   - **C.** Drop it.
 - Decision: parked for now (Nov 2026). Revisit with options A/B above.
 
-### 12. Pebble watch companion
-- **Research done (Nov 2026):** see [docs/PEBBLE.md](docs/PEBBLE.md) for the hardware (Pebble 2 Duo, Time 2, Round 2, Index 01 ring), the software stack (C watchapp + PebbleKit Android 2, FOSS-friendly), feature ideas and open questions.
-- Shape: a C watchapp for all platforms, with the Thereabouts phone app as the bridge, plus a webhook on the server for the Index 01 ring.
-- Not started.
-
 ## Build order
 
 1. ✅ **Delivery mechanism plus low-battery alerts** (0.2.0).
@@ -149,5 +144,6 @@ These are parked until we decide to pick them up. Each needs a short design pass
 7b. ✅ **0.9.0:** per-person, per-group and per-fence alert switches; emoji icons instead of the initial; phone health in the dashboard and "phone went quiet" alerts; daily server backups and a download button; fence alert hours; battery saver.
 7c. ✅ **0.10.0:** trips: journeys between stops (kept 1, 3 or 7 days, opt-in), with fence or street names, distance, average and top speed, route on the map, optional "finished a trip" alerts, in the app (tap a person) and dashboard. Also: colour and emoji picker, keyless map styles, Settings reordered.
 7d. ✅ **0.11.0:** driving detection from GPS speed: "Driving" status and 🚗 badge, 1-minute updates while driving, optional "started driving" alert.
+7e. ✅ **0.12.0:** Pebble watchapp (family list, check-in with dictation, SOS from the watch, SOS alarm with siren, pick me up / call me, pause), Family watchface, timeline pins, opt-in fall detection and heart rate in SOS, watch battery; Index 01 ring webhooks (silent SOS, voice check-in, voice place reminders); SOS "seen" receipts and place reminders for everyone. See [docs/PEBBLE.md](docs/PEBBLE.md).
 8. **Profile pictures** (later; emoji icons cover the simple case).
 9. **Shareable invite message** with an app download link (once the app is on F-Droid or IzzyOnDroid).

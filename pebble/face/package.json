@@ -1,0 +1,55 @@
+{
+  "name": "thereabouts-face",
+  "author": "Thereabouts",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Thereabouts Family",
+    "uuid": "a1f5e2c7-3d94-4b6e-8f02-5c9e7d1a3b64",
+    "sdkVersion": "3",
+    "enableMultiJS": false,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "messageKeys": {
+      "CMD": 0,
+      "IDX": 1,
+      "COUNT": 2,
+      "ID": 3,
+      "NAME": 4,
+      "STATUS": 5,
+      "COLOR": 6,
+      "FLAGS": 7,
+      "TEXT": 8,
+      "KIND": 9,
+      "NUM": 10,
+      "INITIAL": 11
+    },
+    "resources": {
+      "media": []
+    },
+    "companionApp": {
+      "android": {
+        "url": "https://github.com/Spasm0dic/Thereabouts/releases/latest",
+        "apps": [
+          {
+            "package": "io.github.spasm0dic.thereabouts"
+          }
+        ]
+      }
+    }
+  }
+}

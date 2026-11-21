@@ -3,9 +3,9 @@ name: Android
 on:
   push:
     branches: [main]
-    paths: ["android/**", ".github/workflows/android.yml"]
+    paths: ["android/**", "pebble/**", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["android/**", ".github/workflows/android.yml"]
+    paths: ["android/**", "pebble/**", ".github/workflows/android.yml"]
   workflow_dispatch:
 
 permissions:
@@ -123,3 +123,39 @@ jobs:
           \`$CERT_SHA256\`
           NOTES
           gh release create "$tag" thereabouts.apk --target "$GITHUB_SHA" --title "Thereabouts $version" --notes-file notes.md
+
+  # The Pebble watchapp and watchface (.pbw files), attached to the same release.
+  # Kept separate from the APK so a Pebble SDK hiccup never blocks a phone release.
+  pebble:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13" # pebble-tool doesn't support 3.14 yet
+      - name: Install the Pebble SDK
+        run: |
+          python -m pip install --quiet pebble-tool
+          pebble sdk install latest
+      - name: Build
+        run: |
+          (cd pebble/app && pebble build)
+          (cd pebble/face && pebble build)
+          cp pebble/app/build/app.pbw thereabouts-watch.pbw
+          cp pebble/face/build/face.pbw thereabouts-face.pbw
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thereabouts-pebble
+          path: "*.pbw"
+      - name: Attach to the release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' android/app/build.gradle.kts)
+          if gh release view "v$version" >/dev/null 2>&1; then
+            gh release upload "v$version" thereabouts-watch.pbw thereabouts-face.pbw --clobber
+          else
+            echo "No release v$version yet; the .pbw files are in the build artifacts."
+          fi

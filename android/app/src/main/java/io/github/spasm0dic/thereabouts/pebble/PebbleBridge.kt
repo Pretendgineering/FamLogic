@@ -295,7 +295,7 @@ object PebbleBridge {
                     PebbleKit.startApp(context, APP_UUID)
                     kotlinx.coroutines.delay(1_500) // let the app open
                     send(context, APP_UUID, mapOf(K_CMD to C_ALERT, K_KIND to "sos", K_ID to e.memberId, K_NAME to e.name.take(24),
-                        K_TEXT to (if (e.note.isNotEmpty()) "“${e.note.take(60)}”" else "needs help")))
+                        K_TEXT to (if (e.note.isNotEmpty()) "says “${e.note.take(56)}”" else "needs help")))
                 }
                 "sos_end", "sos_seen", "request" -> if (appOpen) {
                     val text = when (e.type) {

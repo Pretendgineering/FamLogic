@@ -1,6 +1,17 @@
-# Pebble companion: research and ideas
+# Pebble companion: design notes
 
-Status: **research only, nothing built** (November 2026). See ROADMAP item 12.
+Status: **built in 0.12.0** (November 2026). Everything in "Feature ideas" below shipped. How to use it is in the README ("Pebble watches and the Index 01 ring").
+
+## How it's built
+- `pebble/app`: the C watchapp (all platforms) with a background worker (`worker_src`) for fall detection. `pebble/face`: the Family watchface. CI builds both into `thereabouts-watch.pbw` and `thereabouts-face.pbw` on each release.
+- The phone app talks to the watch with the PebbleKit Android 2 protocol, ported minimally (two AIDL files in `android/app/src/main/aidl`, `pebble/PebbleKit.kt`) because the library needs a newer compileSdk and Kotlin. `PebbleListenerService` receives from the watch; `PebbleBridge` sends people, alerts and timeline pins.
+- Messages use small integer keys (listed at the top of `PebbleBridge.kt` and `main.c`; keep them in sync).
+- The Index 01 ring calls the server directly (`POST /api/index/{token}/{sos|checkin|remind}`), so it works without the watchapp. Requests are checked with the HMAC signature when present, and repeats are ignored.
+- Tested in the Pebble emulators (basalt, gabbro). Still to try on real hardware: the phone↔watch bridge, fall detection tuning, heart rate.
+
+---
+
+The original research follows.
 
 ## The hardware (Core Devices, 2025–2026)
 
