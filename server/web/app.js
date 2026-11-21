@@ -509,11 +509,11 @@ function renderPlaces() {
       L.circle([p.lat, p.lon], { radius: p.radius, color: accentColor(), weight: 2, fillOpacity: 0.1, interactive: false }),
       L.marker([p.lat, p.lon], {
         interactive: false,
-        icon: L.divIcon({ className: "place-label", html: "", iconSize: [160, 18], iconAnchor: [80, 9] }),
+        icon: L.divIcon({ className: "place-label", html: "<span></span>", iconSize: [0, 0] }),
       }),
     ]).addTo(map);
     // Set the name as text so it can never inject HTML.
-    layer.eachLayer((l) => { if (l instanceof L.Marker) l.getElement()?.replaceChildren(p.name); });
+    layer.eachLayer((l) => { if (l instanceof L.Marker) l.getElement()?.querySelector("span")?.replaceChildren(p.name); });
     placeLayers.set(p.id, layer);
   }
 }

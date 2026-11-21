@@ -66,6 +66,7 @@ private class MapState {
     var appliedSeq = -1
     val markers = mutableMapOf<String, Marker>()
     val places = mutableMapOf<String, Pair<Polygon, Marker>>()
+    val labels = mutableListOf<Marker>()
     var drawnPlaces: List<Place>? = null
     var trailLine: Polyline? = null
     var drawnTrail: Any? = null
@@ -113,6 +114,15 @@ fun OsmMap(
                 }),
             )
             overlays.add(CopyrightOverlay(context))
+            // Fence names only when zoomed in enough to read them without piling up.
+            addMapListener(object : org.osmdroid.events.MapListener {
+                override fun onScroll(event: org.osmdroid.events.ScrollEvent?) = false
+                override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
+                    val show = zoomLevelDouble >= LABEL_MIN_ZOOM
+                    state.labels.forEach { it.isEnabled = show }
+                    return false
+                }
+            })
         }
     }
 
@@ -278,6 +288,41 @@ private fun boxAround(pts: List<GeoPoint>, scale: Float): BoundingBox {
     )
 }
 
+private const val LABEL_MIN_ZOOM = 14.0
+
+/** A fence's name as a small rounded pill in the theme's colours, with a soft shadow. */
+private fun fenceLabelBitmap(context: Context, text: String, accent: Int, dark: Boolean): Bitmap {
+    val d = context.resources.displayMetrics.density
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 12 * d
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        color = accent
+    }
+    val label = if (text.length > 24) text.take(23) + "…" else text
+    val padX = 10 * d
+    val padY = 5 * d
+    val shadow = 3 * d
+    val w = paint.measureText(label) + 2 * padX
+    val h = paint.fontMetrics.let { it.descent - it.ascent } + 2 * padY
+    val bmp = Bitmap.createBitmap((w + 2 * shadow).toInt(), (h + 2 * shadow).toInt(), Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val r = android.graphics.RectF(shadow, shadow, shadow + w, shadow + h)
+    val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (dark) Color.rgb(38, 39, 53) else Color.WHITE
+        setShadowLayer(2.5f * d, 0f, d, Color.argb(if (dark) 120 else 60, 0, 0, 0))
+    }
+    c.drawRoundRect(r, h / 2, h / 2, bg)
+    // A thin ring in the fence colour ties it to its circle.
+    val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = d
+        color = Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent))
+    }
+    c.drawRoundRect(r, h / 2, h / 2, ring)
+    c.drawText(label, r.left + padX, r.top + padY - paint.fontMetrics.ascent, paint)
+    return bmp
+}
+
 fun parseColor(hex: String): Int = runCatching { Color.parseColor(hex) }.getOrDefault(Color.parseColor("#4363d8"))
 
 fun initialOf(name: String) = name.trim().take(1).uppercase().ifEmpty { "?" }
@@ -325,6 +370,7 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>, dark:
         map.overlays.remove(label)
     }
     state.places.clear()
+    state.labels.clear()
     // The theme's purple: deeper on light maps, lilac on dark ones.
     val accent = if (dark) Color.rgb(189, 147, 249) else Color.rgb(110, 72, 214)
     val d = map.context.resources.displayMetrics.density
@@ -342,14 +388,13 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>, dark:
         }
         val label = Marker(map).apply {
             position = center
-            // Colours first: osmdroid draws the label when the text is set.
-            textLabelForegroundColor = accent
-            textLabelBackgroundColor = if (dark) Color.argb(200, 38, 39, 53) else Color.argb(210, 255, 255, 255)
-            textLabelFontSize = (12 * d).toInt()
-            setTextIcon(p.name)
+            icon = BitmapDrawable(map.context.resources, fenceLabelBitmap(map.context, p.name, accent, dark))
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            setInfoWindow(null) // no pop-up; tapping opens the fence instead
+            isEnabled = map.zoomLevelDouble >= LABEL_MIN_ZOOM
             setOnMarkerClickListener { _, _ -> state.onPlaceClick(p); true }
         }
+        state.labels += label
         // Just above the touch overlay (index 0), below everything else.
         map.overlays.add(1 + 2 * i, poly)
         map.overlays.add(2 + 2 * i, label)
