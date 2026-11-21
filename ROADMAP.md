@@ -104,6 +104,35 @@ Make adding someone a single copy-paste. The dashboard's **Copy invite** button 
 - The invite page (`/join/<code>`) shows the same download link, so a link opened on a phone without the app installed still makes sense.
 - Wait until the app is in a store, so the message doesn't send people to sideload an APK.
 
+## Queued for later (not started)
+
+These are parked until we decide to pick them up. Each needs a short design pass (and questions) first.
+
+### 10. Two builds of the app: FOSS and Google Play services
+- **FOSS build (today's app):** stays the default, with no Google dependencies, for F-Droid/IzzyOnDroid and de-Googled phones.
+- **"Plus" build with Google Play services:** a second product flavour from the same code. Extras live behind a small interface, so the FOSS build simply doesn't include them.
+- Candidate extras:
+  - Activity recognition: driving, walking and cycling from Google's sensors, more accurate and cheaper on battery than the GPS-speed method.
+  - The fused location provider (better indoor fixes).
+  - Optionally Firebase Cloud Messaging as a backup wake-up for alerts.
+- Open questions: distribution (GitHub release with two APKs vs. Play Store), whether both can be installed side by side (different application IDs), and how the server and dashboard show which build someone is on.
+
+### 11. Google Find Hub trackers
+- Show Bluetooth trackers registered in Google's Find Hub network (keys, bags, pets) on the family map.
+- **Needs research first:** as far as we know, Find Hub has no public API that lets third-party apps read tracker locations, so this may not be possible (or only in a limited way, or via unofficial methods we'd want to avoid). Check what's officially available before designing anything.
+- If feasible, it would live in the Google Play services build only.
+
+### 12. Pebble watch companion
+- A small watch app plus phone-side glue:
+  - See everyone's status at a glance (name, "At Home" / "Driving", how long ago, battery).
+  - Check in from the wrist.
+  - Hold a button for SOS, with the same 3-second hold and the same confirmation.
+  - SOS and other alerts buzz the watch.
+- Research first:
+  - The current Pebble landscape: the new Pebble hardware and open-source PebbleOS, the Rebble services, the companion app on Android, and PebbleKit (AppMessage) for talking to the phone app.
+  - Which SDK and watch models to target.
+- Likely shape: the Thereabouts phone app relays to the watch, and the watch never talks to the server directly. Works in both builds.
+
 ## Build order
 
 1. ✅ **Delivery mechanism plus low-battery alerts** (0.2.0).
