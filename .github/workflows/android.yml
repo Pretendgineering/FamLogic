@@ -136,7 +136,7 @@ jobs:
           python-version: "3.13" # pebble-tool doesn't support 3.14 yet
       - name: Install the Pebble SDK
         run: |
-          python -m pip install --quiet pebble-tool
+          python -m pip install --quiet pebble-tool uv # the SDK sets up its own venv with uv
           pebble sdk install latest
       - name: Build
         run: |
