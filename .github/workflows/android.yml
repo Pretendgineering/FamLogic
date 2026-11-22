@@ -31,8 +31,7 @@ jobs:
       - name: Set up signing key
         id: signing
         env:
-          # Older secret names from before the project was renamed also work.
-          KEYSTORE_B64: ${{ secrets.FAMLOGIC_KEYSTORE_B64 || secrets.THEREABOUTS_KEYSTORE_B64 || secrets.LIBRE360_KEYSTORE_B64 }}
+          KEYSTORE_B64: ${{ secrets.FAMLOGIC_KEYSTORE_B64 }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
             echo "::warning::FAMLOGIC_KEYSTORE_B64 secret not set: building with a throwaway debug key. This APK will not be published as a release."
@@ -51,8 +50,8 @@ jobs:
       - name: Check signing key
         if: steps.signing.outputs.signed == 'true'
         env:
-          STORE_PASSWORD: ${{ secrets.FAMLOGIC_KEYSTORE_PASSWORD || secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.FAMLOGIC_KEY_ALIAS || secrets.THEREABOUTS_KEY_ALIAS || secrets.LIBRE360_KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.FAMLOGIC_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.FAMLOGIC_KEY_ALIAS }}
         run: |
           if [ -z "$STORE_PASSWORD" ]; then
             echo "::error::The FAMLOGIC_KEYSTORE_PASSWORD secret is missing or empty (check its exact name)."
@@ -63,7 +62,7 @@ jobs:
           if [ -z "$alias" ]; then
             alias=$(keytool -list -v -keystore "$FAMLOGIC_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD 2>/dev/null \
               | sed -n 's/^Alias name: //p' | head -1)
-            alias="${alias:-thereabouts}"
+            alias="${alias:-famlogic}"
           fi
           echo "FAMLOGIC_KEY_ALIAS=$alias" >> "$GITHUB_ENV"
           if ! out=$(keytool -list -keystore "$FAMLOGIC_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD -alias "$alias" 2>&1); then
@@ -81,8 +80,8 @@ jobs:
 
       - name: Build
         env:
-          FAMLOGIC_KEYSTORE_PASSWORD: ${{ secrets.FAMLOGIC_KEYSTORE_PASSWORD || secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
-          FAMLOGIC_KEY_PASSWORD: ${{ secrets.FAMLOGIC_KEY_PASSWORD || secrets.THEREABOUTS_KEY_PASSWORD || secrets.LIBRE360_KEY_PASSWORD }}
+          FAMLOGIC_KEYSTORE_PASSWORD: ${{ secrets.FAMLOGIC_KEYSTORE_PASSWORD }}
+          FAMLOGIC_KEY_PASSWORD: ${{ secrets.FAMLOGIC_KEY_PASSWORD }}
           # FAMLOGIC_KEY_ALIAS comes from the "Check signing key" step.
         run: ./gradlew --no-daemon assembleFossRelease assembleGoogleRelease lintFossDebug lintGoogleDebug
 
@@ -121,7 +120,7 @@ jobs:
             exit 0
           fi
           cat > notes.md <<NOTES
-          Install \`famlogic.apk\` on your Android phone. \`famlogic-google.apk\` is the same app with Google Play services for quicker location fixes and driving detection from motion sensors; either installs over the other as an update. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/famlogic:latest\`. See the README for setup (and "Upgrading from Thereabouts" if you used Thereabouts before).
+          Install \`famlogic.apk\` on your Android phone. \`famlogic-google.apk\` is the same app with Google Play services for quicker location fixes and driving detection from motion sensors; either installs over the other as an update. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/famlogic:latest\`. See the README for setup.
 
           Signing certificate SHA-256 (every official FamLogic APK has this same fingerprint):
           \`$CERT_SHA256\`

@@ -6,11 +6,11 @@ Every Android app is signed with a private key. Android remembers the signature 
 
 Three things follow from that:
 
-- **One key, forever.** Every FamLogic APK (and before it, every Thereabouts APK) must be signed with the same key so updates install over each other and nobody loses their settings or membership.
+- **One key, forever.** Every FamLogic APK must be signed with the same key so updates install over each other and nobody loses their settings or membership.
 - **Lose the key, and updates break.** Everyone would have to uninstall and reinstall. Back it up.
 - **Leak the key, and someone could sign fake updates.** Keep it private: never commit it, never paste it into chats or issues.
 
-The key lives in a small file (`thereabouts-release.p12`) protected by a password. GitHub keeps an encrypted copy as a repository secret, so CI can sign releases without the key ever being in the repo.
+The key lives in a small file (`famlogic-release.p12`) protected by a password. GitHub keeps an encrypted copy as a repository secret, so CI can sign releases without the key ever being in the repo.
 
 ## One-time setup
 
@@ -20,12 +20,12 @@ You only need a machine with Docker. These steps are for a **TrueNAS shell** (Sy
 
 ```sh
 # A folder on a share you can open from your computer. Change this path.
-KEYDIR=/mnt/POOL/SHARE/thereabouts-key
+KEYDIR=/mnt/POOL/SHARE/famlogic-key
 
 sudo mkdir -p "$KEYDIR"
 sudo docker run --rm -it -v "$KEYDIR":/keys -w /keys eclipse-temurin:21-jre \
-  keytool -genkeypair -keystore thereabouts-release.p12 -storetype PKCS12 \
-  -alias thereabouts -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Thereabouts"
+  keytool -genkeypair -keystore famlogic-release.p12 -storetype PKCS12 \
+  -alias famlogic -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=FamLogic"
 ```
 
 It asks for a password twice. Use a long one and save it in your password manager right away.
@@ -33,29 +33,27 @@ It asks for a password twice. Use a long one and save it in your password manage
 Then turn the key into text for GitHub, and give the files to your own user so you can open them over SMB:
 
 ```sh
-sudo sh -c "base64 -w0 '$KEYDIR/thereabouts-release.p12' > '$KEYDIR/thereabouts-release.b64'"
+sudo sh -c "base64 -w0 '$KEYDIR/famlogic-release.p12' > '$KEYDIR/famlogic-release.b64'"
 sudo chown -R "$(id -un)" "$KEYDIR"
 ```
 
-(On a regular Linux or Mac machine with Java installed, you can instead run just the `keytool ...` part in any folder, then `base64 -w0 thereabouts-release.p12 > thereabouts-release.b64`. On a Mac, use `base64 -i thereabouts-release.p12 -o thereabouts-release.b64`.)
+(On a regular Linux or Mac machine with Java installed, you can instead run just the `keytool ...` part in any folder, then `base64 -w0 famlogic-release.p12 > famlogic-release.b64`. On a Mac, use `base64 -i famlogic-release.p12 -o famlogic-release.b64`.)
 
 ### 2. Give it to GitHub
 
-From your computer, open the share and the `thereabouts-key` folder. In the GitHub repo, go to **Settings → Secrets and variables → Actions → New repository secret** and add two secrets:
+From your computer, open the share and the `famlogic-key` folder. In the GitHub repo, go to **Settings → Secrets and variables → Actions → New repository secret** and add two secrets:
 
 | Name | Value |
 |---|---|
-> The key and its secrets keep their original names from when the project was called Thereabouts: CI reads `FAMLOGIC_*` secrets, falling back to the older `THEREABOUTS_*` names, so nothing needs re-entering. A new setup can use either name.
-
-| `THEREABOUTS_KEYSTORE_B64` | the entire contents of `thereabouts-release.b64`: open it in a text editor, select all, copy. It's one long line. |
-| `THEREABOUTS_KEYSTORE_PASSWORD` | the password from step 1 |
+| `FAMLOGIC_KEYSTORE_B64` | the entire contents of `famlogic-release.b64`: open it in a text editor, select all, copy. It's one long line. |
+| `FAMLOGIC_KEYSTORE_PASSWORD` | the password from step 1 |
 
 CI finds the key's alias by itself, so there's nothing else to set.
 
 ### 3. Back it up, then clean up
 
-- Put `thereabouts-release.p12` and its password in your password manager (most accept file attachments). Keep a second copy offline, such as a USB stick in a drawer.
-- Then **delete the `thereabouts-key` folder from the share**. GitHub and your backups now hold the only copies, and a key sitting on a network share is easy to leak.
+- Put `famlogic-release.p12` and its password in your password manager (most accept file attachments). Keep a second copy offline, such as a USB stick in a drawer.
+- Then **delete the `famlogic-key` folder from the share**. GitHub and your backups now hold the only copies, and a key sitting on a network share is easy to leak.
 
 ### 4. Check it
 
@@ -71,7 +69,7 @@ If the secret is missing or wrong, the build warns about a throwaway key (or fai
 
 ## Getting updates on your phone automatically
 
-[Obtainium](https://github.com/ImranR98/Obtainium) installs apps straight from GitHub releases and checks for updates. Install it (from F-Droid or its GitHub page) and add `https://github.com/Spasm0dic/FamLogic`. New releases then arrive like any other app update. This works today, before Thereabouts is in any app store.
+[Obtainium](https://github.com/ImranR98/Obtainium) installs apps straight from GitHub releases and checks for updates. Install it (from F-Droid or its GitHub page) and add `https://github.com/Pretendgineering/FamLogic`. New releases then arrive like any other app update. This works today, before FamLogic is in any app store.
 
 ## F-Droid and other app stores
 

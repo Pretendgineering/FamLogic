@@ -17,7 +17,7 @@ How FamLogic is put together, and the plan for the pieces still to come. The ord
                 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-- **One server, one data folder.** `famlogic.json` holds people, settings and Thereabouts state (as before). Family content that people and agents edit lives as Markdown in `vault/`. Photos (chat) go in `media/`. Backing up the folder backs up everything.
+- **One server, one data folder.** `famlogic.json` holds people, settings and location-sharing state. Family content that people and agents edit lives as Markdown in `vault/`. Photos (chat) go in `media/`. Backing up the folder backs up everything.
 - **One Android app.** What it shows depends on the device's role and the modules that are on.
 - **Web console** for parents/admins: family, devices, modules, settings, and each module's admin pages.
 
@@ -36,7 +36,7 @@ Defined in `server/modules.go`. Each module has an id (stable, stored), a name, 
 | `display` | Family display | planned |
 | `agents` | AI & API access | planned |
 
-- **First run:** a new server (nobody joined yet) shows a module chooser in the console. A data file from before modules is treated as an existing Thereabouts family: Thereabouts on, no chooser.
+- **First run:** a new server (nobody joined yet) shows a module chooser in the console. A data file from before modules is treated as an existing family: location sharing on, no chooser.
 - **Apps** see the modules that are on and built as `module:<id>` in the server's `features`. `Modules.on()` in the app treats a server without the `modules` feature as Thereabouts-only.
 - **Admin API:** `GET /api/admin/modules`, `PUT /api/admin/modules {enabled: {id: bool}, setupDone}`.
 - A module chosen before it's built is remembered and switches on when it arrives.

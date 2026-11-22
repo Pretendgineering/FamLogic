@@ -41,7 +41,7 @@ The original research follows.
   - **CloudPebble** (a browser IDE) is back.
   - The `pebble-tool` command-line tool installs with `uv` and needs Python 3.13 (not 3.14), and comes with QEMU emulators for every platform.
 - **Talking to our Android app: PebbleKit Android 2** (`pebble-dev/PebbleKitAndroid2`).
-  - It's a Kotlin library. The watchapp's `package.json` lists Android companion packages (`"android": [{ "package": "io.github.spasm0dic.famlogic", "url": … }]`), and the Pebble app connects to the first one installed.
+  - It's a Kotlin library. The watchapp's `package.json` lists Android companion packages (`"android": [{ "package": "io.github.pretendgineering.famlogic", "url": … }]`), and the Pebble app connects to the first one installed.
   - Our app adds a provider entry to its manifest and can choose to talk only to our watchapp.
   - The Pebble app keeps our app awake while the watchapp is open, and no "starter" app is needed on the watch.
   - It needs Pebble/Core app 1.0.7.7 or newer. Version 1.14 (September 2026) added data logging from the watch to the phone over PebbleKit 2.

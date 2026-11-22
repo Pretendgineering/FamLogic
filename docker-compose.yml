@@ -1,7 +1,7 @@
 services:
   famlogic:
     # Use the published image, or comment this out and uncomment "build" to build it yourself.
-    image: ghcr.io/spasm0dic/famlogic:latest
+    image: ghcr.io/pretendgineering/famlogic:latest
     # build: ./server
     container_name: famlogic
     restart: unless-stopped
@@ -21,7 +21,6 @@ services:
       # How long an invite link works, in hours.
       # INVITE_HOURS: "72"
     volumes:
-      # Upgrading from Thereabouts? Keep your old volume name (thereabouts-data) here and below.
       - famlogic-data:/data
 
 volumes:

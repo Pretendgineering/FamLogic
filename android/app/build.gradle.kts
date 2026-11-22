@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "io.github.spasm0dic.famlogic"
+    namespace = "io.github.pretendgineering.famlogic"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "io.github.spasm0dic.famlogic"
+        applicationId = "io.github.pretendgineering.famlogic"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.17.1"
+        versionCode = 30
+        versionName = "0.18.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo
@@ -27,7 +27,7 @@ android {
                     ?: error("FAMLOGIC_KEYSTORE is set but FAMLOGIC_KEYSTORE_PASSWORD is not")
                 storeFile = file(keystorePath)
                 storePassword = password
-                keyAlias = System.getenv("FAMLOGIC_KEY_ALIAS")?.ifBlank { null } ?: "thereabouts" // the alias in the existing release key
+                keyAlias = System.getenv("FAMLOGIC_KEY_ALIAS")?.ifBlank { null } ?: "famlogic"
                 // PKCS12 keystores use the same password for the key; allow a separate one anyway.
                 keyPassword = System.getenv("FAMLOGIC_KEY_PASSWORD")?.ifBlank { null } ?: password
             }

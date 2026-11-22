@@ -205,7 +205,7 @@ func OpenStore(path string) (*Store, error) {
 	}
 	if s.d.Modules == nil {
 		// Decided once, on opening: a file from before modules with people in it is an
-		// existing Thereabouts family; an empty one is a new family.
+		// existing family (location sharing on); an empty one is a new family.
 		m := s.modulesLocked()
 		s.d.Modules = &m
 	}

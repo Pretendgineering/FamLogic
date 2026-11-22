@@ -24,11 +24,11 @@ Plan: list the watchapp and watchface around the same time as the phone app goes
 | UUID | `6d3c9f4e-2b8a-4c71-9a35-7e1f0b2d4c88` | `a1f5e2c7-3d94-4b6e-8f02-5c9e7d1a3b64` |
 | Category | Tools & Utilities (or "Daily") | – |
 | Platforms | aplite, basalt, chalk, diorite, emery, flint, gabbro | same |
-| Source | https://github.com/Spasm0dic/FamLogic (pebble/app) | same (pebble/face) |
+| Source | https://github.com/Pretendgineering/FamLogic (pebble/app) | same (pebble/face) |
 
 **Screenshots:** we can make them all in the emulator with the scripts used during development (a fake phone sends sample people; `pebble screenshot` per platform). Per platform: the list, the radar, a street map, the hold-to-SOS countdown, and the person menu. For the face: dark, light and an SOS.
 
-**Companion app:** both need the FamLogic phone app. `package.json` already names the Android package (`io.github.spasm0dic.famlogic`) under `companionApp`, so the Pebble app knows which app to talk to and can prompt users to get it. The store's companion link was built for Google Play / App Store URLs. **Open question:** whether it accepts an F-Droid, IzzyOnDroid or GitHub link. If not, describe it in the text ("Needs the free Thereabouts app for Android: get it from IzzyOnDroid or GitHub") and keep the URL to the GitHub releases page. There's no iOS app, so the listing should say Android only.
+**Companion app:** both need the FamLogic phone app. `package.json` already names the Android package (`io.github.pretendgineering.famlogic`) under `companionApp`, so the Pebble app knows which app to talk to and can prompt users to get it. The store's companion link was built for Google Play / App Store URLs. **Open question:** whether it accepts an F-Droid, IzzyOnDroid or GitHub link. If not, describe it in the text ("Needs the free Thereabouts app for Android: get it from IzzyOnDroid or GitHub") and keep the URL to the GitHub releases page. There's no iOS app, so the listing should say Android only.
 
 ## Draft listing text
 

@@ -40,14 +40,14 @@ See [ROADMAP.md](ROADMAP.md) for the order and [docs/ARCHITECTURE.md](docs/ARCHI
 Any always-on machine with Docker: a home server, NAS, Raspberry Pi 4/5 or small VPS (amd64 or arm64).
 
 ```sh
-curl -O https://raw.githubusercontent.com/spasm0dic/famlogic/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/pretendgineering/famlogic/main/docker-compose.yml
 # edit docker-compose.yml: set ADMIN_PASSWORD (and FAMILY_NAME)
 docker compose up -d
 ```
 
 In the app (and anywhere else you enter the server), you can type just the address and port, such as `192.168.1.5:8080` or `family.example.com`: FamLogic works out `http://` or `https://` itself.
 
-Open `http://<server>:8080`, log in with the admin password, and choose your family's modules. On a NAS or app platform (TrueNAS, Unraid, Portainer…), create a container from `ghcr.io/spasm0dic/famlogic:latest` with port 8080, a persistent volume at `/data` and the settings below.
+Open `http://<server>:8080`, log in with the admin password, and choose your family's modules. On a NAS or app platform (TrueNAS, Unraid, Portainer…), create a container from `ghcr.io/pretendgineering/famlogic:latest` with port 8080, a persistent volume at `/data` and the settings below.
 
 **Phones need to reach the server from anywhere,** not just your Wi-Fi. Pick one:
 - **A VPN such as [Tailscale](https://tailscale.com) or WireGuard** (easiest, nothing exposed): use `http://<vpn-ip>:8080`.
@@ -55,7 +55,7 @@ Open `http://<server>:8080`, log in with the admin password, and choose your fam
 
 ### 2. Install the app
 
-Download **`famlogic.apk`** from the [latest release](https://github.com/Spasm0dic/FamLogic/releases/latest) onto each phone or tablet and open it.
+Download **`famlogic.apk`** from the [latest release](https://github.com/Pretendgineering/FamLogic/releases/latest) onto each phone or tablet and open it.
 
 - **`famlogic-google.apk`** (the Google edition) is the same app plus Google Play services for quicker indoor location and driving detection from motion sensors. Either installs over the other.
 - **Automatic updates** with [Obtainium](https://github.com/ImranR98/Obtainium): add this repository and set *Filter APKs by regular expression* to `^famlogic\.apk$` (or `^famlogic-google\.apk$`).
@@ -97,7 +97,6 @@ Set in `docker-compose.yml` (or your container's environment).
 
 - **Update the server:** `docker compose pull && docker compose up -d` (restarting alone doesn't fetch a newer image). The running version shows in the console's Settings → Server.
 - **Backups:** everything is in the data folder: `famlogic.json` (people and settings), `chat.db` (messages) and `media/` (photos). The server keeps daily copies of the first two in `backups/`, and **Settings → Server → Download backup** saves one now. To restore, stop the container, put the files back, and start it.
-- **Coming from Thereabouts?** See [docs/UPGRADING.md](docs/UPGRADING.md): your family, fences and settings carry over.
 
 ## Building from source
 

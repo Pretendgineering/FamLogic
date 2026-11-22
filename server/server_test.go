@@ -227,35 +227,6 @@ func TestAlertsOverHTTP(t *testing.T) {
 	}
 }
 
-func TestMigrateOldDataFile(t *testing.T) {
-	for _, oldName := range []string{"thereabouts.json"} {
-		t.Run(oldName, func(t *testing.T) { testMigrateFrom(t, oldName) })
-	}
-}
-
-func testMigrateFrom(t *testing.T, oldName string) {
-	dir := t.TempDir()
-	old, _ := OpenStore(filepath.Join(dir, oldName))
-	inv, _ := old.CreateInvite("Alex", "", time.Hour)
-	_, token, _ := old.Join(inv.Code, "", "", "")
-
-	newPath := filepath.Join(dir, "famlogic.json")
-	if err := migrateOldDataFile(dir, newPath); err != nil {
-		t.Fatal(err)
-	}
-	s, err := OpenStore(newPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m, ok := s.MemberByToken(token); !ok || m.Name != "Alex" {
-		t.Fatal("member lost in migration")
-	}
-	// Running again is harmless.
-	if err := migrateOldDataFile(dir, newPath); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestServerAnnouncesFeatures(t *testing.T) {
 	e := newEnv(t)
 	_, info := e.do("GET", "/api/info", "", nil)

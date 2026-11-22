@@ -1,6 +1,6 @@
 # FamLogic roadmap
 
-FamLogic is a self-hosted family hub built from modules. It grew out of Thereabouts (family location sharing), which is now its first module. How the pieces fit together is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+FamLogic is a self-hosted family hub built from modules; location sharing (the Thereabouts module) came first. How the pieces fit together is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Principles
 
@@ -10,14 +10,14 @@ FamLogic is a self-hosted family hub built from modules. It grew out of Thereabo
 4. **Markdown for family content.** Chores, lists, menus and schedules are Markdown files (with YAML front matter and `[[links]]`) in a vault folder: readable in Obsidian, editable by people and AI agents, easy to back up.
 5. **Agent-friendly.** A documented API with scoped keys, so an agent (Hermes with a cloud model or a local Ollama, or anything else) can add to-dos, plan meals or post a reminder in chat.
 6. **Kid-proof.** Children never need to manage a password; parents can see children's chats, and can revoke any device.
-7. **Off means off, and each switch says what it shares.** (From Thereabouts' ground rules: switches that affect others live on the server; personal alert choices live on the phone.)
+7. **Off means off, and each switch says what it shares.** Switches that affect others live on the server; personal alert choices live on the phone.
 
 ## Prioritized plan
 
 Status: ✅ done · 🔨 next · ⏳ queued
 
 ### ✅ Phase 0: FamLogic foundation (0.15.0)
-- Renamed Thereabouts → FamLogic everywhere (new Android app ID, Docker image `ghcr.io/spasm0dic/famlogic`, data file `famlogic.json` moved over automatically).
+- FamLogic as a suite: one app, one Docker image (`ghcr.io/pretendgineering/famlogic`), one data folder.
 - Module system on the server, first-run module chooser and Settings → Modules in the web console; apps learn which modules are on.
 - Web console restructured: rail navigation with Home, Thereabouts, module pages, Family, Devices and Settings (Modules, Server, AI & API).
 - Parent/child roles on every person, set in Family.
@@ -71,9 +71,9 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Google Find Hub trackers** (parked, Nov 2026): no official API; the only route is the unofficial GoogleFindMyTools approach with the admin's own Google account. Alternative: family phones listening for the family's own cheap Bluetooth tags.
 - **Home Assistant** integration (presence, chores done, display on a dashboard).
 
-## History: the Thereabouts module
+## History: location sharing (the Thereabouts module)
 
-Built as the standalone Thereabouts app before FamLogic:
+Location sharing came first; these versions built it:
 
 1. ✅ **0.2.0:** alerts delivered with location replies; low-battery alerts.
 2. ✅ **0.4.0:** accounts: sign back in with a username and password.

@@ -1,4 +1,4 @@
-module github.com/spasm0dic/famlogic/server
+module github.com/pretendgineering/famlogic/server
 
 go 1.26.0
 

@@ -42,7 +42,7 @@ func moduleKnown(id string) bool {
 }
 
 // modulesLocked returns the family's module settings. A data file from before
-// modules existed is an existing Thereabouts family: location on, setup done.
+// modules existed is an existing family: location on, setup done.
 // A brand-new server (nobody joined yet) shows the first-run setup.
 func (s *Store) modulesLocked() ModuleSettings {
 	if s.d.Modules != nil {

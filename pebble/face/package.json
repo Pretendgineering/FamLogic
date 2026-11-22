@@ -53,10 +53,10 @@
     },
     "companionApp": {
       "android": {
-        "url": "https://github.com/Spasm0dic/FamLogic/releases/latest",
+        "url": "https://github.com/Pretendgineering/FamLogic/releases/latest",
         "apps": [
           {
-            "package": "io.github.spasm0dic.famlogic"
+            "package": "io.github.pretendgineering.famlogic"
           }
         ]
       }

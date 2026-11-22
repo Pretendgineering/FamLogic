@@ -46,7 +46,7 @@ func (s *Store) DailyBackup(dir string, keep int) error {
 	}
 	var backups []string
 	for _, e := range entries {
-		if n := e.Name(); (strings.HasPrefix(n, "famlogic-") || strings.HasPrefix(n, "thereabouts-")) && strings.HasSuffix(n, ".json") {
+		if n := e.Name(); strings.HasPrefix(n, "famlogic-") && strings.HasSuffix(n, ".json") {
 			backups = append(backups, n)
 		}
 	}

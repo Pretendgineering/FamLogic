@@ -100,9 +100,6 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 	dataFile := filepath.Join(cfg.DataDir, "famlogic.json")
-	if err := migrateOldDataFile(cfg.DataDir, dataFile); err != nil {
-		log.Fatalf("moving old data file: %v", err)
-	}
 	store, err := OpenStore(dataFile)
 	if err == nil {
 		err = store.EnsureDefaultCircle(cfg.FamilyName)
@@ -143,23 +140,6 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
-}
-
-// migrateOldDataFile renames the data file from before the project was called
-// FamLogic (thereabouts.json), so upgrading keeps everyone's family and settings.
-func migrateOldDataFile(dir, newPath string) error {
-	if _, err := os.Stat(newPath); err == nil {
-		return nil // already migrated (or a fresh install)
-	}
-	for _, old := range []string{"thereabouts.json"} {
-		oldPath := filepath.Join(dir, old)
-		if _, err := os.Stat(oldPath); err != nil {
-			continue
-		}
-		log.Printf("Renaming %s to %s (the project is now called FamLogic)", oldPath, newPath)
-		return os.Rename(oldPath, newPath)
-	}
-	return nil // nothing to migrate
 }
 
 func runHealthcheck(listen string) int {
