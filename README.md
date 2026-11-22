@@ -106,6 +106,8 @@ Download `thereabouts.apk` from the [Releases](../../releases) page (or from the
 
 Both are signed with the same key and are the same app to Android, so you can switch by installing one over the other: you stay signed in and keep your settings. You can't have both installed at once.
 
+**Updating automatically with [Obtainium](https://github.com/ImranR98/Obtainium):** add this repository's GitHub URL. Each release has two APKs, so to keep the right one, set **Filter APKs by regular expression** in the app's Obtainium settings to `^thereabouts\.apk$` (FOSS) or `^thereabouts-google\.apk$` (Google edition). Obtainium ignores the Pebble `.pbw` files.
+
 **GrapheneOS and other phones without Google:** this works as-is, because the app uses Android's own location service. Without a network location provider, the app uses GPS, so indoor fixes can be slower and battery use a little higher. Turning on GrapheneOS's own network location (Settings → Location) lets the app use Wi-Fi positioning instead, which saves battery. Also set Thereabouts's battery usage to **Unrestricted** when the app asks.
 
 ## 3. Add your family
