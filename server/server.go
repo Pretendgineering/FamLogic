@@ -38,11 +38,17 @@ type Server struct {
 	geo     *geocoder     // address search for fences
 
 	indexSeen *indexDeliveries // Index 01 ring deliveries already handled
+	chat      *ChatStore // nil if the chat database couldn't be opened
 }
 
 func NewServer(cfg Config, store *Store, static fs.FS) *Server {
-	return &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter(), geo: newGeocoder(cfg.GeocoderURL),
+	s := &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter(), geo: newGeocoder(cfg.GeocoderURL),
 		indexSeen: &indexDeliveries{seen: map[string]time.Time{}}}
+	if s.chat = openChatNextTo(store.path); s.chat != nil {
+		chat := s.chat
+		store.AddBackupHook(func(dir string, keep int) error { return keepDaily(dir, "chat-", ".db", keep, chat.Backup) })
+	}
+	return s
 }
 
 func (s *Server) Routes() http.Handler {
@@ -91,9 +97,24 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/admin/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/admin/members", s.admin(s.handleAdminMembers))
 	mux.HandleFunc("GET /api/admin/backup", s.admin(s.handleAdminBackup))
-	mux.HandleFunc("GET /api/admin/modules", s.admin(s.handleAdminModules))
+	mux.HandleFunc("GET /api/admin/modules", s.consoleUser(s.handleAdminModules)) // any console user: which modules are on
 	mux.HandleFunc("PUT /api/admin/modules", s.admin(s.handleAdminSetModules))
 	mux.HandleFunc("PUT /api/admin/members/{id}/role", s.admin(s.handleAdminSetRole))
+	mux.HandleFunc("POST /api/admin/dependents", s.admin(s.handleAdminAddDependent))
+	mux.HandleFunc("GET /api/admin/session", s.handleSession)
+	mux.HandleFunc("GET /api/admin/chat", s.admin(s.handleAdminChatList))
+	mux.HandleFunc("GET /api/admin/chat/{id}/messages", s.admin(s.handleAdminChatMessages))
+
+	// Chat (phones, and parents in the web console).
+	mux.HandleFunc("GET /api/chat", s.device(s.handleChatList))
+	mux.HandleFunc("POST /api/chat/direct", s.device(s.handleChatDirect))
+	mux.HandleFunc("POST /api/chat/groups", s.device(s.handleChatCreateGroup))
+	mux.HandleFunc("PATCH /api/chat/{id}", s.device(s.handleChatUpdateGroup))
+	mux.HandleFunc("POST /api/chat/{id}/update", s.device(s.handleChatUpdateGroup)) // for clients that can't send PATCH
+	mux.HandleFunc("GET /api/chat/{id}/messages", s.device(s.handleChatMessages))
+	mux.HandleFunc("POST /api/chat/{id}/messages", s.device(s.handleChatPost))
+	mux.HandleFunc("POST /api/chat/{id}/read", s.device(s.handleChatRead))
+	mux.HandleFunc("GET /api/chat-media/{name}", s.handleChatMedia)
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
@@ -176,7 +197,8 @@ type publicMember struct {
 	Name   string    `json:"name"`
 	Color  string    `json:"color"`
 	Emoji  string    `json:"emoji,omitempty"`
-	Role   string    `json:"role"` // "parent" or "child"
+	Role   string    `json:"role"`   // "parent", "child" or "dependent"
+	Access string    `json:"access"` // admin, parent, older_child, younger_child, dependent
 	Paused bool      `json:"paused"`
 	Loc    *Location `json:"loc"`
 	// When this person's active SOS started (unix ms); absent if no SOS.
@@ -195,7 +217,7 @@ type publicMember struct {
 func toPublic(ms []Member) []publicMember {
 	out := make([]publicMember, len(ms))
 	for i, m := range ms {
-		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Role: m.role(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
+		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Role: m.role(), Access: m.access(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
 		if out[i].Circles == nil {
 			out[i].Circles = []string{}
 		}
@@ -252,6 +274,11 @@ func (s *Server) device(h deviceHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if !ok {
+			// A parent logged in to the web console uses the same API as their phone.
+			if sess := s.session(r); sess.Member != nil {
+				h(w, r, sess.Member)
+				return
+			}
 			writeError(w, http.StatusUnauthorized, "missing token")
 			return
 		}
@@ -301,11 +328,19 @@ func (s *Server) handleInviteInfo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "that invite code is not valid or has expired")
 		return
 	}
-	resp := map[string]any{"kind": "join", "name": inv.Name, "server": s.serverInfo(), "circle": s.circleName(inv.CircleID)}
+	access := inv.Access
+	if access == "" {
+		access = AccessParent
+	}
+	// passwordless: a younger child's code; the app asks for no username or password.
+	resp := map[string]any{"kind": "join", "name": inv.Name, "server": s.serverInfo(), "circle": s.circleName(inv.CircleID),
+		"access": access, "passwordless": access == AccessYoungerChild}
 	if m != nil {
 		resp["kind"] = "reset"
 		resp["name"] = m.Name
 		resp["username"] = m.Username
+		resp["access"] = m.access()
+		resp["passwordless"] = !m.canUsePassword()
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -327,6 +362,12 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A younger child's code: sign this device in, no password.
+	if resetFor != nil && !resetFor.canUsePassword() {
+		m, token, err := s.store.RedeemDeviceCode(req.Code)
+		s.writeAccountResult(w, m, token, err)
+		return
+	}
 	// A reset link: keep who they are, set a new password, sign this phone in.
 	if resetFor != nil {
 		username := resetFor.Username
@@ -359,9 +400,10 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Apps from before accounts existed send neither username nor password.
+	// Apps from before accounts existed send neither username nor password, and
+	// younger children don't get them.
 	username, hash := "", ""
-	if req.Username != "" || req.Password != "" {
+	if (req.Username != "" || req.Password != "") && inv.Access != AccessYoungerChild {
 		var err error
 		if username, err = NormalizeUsername(req.Username); err != nil {
 			writeError(w, http.StatusBadRequest, capitalize(err.Error()))
@@ -444,6 +486,10 @@ func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.Succeed(username)
+	if !m.canUsePassword() {
+		writeError(w, http.StatusForbidden, "Signing in with a password is switched off for you. Ask a parent for a new join code.")
+		return
+	}
 	m, token, err := s.store.SignIn(m.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
@@ -461,6 +507,10 @@ func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request, me *M
 		Username        string `json:"username"`
 	}
 	if !readJSON(w, r, &req) {
+		return
+	}
+	if !me.canUsePassword() {
+		writeError(w, http.StatusForbidden, "A parent can let you use a password (in the web console's Family page).")
 		return
 	}
 	if me.PasswordHash != "" {
@@ -838,36 +888,98 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request, me *Member
 
 func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request, me *Member) {
 	_ = s.store.DeleteMember(me.ID)
+	if s.chat != nil {
+		_ = s.chat.ForgetMember(me.ID)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- admin (web dashboard) auth ----
+// ---- web console auth ----
+//
+// The console cookie says who is logged in: the main admin (with the admin
+// password from the server's settings), or one person with their own username
+// and password. Admins (the main admin, and anyone they made an admin) get every
+// page; parents get the parent tools: everything the app does, in the browser.
+// Children and non-users can't log in to the console.
 
-func (s *Server) sign(exp string) string {
+// Session is who's using the console.
+type Session struct {
+	Owner  bool    // logged in with the admin password
+	Member *Member // logged in with their own account
+}
+
+func (c Session) Admin() bool { return c.Owner || (c.Member != nil && c.Member.Admin && c.Member.role() == RoleParent) }
+func (c Session) Valid() bool { return c.Owner || c.Member != nil }
+
+func (s *Server) sign(payload string) string {
 	mac := hmac.New(sha256.New, []byte(s.store.Secret()))
-	mac.Write([]byte("admin|" + exp))
+	mac.Write([]byte("admin|" + payload))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func (s *Server) isAdmin(r *http.Request) bool {
+// session reads the console cookie: "exp.sig" (main admin, the original format)
+// or "exp.m-<memberID>.sig" (a person).
+func (s *Server) session(r *http.Request) Session {
 	c, err := r.Cookie(adminCookie)
 	if err != nil {
-		return false
+		return Session{}
 	}
-	exp, sig, ok := strings.Cut(c.Value, ".")
-	if !ok {
-		return false
+	parts := strings.Split(c.Value, ".")
+	exp, who, sig := parts[0], "", parts[len(parts)-1]
+	switch len(parts) {
+	case 2:
+	case 3:
+		who = parts[1]
+	default:
+		return Session{}
 	}
 	e, err := strconv.ParseInt(exp, 10, 64)
 	if err != nil || time.Now().Unix() > e {
-		return false
+		return Session{}
 	}
-	return hmac.Equal([]byte(sig), []byte(s.sign(exp)))
+	payload := exp
+	if who != "" {
+		payload += "|" + who
+	}
+	if !hmac.Equal([]byte(sig), []byte(s.sign(payload))) {
+		return Session{}
+	}
+	if who == "" {
+		return Session{Owner: true}
+	}
+	id, ok := strings.CutPrefix(who, "m-")
+	if !ok {
+		return Session{}
+	}
+	m, found := s.store.MemberByID(id)
+	if !found || m.role() != RoleParent || m.PasswordHash == "" {
+		return Session{} // removed, or no longer a parent
+	}
+	return Session{Member: m}
 }
 
+func (s *Server) isAdmin(r *http.Request) bool { return s.session(r).Admin() }
+
+// admin guards the console's admin pages.
 func (s *Server) admin(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.isAdmin(r) {
+		sess := s.session(r)
+		if !sess.Valid() {
+			writeError(w, http.StatusUnauthorized, "please log in")
+			return
+		}
+		if !sess.Admin() {
+			writeError(w, http.StatusForbidden, "this needs an admin")
+			return
+		}
+		h(w, r)
+	}
+}
+
+// consoleUser guards console pages any logged-in parent may see.
+func (s *Server) consoleUser(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.session(r).Valid() {
 			writeError(w, http.StatusUnauthorized, "please log in")
 			return
 		}
@@ -875,38 +987,92 @@ func (s *Server) admin(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Password string `json:"password"`
-	}
-	if !readJSON(w, r, &req) {
-		return
-	}
-	a := sha256.Sum256([]byte(req.Password))
-	b := sha256.Sum256([]byte(s.cfg.AdminPassword))
-	if subtle.ConstantTimeCompare(a[:], b[:]) != 1 {
-		s.loginMu.Lock()
-		time.Sleep(time.Second)
-		s.loginMu.Unlock()
-		writeError(w, http.StatusUnauthorized, "wrong password")
-		return
-	}
+func (s *Server) setSession(w http.ResponseWriter, r *http.Request, who string) {
 	exp := strconv.FormatInt(time.Now().Add(adminSessionTTL).Unix(), 10)
+	value, payload := exp, exp
+	if who != "" {
+		value += "." + who
+		payload += "|" + who
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     adminCookie,
-		Value:    exp + "." + s.sign(exp),
+		Value:    value + "." + s.sign(payload),
 		Path:     "/",
 		MaxAge:   int(adminSessionTTL.Seconds()),
 		HttpOnly: true,
 		Secure:   strings.HasPrefix(s.baseURL(r), "https://"),
 		SameSite: http.SameSiteStrictMode,
 	})
+}
+
+func (s *Server) slowDown() {
+	s.loginMu.Lock()
+	time.Sleep(time.Second)
+	s.loginMu.Unlock()
+}
+
+// handleLogin: the admin password alone (main admin), or a parent's username and password.
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		a := sha256.Sum256([]byte(req.Password))
+		b := sha256.Sum256([]byte(s.cfg.AdminPassword))
+		if subtle.ConstantTimeCompare(a[:], b[:]) != 1 {
+			s.slowDown()
+			writeError(w, http.StatusUnauthorized, "wrong password")
+			return
+		}
+		s.setSession(w, r, "")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	username, _ := NormalizeUsername(req.Username)
+	if d := s.limiter.Locked(username); d > 0 {
+		writeError(w, http.StatusTooManyRequests, "Too many wrong passwords. Try again in "+minutesText(d)+".")
+		return
+	}
+	m, found := s.store.MemberByUsername(username)
+	hash := dummyHash
+	if found && m.PasswordHash != "" {
+		hash = m.PasswordHash
+	}
+	if !VerifyPassword(req.Password, hash) || !found || m.PasswordHash == "" {
+		s.wrongPassword(username)
+		writeError(w, http.StatusUnauthorized, "wrong username or password")
+		return
+	}
+	s.limiter.Succeed(username)
+	if m.role() != RoleParent {
+		writeError(w, http.StatusForbidden, "the web console is for parents")
+		return
+	}
+	s.setSession(w, r, "m-"+m.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: adminCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSession tells the console who's logged in and what they may do.
+func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
+	sess := s.session(r)
+	if !sess.Valid() {
+		writeError(w, http.StatusUnauthorized, "please log in")
+		return
+	}
+	out := map[string]any{"owner": sess.Owner, "admin": sess.Admin(), "server": s.serverInfo()}
+	if sess.Member != nil {
+		out["member"] = toPublic([]Member{*sess.Member})[0]
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // adminMember adds sign-in details that only the dashboard sees.
@@ -998,6 +1164,9 @@ func (s *Server) handleAdminDeleteMember(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusNotFound, "no such member")
 		return
 	}
+	if s.chat != nil {
+		_ = s.chat.ForgetMember(r.PathValue("id"))
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1023,8 +1192,14 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     string `json:"name"`
 		CircleID string `json:"circleId"`
+		Access   string `json:"access"` // parent (default), older_child, younger_child
 	}
 	if !readJSON(w, r, &req) {
+		return
+	}
+	access, ok := inviteAccess(req.Access)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invites are for parents or children")
 		return
 	}
 	name := ""
@@ -1035,7 +1210,7 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	inv, err := s.store.CreateInvite(name, req.CircleID, s.cfg.InviteTTL)
+	inv, err := s.store.CreateInvite(name, req.CircleID, s.cfg.InviteTTL, access)
 	if errors.Is(err, ErrNotFound) {
 		writeError(w, http.StatusBadRequest, "no such group")
 		return

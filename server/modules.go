@@ -22,7 +22,7 @@ type ModuleInfo struct {
 // Modules, in the order the console shows them. Keep ids stable: they're stored.
 var allModules = []ModuleInfo{
 	{"thereabouts", "Thereabouts", "Location sharing: everyone on a map, SOS, check-ins, fences, trips, driving, plus Pebble watches and the Index 01 ring.", true, true},
-	{"chat", "Chat", "Family group chat and one-to-one messages, with photos. Parents can see children's chats.", false, true},
+	{"chat", "Chat", "A family chat, group chats and one-to-one messages, with photos. Parents can see children's chats.", true, true},
 	{"calendar", "Calendar", "Shared family calendar, with CalDAV so phones and other apps can sync.", false, true},
 	{"todos", "To-dos & lists", "Quick to-dos and shared lists (shopping, packing), stored as Markdown.", false, true},
 	{"chores", "Chores", "A chore chart with who does what and when, ticked off on phones or the family display.", false, false},
@@ -110,38 +110,6 @@ func (s *Store) moduleFeatures() []string {
 	return out
 }
 
-// ---- roles
-
-// Roles: parents manage the family (and, with the chat module, can see their
-// children's chats); children have simpler sign-in (a join code from a parent,
-// no password needed). Members from before roles existed are parents.
-const (
-	RoleParent = "parent"
-	RoleChild  = "child"
-)
-
-func (m *Member) role() string {
-	if m.Role == RoleChild {
-		return RoleChild
-	}
-	return RoleParent
-}
-
-// SetRole changes someone's role (admin only).
-func (s *Store) SetRole(id, role string) error {
-	if role != RoleParent && role != RoleChild {
-		return ErrBadRequest
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	m, ok := s.d.Members[id]
-	if !ok {
-		return ErrNotFound
-	}
-	m.Role = role
-	return s.saveLocked()
-}
-
 // ---- HTTP
 
 type moduleView struct {
@@ -171,21 +139,4 @@ func (s *Server) handleAdminSetModules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.handleAdminModules(w, r)
-}
-
-func (s *Server) handleAdminSetRole(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Role string `json:"role"`
-	}
-	if !readJSON(w, r, &body) {
-		return
-	}
-	switch err := s.store.SetRole(r.PathValue("id"), body.Role); err {
-	case nil:
-		w.WriteHeader(http.StatusNoContent)
-	case ErrNotFound:
-		writeError(w, http.StatusNotFound, "no such member")
-	default:
-		writeError(w, http.StatusBadRequest, "role must be parent or child")
-	}
 }

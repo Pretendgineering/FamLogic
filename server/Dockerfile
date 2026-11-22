@@ -1,6 +1,6 @@
 # Build a static binary...
 # (Cross-compiles on the build machine, so ARM images such as Raspberry Pi build fast.)
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /src
 COPY . .
 ARG VERSION=dev

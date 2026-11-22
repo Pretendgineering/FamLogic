@@ -101,8 +101,12 @@ type Member struct {
 	// announce "started driving" again.
 	DriveEndedAt int64 `json:"driveEndedAt,omitempty"`
 
-	// "parent" (the default) or "child" (see modules.go).
-	Role string `json:"role,omitempty"`
+	// "parent" (the default), "child" or "dependent" (a non-user, e.g. a baby);
+	// Admin opens the console's admin pages; PasswordAllowed lets a child set a
+	// password (see roles.go).
+	Role            string `json:"role,omitempty"`
+	Admin           bool   `json:"admin,omitempty"`
+	PasswordAllowed bool   `json:"passwordAllowed,omitempty"`
 }
 
 // SharesLowBattery reports whether others get told when this person's battery is low.
@@ -118,6 +122,7 @@ type Invite struct {
 	Name      string `json:"name,omitempty"`
 	MemberID  string `json:"memberId,omitempty"`
 	CircleID  string `json:"circleId,omitempty"` // the circle a (normal) invite joins
+	Access    string `json:"access,omitempty"`   // the role a new member gets ("" = parent; see roles.go)
 	CreatedAt int64  `json:"createdAt"`
 	ExpiresAt int64  `json:"expiresAt"`
 }
@@ -151,6 +156,8 @@ type Store struct {
 	changed chan struct{} // closed and replaced whenever an event is added
 	// When the silence watch started (unix ms; see health.go).
 	watchStart int64
+	// Extra daily backups (see backup.go).
+	backupHooks []func(dir string, keep int) error
 }
 
 var palette = []string{"#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#42d4f4", "#f032e6", "#9a6324", "#469990", "#808000"}
@@ -166,6 +173,8 @@ func OpenStore(path string) (*Store, error) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return nil, err
 		}
+		m := s.modulesLocked() // a new family: default modules, first-run setup to come
+		s.d.Modules = &m
 		return s, s.saveLocked()
 	case err != nil:
 		return nil, err
@@ -194,6 +203,12 @@ func OpenStore(path string) (*Store, error) {
 	if s.d.Secret == "" {
 		s.d.Secret = randomString(32)
 	}
+	if s.d.Modules == nil {
+		// Decided once, on opening: a file from before modules with people in it is an
+		// existing Thereabouts family; an empty one is a new family.
+		m := s.modulesLocked()
+		s.d.Modules = &m
+	}
 	return s, nil
 }
 
@@ -219,7 +234,7 @@ func (s *Store) Secret() string {
 
 // CreateInvite makes a one-time code for someone new to join circleID
 // ("" = the default circle).
-func (s *Store) CreateInvite(name, circleID string, ttl time.Duration) (*Invite, error) {
+func (s *Store) CreateInvite(name, circleID string, ttl time.Duration, access ...string) (*Invite, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if circleID == "" {
@@ -229,6 +244,9 @@ func (s *Store) CreateInvite(name, circleID string, ttl time.Duration) (*Invite,
 	}
 	now := time.Now()
 	inv := &Invite{Code: inviteCode(), Name: name, CircleID: circleID, CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(ttl).UnixMilli()}
+	if len(access) > 0 && access[0] != AccessParent {
+		inv.Access = access[0]
+	}
 	s.d.Invites[inv.Code] = inv
 	return inv, s.saveLocked()
 }
@@ -296,6 +314,10 @@ func (s *Store) Join(code, name, username, passwordHash string) (*Member, string
 	}
 	if c := s.inviteCircleLocked(inv); c != "" {
 		m.Circles = []string{c}
+	}
+	applyInviteAccess(m, inv)
+	if !m.canUsePassword() { // younger children: no account, just this device
+		m.Username, m.PasswordHash, m.LastSignIn = "", "", 0
 	}
 	s.d.Members[m.ID] = m
 	delete(s.d.Invites, code)

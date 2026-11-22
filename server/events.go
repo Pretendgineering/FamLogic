@@ -38,6 +38,10 @@ type Event struct {
 	Note     string `json:"note,omitempty"`     // checkin: optional message
 	CircleID string `json:"circleId,omitempty"` // place alerts: the circle the place belongs to
 	PlaceID  string `json:"placeId,omitempty"`
+	// chat: the conversation, its title for the recipient ("" for one-to-one) and the message id.
+	Conv    string `json:"conv,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Message int64  `json:"message,omitempty"`
 	// trip: where it started (a fence id, if any), how far and how long.
 	FromPlaceID string `json:"fromPlaceId,omitempty"`
 	// For one person only (seen receipts, requests, reminders); "" = the usual audience.
@@ -146,4 +150,19 @@ func (s *Store) EventsFor(memberID string, since int64) ([]Event, int64) {
 		}
 	}
 	return out, cursor
+}
+
+// ChatEvents tells each recipient about a new chat message (one event each).
+func (s *Store) ChatEvents(to []string, fromID, fromName, conv, title, preview string, msgID int64) {
+	if len(to) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range to {
+		if _, ok := s.d.Members[id]; ok {
+			s.addEventLocked(Event{Type: EventChat, To: id, MemberID: fromID, Name: fromName, Conv: conv, Title: title, Note: preview, Message: msgID})
+		}
+	}
+	_ = s.saveLocked()
 }

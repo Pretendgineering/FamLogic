@@ -55,6 +55,43 @@ func (s *Store) DailyBackup(dir string, keep int) error {
 		_ = os.Remove(filepath.Join(dir, backups[0]))
 		backups = backups[1:]
 	}
+	for _, hook := range s.backupHooks {
+		if err := hook(dir, keep); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AddBackupHook adds another daily backup (e.g. the chat database).
+func (s *Store) AddBackupHook(h func(dir string, keep int) error) { s.backupHooks = append(s.backupHooks, h) }
+
+// keepDaily makes prefix-<date><ext> in dir once a day with write, and keeps the newest `keep`.
+func keepDaily(dir, prefix, ext string, keep int, write func(path string) error) error {
+	name := filepath.Join(dir, prefix+time.Now().Format("2006-01-02")+ext)
+	if _, err := os.Stat(name); err != nil {
+		if err := write(name + ".tmp"); err != nil {
+			return err
+		}
+		if err := os.Rename(name+".tmp", name); err != nil {
+			return err
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var backups []string
+	for _, e := range entries {
+		if n := e.Name(); strings.HasPrefix(n, prefix) && strings.HasSuffix(n, ext) {
+			backups = append(backups, n)
+		}
+	}
+	sort.Strings(backups)
+	for len(backups) > keep {
+		_ = os.Remove(filepath.Join(dir, backups[0]))
+		backups = backups[1:]
+	}
 	return nil
 }
 

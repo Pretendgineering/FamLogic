@@ -261,6 +261,9 @@ func (s *Store) VisibleTo(viewerID string) ([]MemberView, []Circle) {
 	}
 	var out []MemberView
 	for _, m := range s.d.Members {
+		if m.role() == RoleDependent {
+			continue // non-users (e.g. babies) aren't on the map
+		}
 		shared := sharedCircles(m, viewer)
 		if m.ID != viewerID && len(shared) == 0 {
 			continue

@@ -12,8 +12,9 @@
   <section id="login" class="join" hidden>
     <form class="card" id="login-form">
       <h1>FamLogic</h1>
-      <p class="muted">Log in to see your family and send invites.</p>
-      <label>Admin password <input type="password" id="password" autocomplete="current-password" required autofocus></label>
+      <p class="muted">Parents: log in with your FamLogic username and password. Main admin: leave the username empty and use the admin password.</p>
+      <label>Username <input id="username" autocomplete="username" autocapitalize="none" placeholder="(empty for the admin password)" autofocus></label>
+      <label>Password <input type="password" id="password" autocomplete="current-password" required></label>
       <p class="error" id="login-error"></p>
       <button type="submit">Log in</button>
     </form>
@@ -33,22 +34,24 @@
       <a href="#/meals" data-view="meals" data-module="meals"><span class="ri" data-icon="meal"></span><span>Meals</span></a>
       <span class="rail-sep"></span>
       <a href="#/family" data-view="family"><span class="ri" data-icon="people"></span><span>Family</span></a>
-      <a href="#/devices" data-view="devices"><span class="ri" data-icon="device"></span><span>Devices</span></a>
-      <a href="#/settings" data-view="settings"><span class="ri" data-icon="gear"></span><span>Settings</span></a>
+      <a href="#/devices" data-view="devices" class="admin-only"><span class="ri" data-icon="device"></span><span>Devices</span></a>
+      <a href="#/settings" data-view="settings" class="admin-only"><span class="ri" data-icon="gear"></span><span>Settings</span></a>
     </nav>
 
     <main class="page" data-page="home" hidden>
-      <header class="page-head"><h1 id="home-title">FamLogic</h1><p class="muted" id="home-sub"></p></header>
+      <header class="page-head"><h1 id="home-title">FamLogic</h1><p class="muted" id="home-sub"></p>
+        <p class="muted small"><span id="whoami"></span> · <button type="button" class="link" id="logout-btn3">Log out</button></p></header>
       <div class="cards" id="home-cards"></div>
     </main>
 
     <main class="page" data-page="family" hidden>
       <header class="page-head">
         <h1>Family</h1>
-        <p class="muted">Everyone in your family's FamLogic. <strong>Parents</strong> manage the family; <strong>children</strong> get simpler sign-in (coming with the chat module: a join code from you, no password) and their chats can be seen by parents.</p>
+        <p class="muted">Everyone in your family's FamLogic. <strong>Parents</strong> look after the family and can read their children's chats; <strong>children</strong> use the app without family settings, and younger ones sign in with a join code instead of a password.</p>
       </header>
       <div class="panel wide-panel">
-        <div class="panel-actions"><button id="family-invite" class="tonal">+ Invite someone</button></div>
+        <div class="panel-actions admin-only"><button id="family-invite" class="tonal">+ Invite someone</button><button id="family-dependent" class="secondary">+ Someone who doesn't use the app</button></div>
+        <p class="muted small admin-only">Roles: <strong>Admin</strong> (a parent who can use these admin pages; only the main admin can make admins), <strong>Parent</strong>, <strong>Older child</strong> (may use a password), <strong>Younger child</strong> (joins with a code from you, no password), and family members who <strong>don't use the app</strong> (such as a baby), so chores and events can include them.</p>
         <ul class="list" id="family-list"></ul>
       </div>
     </main>
@@ -98,6 +101,27 @@
       </section>
     </main>
 
+    <main class="page chat-page" data-page="chat" hidden>
+      <div class="chat-layout">
+        <section class="chat-list panel">
+          <div class="chat-list-head"><h1>Chat</h1>
+            <span class="member-only"><button type="button" class="tonal" id="chat-new">New</button></span></div>
+          <p class="muted small" id="chat-note"></p>
+          <ul class="list" id="chat-convs"></ul>
+        </section>
+        <section class="chat-thread panel">
+          <header class="chat-thread-head"><h2 id="chat-title">Choose a chat</h2><span class="muted small" id="chat-sub"></span></header>
+          <div class="chat-messages" id="chat-messages"></div>
+          <form class="chat-compose" id="chat-compose" hidden>
+            <label class="chat-photo" title="Add a photo"><input type="file" id="chat-photo" accept="image/*" hidden>📷</label>
+            <input id="chat-text" autocomplete="off" placeholder="Message" maxlength="4000">
+            <button type="submit">Send</button>
+          </form>
+          <p class="muted small chat-readonly" id="chat-readonly" hidden></p>
+        </section>
+      </div>
+    </main>
+
     <main class="page" data-page="module" hidden>
       <header class="page-head"><h1 id="module-title"></h1><p class="muted" id="module-desc"></p></header>
       <div class="panel wide-panel soon" id="module-soon"></div>
@@ -123,7 +147,7 @@
         </nav>
 
         <section class="panel" data-panel="people">
-          <button id="invite-btn" class="tonal wide">+ Invite someone</button>
+          <button id="invite-btn" class="tonal wide admin-only">+ Invite someone</button>
           <ul id="members" class="list"></ul>
           <p id="no-members" class="muted" hidden>Nobody has joined yet. Use <strong>Invite someone</strong> to add the first phone.</p>
           <div id="invites-block" hidden>
@@ -133,14 +157,14 @@
         </section>
 
         <section class="panel" data-panel="fences" hidden>
-          <button id="new-place-btn" class="tonal wide">+ Add fence</button>
+          <button id="new-place-btn" class="tonal wide admin-only">+ Add fence</button>
           <p class="muted small">Areas like Home or School. Everyone in the fence's group is told when someone arrives or leaves.</p>
           <ul id="places" class="list"></ul>
           <p id="no-places" class="muted" hidden>No fences yet.</p>
         </section>
 
         <section class="panel" data-panel="groups" hidden>
-          <button id="new-circle-btn" class="tonal wide">+ New group</button>
+          <button id="new-circle-btn" class="tonal wide admin-only">+ New group</button>
           <p class="muted small">People who see each other, such as Family or Grandparents. Everyone only sees people they share a group with.</p>
           <ul id="circles" class="list"></ul>
         </section>
@@ -150,7 +174,7 @@
             <select id="map-style"></select>
           </label>
           <label class="filter check-row"><input type="checkbox" id="dim-map"> Soften the map in dark mode</label>
-          <a class="button secondary wide" id="backup-btn" href="/api/admin/backup" download title="The whole data file. It contains password hashes: keep it somewhere safe.">Download backup</a>
+          <a class="button secondary wide admin-only" id="backup-btn" href="/api/admin/backup" download title="The whole data file. It contains password hashes: keep it somewhere safe.">Download backup</a>
           <button id="logout-btn" class="secondary wide">Log out</button>
         </div>
       </aside>
@@ -159,6 +183,16 @@
    </div>
     <div id="menu" class="menu" role="menu" hidden></div>
   </section>
+
+  <dialog id="chat-new-dialog">
+    <form method="dialog" id="chat-new-form">
+      <h2>New chat</h2>
+      <p class="muted">Pick one person for a one-to-one chat, or several and a name for a group.</p>
+      <ul class="list modules" id="chat-new-people"></ul>
+      <label id="chat-new-name-label" hidden>Group name <input id="chat-new-name" maxlength="40" placeholder="e.g. Movie night"></label>
+      <div class="row"><button type="submit">Start</button><button type="button" class="secondary" data-close>Cancel</button></div>
+    </form>
+  </dialog>
 
   <dialog id="setup-dialog">
     <form method="dialog" id="setup-form">
@@ -173,6 +207,11 @@
     <form id="invite-form" method="dialog">
       <h2>Invite someone</h2>
       <label>Their name (optional) <input id="invite-name" maxlength="40" placeholder="e.g. Grandma"></label>
+      <label>Joining as <select id="invite-access">
+        <option value="parent">Parent</option>
+        <option value="older_child">Older child (may use a password)</option>
+        <option value="younger_child">Younger child (no password: a join code)</option>
+      </select></label>
       <label id="invite-circle-label">Group <select id="invite-circle"></select></label>
       <div class="row"><button type="submit">Create invite</button><button type="button" class="secondary" data-close>Cancel</button></div>
     </form>

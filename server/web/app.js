@@ -12,6 +12,10 @@ let places = [];        // all places
 const placeLayers = new Map(); // place id -> Leaflet layer group
 let trailLayer = null;  // the clicked person's trail, if they keep one
 let serverFeatures = []; // what the server can do, e.g. "geocode"
+// Who's using the console: the main admin (admin password), or a person (admin or parent).
+let me = { owner: false, admin: true, member: null };
+const isAdmin = () => !!me.admin;
+const memberBase = () => isAdmin() ? "/api/admin/members" : "/api/members";
 // The theme's accent colour (fences on the map use it).
 const accentColor = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#8b5cf6";
 let circleFilter = "";  // "" = everyone, else a circle id
@@ -186,7 +190,7 @@ $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#login-error").textContent = "";
   try {
-    await api("POST", "/api/admin/login", { password: $("#password").value });
+    await api("POST", "/api/admin/login", { username: $("#username").value.trim(), password: $("#password").value });
     $("#password").value = "";
     start();
   } catch (err) {
@@ -281,15 +285,18 @@ function renderMembers(members) {
       el("div", { class: "grow" },
         el("div", { class: "title" }, m.name),
         el("div", { class: "sub" }, describe(m)),
-        el("div", { class: "sub" }, account(m)),
-        health(m),
+        isAdmin() ? el("div", { class: "sub" }, account(m)) : null,
+        isAdmin() ? health(m) : null,
         circles.length > 1 ? el("div", { class: "chips" }, ...(m.circles || []).map((id) =>
           el("span", {
             class: "chip" + ((m.hiddenFrom || []).includes(id) ? " hidden-from" : ""),
             title: (m.hiddenFrom || []).includes(id) ? `Not sharing their location with ${circleName(id)}` : "",
           }, circleName(id)))) : null,
       ),
-      moreButton(`Options for ${m.name}`, [
+      moreButton(`Options for ${m.name}`, !isAdmin() ? [
+        ...(m.loc ? [["Show on map", () => { map.setView([m.loc.lat, m.loc.lon], Math.max(map.getZoom(), 15)); showTrail(m); }]] : []),
+        ...(m.trips ? [["Trips…", () => openTrips(m)]] : []),
+      ] : [
         ...(m.loc ? [["Show on map", () => { map.setView([m.loc.lat, m.loc.lon], Math.max(map.getZoom(), 15)); showTrail(m); }], "-"] : []),
         ["Groups…", () => openCircles(m)],
         ["Rename…", () => rename(m)],
@@ -368,7 +375,9 @@ function renderInvites(invites) {
 
 async function refresh() {
   try {
-    const [data, invites] = await Promise.all([api("GET", "/api/admin/members"), api("GET", "/api/admin/invites")]);
+    const [data, invites] = isAdmin()
+      ? await Promise.all([api("GET", "/api/admin/members"), api("GET", "/api/admin/invites")])
+      : [await api("GET", "/api/members?since=9007199254740991"), []];
     $("#family-name").textContent = data.server.name;
     $("#server-version").textContent = `server ${data.server.version}`;
     serverFeatures = data.server.features || [];
@@ -386,6 +395,7 @@ async function refresh() {
     setCount("#count-people", lastMembers.length, sos.length > 0);
     setCount("#count-fences", places.length);
     setCount("#count-groups", circles.length > 1 ? circles.length : 0);
+    if ((moduleInfo("chat") || {}).enabled && (moduleInfo("chat") || {}).available && view !== "chat") await loadChats();
     if (view && view !== "thereabouts") renderView();
   } catch (err) {
     if (err.message !== "unauthorized") console.error(err);
@@ -396,7 +406,8 @@ async function refresh() {
 
 function visibleMembers() {
   if (!circles.some((c) => c.id === circleFilter)) circleFilter = "";
-  return circleFilter ? lastMembers.filter((m) => (m.circles || []).includes(circleFilter)) : lastMembers;
+  const users = lastMembers.filter((m) => m.role !== "dependent"); // non-users aren't on the map
+  return circleFilter ? users.filter((m) => (m.circles || []).includes(circleFilter)) : users;
 }
 
 function renderCircles() {
@@ -413,7 +424,7 @@ function renderCircles() {
       el("div", { class: "grow" },
         el("div", { class: "title" }, c.name),
         el("div", { class: "sub" }, count === 1 ? "1 person" : `${count} people`)),
-      moreButton(`Options for ${c.name}`, [
+      !isAdmin() ? null : moreButton(`Options for ${c.name}`, [
         ["Show only this group on the map", () => setFilter(c.id)],
         ["Rename…", () => renameCircle(c)],
         ...(circles.length > 1 ? ["-", ["Delete group…", () => deleteCircle(c), "danger"]] : []),
@@ -482,7 +493,7 @@ async function showTrail(m) {
   trailLayer = null;
   if (!m.trail) return;
   try {
-    const { points } = await api("GET", `/api/admin/members/${encodeURIComponent(m.id)}/trail`);
+    const { points } = await api("GET", `${memberBase()}/${encodeURIComponent(m.id)}/trail`);
     if (points.length < 2) return;
     trailLayer = L.polyline(points.map((p) => [p.lat, p.lon]), { color: m.color, weight: 4, opacity: 0.8 }).addTo(map);
     trailLayer.bindTooltip(`${m.name}'s trail since ${new Date(points[0].time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
@@ -500,7 +511,7 @@ function renderPlaces() {
       el("div", { class: "title" }, p.name),
       el("div", { class: "sub" }, `${Math.round(p.radius)} m` + (circles.length > 1 ? ` · ${circleName(p.circleId)}` : "") +
         (p.schedule ? ` · ${scheduleSummary(p.schedule)}` : ""))),
-    moreButton(`Options for ${p.name}`, [
+    !isAdmin() ? null : moreButton(`Options for ${p.name}`, [
       ["Show on map", () => map.setView([p.lat, p.lon], 16)],
       ["Edit…", () => editPlace(p)],
       "-",
@@ -737,7 +748,7 @@ async function openTrips(m, again = false) {
     tripsDialog.showModal();
   }
   try {
-    const { trips } = await api("GET", `/api/admin/members/${encodeURIComponent(m.id)}/trips`);
+    const { trips } = await api("GET", `${memberBase()}/${encodeURIComponent(m.id)}/trips`);
     if (!trips.length) { list.replaceChildren(el("li", { class: "muted" }, "No trips yet.")); return; }
     list.replaceChildren(...trips.map((t) => el("li", { class: "clickable", onclick: () => { tripsDialog.close(); showTrip(m, t); } },
       el("div", { class: "grow" },
@@ -848,6 +859,7 @@ $("#invite-btn").addEventListener("click", () => {
   $("#invite-form").hidden = false;
   $("#invite-result").hidden = true;
   $("#invite-name").value = "";
+  $("#invite-access").value = "parent";
   const sel = $("#invite-circle");
   sel.replaceChildren(...circles.map((c) => el("option", { value: c.id }, c.name)));
   if (circleFilter) sel.value = circleFilter;
@@ -858,8 +870,11 @@ dialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click
 $("#invite-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
-    const inv = await api("POST", "/api/admin/invites", { name: $("#invite-name").value, circleId: $("#invite-circle").value });
-    showLink(inv, "Invite ready", "Send this link to their phone. It works once and expires in a few days.");
+    const access = $("#invite-access").value;
+    const inv = await api("POST", "/api/admin/invites", { name: $("#invite-name").value, circleId: $("#invite-circle").value, access });
+    showLink(inv, "Invite ready", access === "younger_child"
+      ? "Open this link on their phone or tablet (or scan the code). No password needed: it signs that device in as them. It works once and expires in a few days."
+      : "Send this link to their phone. It works once and expires in a few days.");
     refresh();
   } catch (err) {
     alert(err.message);
@@ -932,12 +947,14 @@ function viewFromHash() { return location.hash.replace(/^#\/?/, "").split("/")[0
 function showView(name) {
   if (!name) { try { name = localStorage.getItem("view") || ""; } catch (_) {} }
   if (!name) name = "home";
+  if (!isAdmin() && (name === "devices" || name === "settings")) name = "home";
   const known = ["home", "family", "devices", "settings"].includes(name) || !!moduleInfo(name) || name === "thereabouts";
   if (!known || ((moduleInfo(name) || name === "thereabouts") && !moduleOn(name))) name = "home";
   view = name;
   try { localStorage.setItem("view", name); } catch (_) {}
   if (viewFromHash() !== name) history.replaceState(null, "", "#/" + name);
-  const pageName = moduleInfo(name) && name !== "thereabouts" ? "module" : name;
+  const built = (moduleInfo(name) || {}).available;
+  const pageName = name === "chat" && built ? "chat" : (moduleInfo(name) && name !== "thereabouts" ? "module" : name);
   document.querySelectorAll("[data-page]").forEach((p) => { p.hidden = p.dataset.page !== pageName; });
   document.querySelectorAll(".rail a[data-view]").forEach((a) => {
     if (a.dataset.view === name) a.setAttribute("aria-current", "page");
@@ -964,6 +981,7 @@ function renderView() {
   else if (view === "family") renderFamily();
   else if (view === "devices") renderDevices();
   else if (view === "settings") renderSettings();
+  else if (view === "chat" && (moduleInfo("chat") || {}).available) renderChat();
   else if (moduleInfo(view) && view !== "thereabouts") renderModulePage(view);
 }
 
@@ -990,12 +1008,15 @@ function renderHome() {
   }
   for (const m of modules) {
     if (m.id === "thereabouts" || !m.enabled || !MODULE_ICONS[m.id] || !document.querySelector(`.rail a[data-view="${m.id}"]`)) continue;
-    cards.push(card("#/" + m.id, MODULE_ICONS[m.id], m.name, m.available ? m.description : "Coming soon. " + m.description));
+    const unread = m.id === "chat" ? chatUnread() : 0;
+    cards.push(card("#/" + m.id, MODULE_ICONS[m.id], m.name + (unread ? ` · ${unread} new` : ""), m.available ? m.description : "Coming soon. " + m.description));
   }
   const quiet = lastMembers.filter((m) => m.silent || (m.issues || []).length).length;
   cards.push(card("#/family", "people", "Family", "People, parents and children, invites."));
-  cards.push(card("#/devices", "device", "Devices", quiet ? `${quiet} ${quiet === 1 ? "phone needs" : "phones need"} attention` : "All phones look fine"));
-  cards.push(card("#/settings", "gear", "Settings", "Modules, backups, AI and API access."));
+  if (isAdmin()) {
+    cards.push(card("#/devices", "device", "Devices", quiet ? `${quiet} ${quiet === 1 ? "phone needs" : "phones need"} attention` : "All phones look fine"));
+    cards.push(card("#/settings", "gear", "Settings", "Modules, backups, AI and API access."));
+  }
   $("#home-cards").replaceChildren(...cards);
 }
 
@@ -1003,34 +1024,55 @@ function avatarOf(m) {
   return el("div", { class: "avatar" + (m.emoji ? " emoji" : ""), style: `background:${m.color}` }, m.emoji || initial(m.name));
 }
 
+const ACCESS_LABELS = { admin: "Admin", parent: "Parent", older_child: "Older child", younger_child: "Younger child", dependent: "Doesn't use the app" };
+
 function renderFamily() {
   const roles = serverFeatures.includes("roles");
   $("#family-list").replaceChildren(...lastMembers.map((m) => {
-    const sel = roles ? el("select", { class: "role-select", "aria-label": `${m.name}'s role` },
-      el("option", { value: "parent" }, "Parent"), el("option", { value: "child" }, "Child")) : null;
-    if (sel) {
-      sel.value = m.role === "child" ? "child" : "parent";
-      sel.addEventListener("change", async () => {
-        try { await api("PUT", `/api/admin/members/${m.id}/role`, { role: sel.value }); refresh(); }
-        catch (err) { alert(err.message); sel.value = m.role || "parent"; }
+    const access = m.access || (m.role === "child" ? "younger_child" : m.role === "dependent" ? "dependent" : "parent");
+    let control;
+    if (!roles || !isAdmin() || access === "dependent") {
+      control = el("span", { class: "badge" + (access === "admin" ? " on" : "") }, ACCESS_LABELS[access] || access);
+    } else {
+      control = el("select", { class: "role-select", "aria-label": `${m.name}'s role` },
+        ...["admin", "parent", "older_child", "younger_child"].map((a) => {
+          const o = el("option", { value: a }, ACCESS_LABELS[a]);
+          // Only the main admin makes or unmakes admins.
+          if (!me.owner && (a === "admin" || access === "admin") && a !== access) o.disabled = true;
+          return o;
+        }));
+      control.value = access;
+      control.addEventListener("change", async () => {
+        try { await api("PUT", `/api/admin/members/${m.id}/role`, { role: control.value }); refresh(); }
+        catch (err) { alert(err.message); control.value = access; }
       });
     }
+    const sub = access === "dependent" ? "Part of the family; doesn't use the app"
+      : access === "younger_child" ? "Signs in with a join code from a parent (no password)"
+      : isAdmin() ? account(m) : "";
     return el("li", {},
       avatarOf(m),
       el("div", { class: "grow" },
         el("div", { class: "title" }, m.name),
-        el("div", { class: "sub" }, account(m))),
-      sel,
-      moreButton(`Options for ${m.name}`, [
+        sub ? el("div", { class: "sub" }, sub) : null),
+      control,
+      !isAdmin() ? null : moreButton(`Options for ${m.name}`, [
         ["Rename…", () => rename(m)],
         ["Icon and colour…", () => openIconPicker(m)],
-        ["Reset sign-in…", () => resetSignIn(m)],
+        ...(access === "dependent" ? [] : [[access === "younger_child" ? "New join code…" : "Reset sign-in…", () => resetSignIn(m)]]),
         "-",
         ["Remove from server…", () => removeMember(m), "danger"],
       ]));
   }));
   if (!lastMembers.length) $("#family-list").append(el("li", { class: "muted" }, "Nobody yet. Invite the first person."));
 }
+$("#family-dependent").addEventListener("click", async () => {
+  const name = prompt("Their name (e.g. a baby who doesn't use the app):");
+  if (!name) return;
+  try { await api("POST", "/api/admin/dependents", { name }); refresh(); }
+  catch (err) { alert(err.message); }
+});
+$("#logout-btn3").addEventListener("click", () => $("#logout-btn").click());
 $("#family-invite").addEventListener("click", () => $("#invite-btn").click());
 
 function renderDevices() {
@@ -1106,7 +1148,7 @@ async function loadModules() {
   try {
     const res = await api("GET", "/api/admin/modules");
     setModules(res);
-    if (!res.setupDone) openSetup();
+    if (!res.setupDone && isAdmin()) openSetup();
   } catch (err) {
     // An older server: no modules, everything is Thereabouts.
     if (err.message !== "unauthorized") modulesLoaded = false;
@@ -1129,9 +1171,185 @@ $("#setup-form").addEventListener("submit", async (e) => {
   } catch (err) { alert(err.message); }
 });
 
+// ---- chat ----
+// People see their own chats; parents also see (read only) any chat their children
+// are in. The main admin (admin password, no account) sees every chat, read only.
+
+let chatConvs = [];
+let chatOpen = "";        // the open conversation's id
+let chatMsgs = [];
+let chatTimer = null;
+const personById = (id) => lastMembers.find((m) => m.id === id);
+const nameOf = (id) => (personById(id) || {}).name || "Someone";
+const chatUnread = () => chatConvs.reduce((n, c) => n + (c.unread || 0), 0);
+const chatBase = () => me.owner ? "/api/admin/chat" : "/api/chat";
+
+async function loadChats() {
+  try {
+    chatConvs = (await api("GET", chatBase())).conversations || [];
+  } catch (err) {
+    chatConvs = [];
+    $("#chat-note").textContent = err.message;
+  }
+}
+
+function renderChatList() {
+  $("#chat-note").textContent = me.owner ? "You're the main admin: you can read every chat, but not post. Log in with your own account to chat."
+    : me.member && me.member.role === "parent" && chatConvs.some((c) => c.oversight) ? "Chats marked “Watching” are your children's: you can read them, not post." : "";
+  $("#chat-convs").replaceChildren(...chatConvs.map((c) => {
+    const last = c.last ? (c.last.text || "📷 Photo") : "No messages yet";
+    const who = c.last && c.kind !== "direct" ? nameOf(c.last.sender) + ": " : "";
+    return el("li", { class: "clickable" + (c.id === chatOpen ? " active" : ""), onclick: () => openChat(c.id) },
+      el("div", { class: "avatar" + (c.kind === "family" ? "" : ""), style: `background:${c.kind === "direct" ? (personById(c.members.find((id) => id !== (me.member || {}).id)) || {}).color || "var(--accent)" : "var(--accent)"}` },
+        c.kind === "family" ? "★" : (c.title || "?").trim().charAt(0).toUpperCase()),
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, c.title, c.oversight ? el("span", { class: "badge" }, "Watching") : null),
+        el("div", { class: "sub" }, (who + last).slice(0, 80))),
+      c.unread ? el("span", { class: "badge on" }, String(c.unread)) : null);
+  }));
+}
+
+function dayLabel(ms) {
+  const d = new Date(ms), today = new Date();
+  if (d.toDateString() === today.toDateString()) return "Today";
+  const y = new Date(today); y.setDate(today.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+}
+
+function renderThread(data) {
+  const conv = data.conversation;
+  $("#chat-title").textContent = conv.title;
+  $("#chat-sub").textContent = conv.kind === "family" ? "Everyone in the family" : conv.kind === "group" ? conv.members.map(nameOf).join(", ") : "";
+  const box = $("#chat-messages");
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  const mine = (me.member || {}).id;
+  const reads = data.reads || {};
+  // "Seen by" under my latest message: everyone else who has read up to it.
+  const myLast = [...chatMsgs].reverse().find((m) => m.sender === mine);
+  const seenBy = myLast ? Object.entries(reads).filter(([id, upTo]) => id !== mine && upTo >= myLast.id).map(([id]) => nameOf(id)) : [];
+  let lastDay = "";
+  const nodes = [];
+  for (const m of chatMsgs) {
+    const day = dayLabel(m.time);
+    if (day !== lastDay) { nodes.push(el("div", { class: "chat-day" }, day)); lastDay = day; }
+    const isMine = m.sender === mine;
+    const bubble = el("div", { class: "bubble" });
+    if (m.photo) bubble.append(el("img", { src: `/api/chat-media/${encodeURIComponent(m.photo)}`, alt: "Photo", loading: "lazy" }));
+    if (m.text) bubble.append(m.text);
+    nodes.push(el("div", { class: "msg" + (isMine ? " mine" : "") },
+      isMine || conv.kind === "direct" && !conv.oversight ? null : el("div", { class: "who" }, nameOf(m.sender)),
+      bubble,
+      el("div", { class: "meta" }, new Date(m.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) +
+        (myLast && m.id === myLast.id && seenBy.length ? ` · Seen by ${seenBy.join(", ")}` : ""))));
+  }
+  if (!chatMsgs.length) nodes.push(el("p", { class: "muted" }, "No messages yet. Say hello!"));
+  box.replaceChildren(...nodes);
+  if (atBottom || box.dataset.conv !== conv.id) box.scrollTop = box.scrollHeight;
+  box.dataset.conv = conv.id;
+  const canPost = !!data.canPost && !me.owner;
+  $("#chat-compose").hidden = !canPost;
+  $("#chat-readonly").hidden = canPost;
+  $("#chat-readonly").textContent = me.owner ? "Read only (main admin)." : "You can read this chat because a child of yours is in it. Only the people in it can post.";
+}
+
+async function openChat(id) {
+  if (chatOpen !== id) { chatMsgs = []; $("#chat-messages").replaceChildren(); }
+  chatOpen = id;
+  renderChatList();
+  await pollThread();
+}
+
+async function pollThread() {
+  if (!chatOpen) return;
+  try {
+    const after = chatMsgs.length ? chatMsgs[chatMsgs.length - 1].id : 0;
+    const data = await api("GET", `${chatBase()}/${encodeURIComponent(chatOpen)}/messages` + (after && !me.owner ? `?after=${after}` : ""));
+    if (after && !me.owner) chatMsgs = chatMsgs.concat(data.messages); else chatMsgs = data.messages;
+    renderThread(data);
+    const newest = chatMsgs.length ? chatMsgs[chatMsgs.length - 1].id : 0;
+    if (data.canPost && newest) {
+      await api("POST", `/api/chat/${encodeURIComponent(chatOpen)}/read`, { upTo: newest }).catch(() => {});
+      const c = chatConvs.find((x) => x.id === chatOpen);
+      if (c && c.unread) { c.unread = 0; renderChatList(); }
+    }
+  } catch (err) { console.error(err); }
+}
+
+async function renderChat() {
+  await loadChats();
+  if (!chatOpen && chatConvs.length) chatOpen = chatConvs[0].id;
+  renderChatList();
+  await pollThread();
+  clearInterval(chatTimer);
+  chatTimer = setInterval(() => {
+    if (view !== "chat" || document.hidden) return;
+    pollThread();
+    loadChats().then(renderChatList);
+  }, 4000);
+}
+
+$("#chat-compose").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("#chat-text").value.trim();
+  if (!text || !chatOpen) return;
+  $("#chat-text").value = "";
+  try {
+    await api("POST", `/api/chat/${encodeURIComponent(chatOpen)}/messages`, { text });
+    await pollThread();
+    loadChats().then(renderChatList);
+  } catch (err) { alert(err.message); $("#chat-text").value = text; }
+});
+
+$("#chat-photo").addEventListener("change", async () => {
+  const file = $("#chat-photo").files[0];
+  $("#chat-photo").value = "";
+  if (!file || !chatOpen) return;
+  const form = new FormData();
+  form.append("photo", file);
+  form.append("text", $("#chat-text").value.trim());
+  $("#chat-text").value = "";
+  try {
+    const res = await fetch(`/api/chat/${encodeURIComponent(chatOpen)}/messages`, { method: "POST", body: form, credentials: "same-origin" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    await pollThread();
+  } catch (err) { alert(err.message); }
+});
+
+// New chat: one person → one-to-one; several → a named group.
+const chatNewDialog = $("#chat-new-dialog");
+$("#chat-new").addEventListener("click", () => {
+  const mine = (me.member || {}).id;
+  const people = lastMembers.filter((m) => m.id !== mine && m.role !== "dependent");
+  $("#chat-new-people").replaceChildren(...people.map((m) => el("li", {}, el("label", {},
+    el("input", { type: "checkbox", value: m.id, onchange: () => { $("#chat-new-name-label").hidden = chatNewDialog.querySelectorAll("input[type=checkbox]:checked").length < 2; } }),
+    avatarOf(m), el("div", { class: "grow" }, el("div", { class: "title" }, m.name))))));
+  $("#chat-new-name").value = "";
+  $("#chat-new-name-label").hidden = true;
+  chatNewDialog.showModal();
+});
+chatNewDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => chatNewDialog.close()));
+$("#chat-new-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const ids = [...chatNewDialog.querySelectorAll("input[type=checkbox]:checked")].map((b) => b.value);
+  if (!ids.length) return;
+  try {
+    const conv = ids.length === 1
+      ? await api("POST", "/api/chat/direct", { to: ids[0] })
+      : await api("POST", "/api/chat/groups", { name: $("#chat-new-name").value || "Group", members: ids });
+    chatNewDialog.close();
+    await loadChats();
+    openChat(conv.id);
+  } catch (err) { alert(err.message); }
+});
+
 // ---- start ----
 
 async function start() {
+  try { me = await api("GET", "/api/admin/session"); } catch (_) { return; }
+  document.body.classList.toggle("parent-mode", !me.admin);
+  document.body.classList.toggle("owner-mode", !!me.owner);
+  $("#whoami").textContent = me.member ? `Logged in as ${me.member.name}${me.admin ? " (admin)" : ""}` : "Logged in as the main admin";
   $("#login").hidden = true;
   $("#app").hidden = false;
   await loadModules();
@@ -1142,4 +1360,4 @@ async function start() {
   refreshTimer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
 }
 
-api("GET", "/api/admin/members").then(start).catch(() => {});
+api("GET", "/api/admin/session").then(start).catch(() => {});

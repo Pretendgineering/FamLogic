@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -11,13 +12,24 @@ func TestModulesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := fresh.Modules(); m.SetupDone || !m.Enabled["thereabouts"] || m.Enabled["chat"] {
+	if m := fresh.Modules(); m.SetupDone || !m.Enabled["thereabouts"] || !m.Enabled["chat"] || m.Enabled["chores"] {
 		t.Fatalf("fresh: %+v", m)
 	}
-	// An existing family (from before modules): location on, no setup screen.
-	s, _ := newStoreWithMembers(t, "Sam")
-	if m := s.Modules(); !m.SetupDone || !m.Enabled["thereabouts"] {
+	// An existing family (a data file from before modules, with people in it):
+	// location on, no setup screen.
+	old := filepath.Join(t.TempDir(), "famlogic.json")
+	os.WriteFile(old, []byte(`{"secret":"x","members":{"a1":{"id":"a1","name":"Sam","color":"#fff","tokenHash":"h","createdAt":1}}}`), 0o600)
+	s, err := OpenStore(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := s.Modules(); !m.SetupDone || !m.Enabled["thereabouts"] || m.Enabled["chat"] {
 		t.Fatalf("existing: %+v", m)
+	}
+	// People joining a brand-new server before setup doesn't change its defaults.
+	fresh2, _ := newStoreWithMembers(t, "Alex")
+	if m := fresh2.Modules(); m.SetupDone || !m.Enabled["chat"] {
+		t.Fatalf("new family after a join: %+v", m)
 	}
 	if feats := s.moduleFeatures(); len(feats) != 1 || feats[0] != "module:thereabouts" {
 		t.Fatalf("features: %v", feats)
@@ -30,25 +42,53 @@ func TestModulesDefaults(t *testing.T) {
 	if m.Enabled["thereabouts"] || !m.Enabled["chat"] || m.Enabled["bogus"] || !m.SetupDone {
 		t.Fatalf("after set: %+v", m)
 	}
+	if err := s.SetModules(map[string]bool{"chores": true}, true); err != nil {
+		t.Fatal(err)
+	}
 	if feats := s.moduleFeatures(); len(feats) != 0 {
-		t.Fatalf("features should be empty until chat is built: %v", feats)
+		t.Fatalf("features should be empty until chores is built: %v", feats)
 	}
 }
 
 func TestRoles(t *testing.T) {
 	s, ms := newStoreWithMembers(t, "Mom", "Kid")
-	if ms[1].role() != RoleParent {
+	kid := ms[1].ID
+	if ms[1].access() != AccessParent {
 		t.Fatal("existing members should be parents")
 	}
-	if err := s.SetRole(ms[1].ID, RoleChild); err != nil {
+	if err := s.SetAccess(kid, AccessYoungerChild, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetRole(ms[1].ID, "boss"); err != ErrBadRequest {
+	if err := s.SetAccess(kid, "boss", false); err != ErrBadRequest {
 		t.Fatalf("bad role: %v", err)
 	}
-	for _, m := range s.Members() {
-		if m.ID == ms[1].ID && m.role() != RoleChild {
-			t.Fatal("role not saved")
+	// Only the main admin makes admins.
+	if err := s.SetAccess(ms[0].ID, AccessAdmin, false); err != ErrNeedsOwner {
+		t.Fatalf("admin without owner: %v", err)
+	}
+	if err := s.SetAccess(ms[0].ID, AccessAdmin, true); err != nil {
+		t.Fatal(err)
+	}
+	// Users can't become non-users.
+	if err := s.SetAccess(kid, AccessDependent, true); err != ErrBadRequest {
+		t.Fatalf("user to dependent: %v", err)
+	}
+	m, _ := s.MemberByID(kid)
+	if m.access() != AccessYoungerChild || m.canUsePassword() {
+		t.Fatalf("kid: %+v", m)
+	}
+	s.SetAccess(kid, AccessOlderChild, false)
+	if m, _ := s.MemberByID(kid); !m.canUsePassword() {
+		t.Fatal("older children may use a password")
+	}
+	baby, err := s.AddDependent("Baby")
+	if err != nil || baby.role() != RoleDependent || baby.canUsePassword() || baby.TokenHash != "" {
+		t.Fatalf("dependent: %+v %v", baby, err)
+	}
+	views, _ := s.VisibleTo(ms[0].ID)
+	for _, v := range views {
+		if v.ID == baby.ID {
+			t.Fatal("non-users shouldn't be in the app's people list")
 		}
 	}
 }
