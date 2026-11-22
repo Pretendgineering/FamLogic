@@ -28,38 +28,40 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Chat: family chat, named groups and one-to-one, photos, read receipts, notifications with Reply, parents can read children's chats; stored in SQLite (`chat.db`).
 - App: a tab bar for the modules that are on (Map, Chat), hidden when only one is.
 
-### 🔨 Phase 1b: Devices
-- **Device registry:** each person can have several devices (phone, tablet); the console's Devices page lists them with role, app version, last seen, and Revoke.
-- **Device roles in one APK:** on first launch the app asks *Join my family* (parent or child, decided by the invite) or *Use as a family display* (shows a pairing code a parent approves in the console). See ARCHITECTURE.md → Devices.
+### 🔨 Phase 3: Design language
+- **Serif headings, sans text:** Liberation Serif (the free, metric-compatible Times New Roman, OFL-licensed and bundled, so it works offline) for titles, names, card headers and big numbers; a clean sans for body text and controls. "Firm but friendly": old meets new.
+- **Themes,** chosen per device (app) or per browser (console), each with light and dark: **Muted Dracula** (the default), Current purple, Warm paper, Forest, Ocean, and High contrast.
 
-### ⏳ Chat, next steps
-- "Message" from a person's card on the map; chat on the Pebble (quick replies) and from the Index 01 ring.
-- Delete your own messages; mute a chat.
+### ⏳ Phase 4: Tasks, tags and the Markdown vault
+- **Tags on everything:** to-dos, chores, routines, events and list items can be tagged to people (`@Sam`) and groups (`#kids`, `#parents`), so each person's screens show what's theirs.
+- The **vault** folder of Markdown files (Obsidian-friendly; see ARCHITECTURE.md → Vault), watched for edits made elsewhere.
+- **To-dos and lists:** shared lists (shopping, packing) and personal to-dos with due dates and **time of day** (morning, after school, evening), so screens show what matters now. Quick add from the app, console, Pebble and Index 01.
+- **Chores:** who, what, how often; tick off anywhere; optional stars for children.
+- **Routines and daily rhythms:** checklists like *Morning*, *After school* or *Bedtime*, and a **daily rhythm** set in the console (mini schedules per day, per person or group: "07:00 Morning, 15:30 After school, 19:30 Bedtime", "13:00 Nap time" for the little one). Screens switch to the current routine on their own.
 
-### ⏳ Phase 3: Markdown vault and API
-- The vault folder in the data directory, Obsidian-friendly (see ARCHITECTURE.md → Vault), watched for edits made outside FamLogic.
-- API keys with scopes (read, lists, chores, calendar, chat-post), created and revoked in Settings → AI & API.
-- OpenAPI description, and a ready-made **skill file** for Hermes and other agents.
-- Optional later: an MCP endpoint.
+### ⏳ Phase 5: Voice and the agent bridge
+- **Press to talk** and **read aloud** as a main way to use FamLogic, everywhere: phones, kids' tablets, the TV, Pebble watches, the Index 01 ring.
+- FamLogic is the **gateway**, not the AI: speech is turned into text, sent with who's talking (and their role) to **your own agent** (Hermes, OpenClaw or anything with a webhook or OpenAI-style API, on your home server or VPS), and the reply is read back.
+- The agent uses FamLogic's API (scoped keys, OpenAPI, a ready-made **skill file**) to do things: "I fed the cat" ticks off the chore, "tell Mom I'm at the park" sends a chat message, "what's next?" reads the routine, parents ask "what still needs doing today?".
+- **Speech** on the server first (optional Whisper for speech-to-text and Piper for text-to-speech containers: private and the same on every device), falling back to the device's own Android speech services.
+- **Read aloud:** new messages and chores can be spoken on kids' devices and the TV (per device, with quiet hours).
+- **TV remote:** a remote button mapped (with a button-remapper app) to FamLogic's talk shortcut.
+- **Pebble:** hold a button to talk (watches with a microphone); the reply shows on the watch.
+- **Parents' summary:** an optional end-of-day summary (chores done, messages, who went where), from the agent or FamLogic itself.
 
-### ⏳ Phase 4: To-dos and lists
-- Quick add from the app, the web console, the Pebble watch and the Index 01 ring ("add milk to the shopping list").
-- Shared lists (shopping, packing) and personal to-dos, assignable, with due dates; Markdown task lists underneath.
+### ⏳ Phase 6: TV launcher and tablet layout
+- **Android TV launcher:** FamLogic as the TV's home screen. Connect to the server in its settings (no personal account; a parent approves it in the console). A horizontally scrolling row of rounded cards, three at a time: today's agenda, a small map of who's where, to-dos for this time of day, the current routine (it changes with the daily rhythm: Morning, Nap time, Bedtime…), this week's menu, recent chat. Below: shortcuts to your most-used apps. D-pad friendly, dark and burn-in friendly.
+- **Tablet layout:** the map beside the signed-in person's chores, to-dos and routine, filtered by their tags; a big talk button on kids' tablets; works as a kitchen wall display too.
+- **Devices:** several devices per person, the console's Devices page with role, version, last seen and Revoke; display/launcher pairing with a code approved in the console.
 
-### ⏳ Phase 5: Calendar
-- Shared family calendar; events as Markdown notes.
-- **CalDAV** so phone calendars (DAVx⁵ on Android, iOS natively) and Thunderbird sync both ways.
-- Subscribe to outside calendars (school, sports) by ICS link.
-
-### ⏳ Phase 6: Family display
-- The app's display mode for a wall tablet, kitchen console or Android TV: today's agenda, chores, this week's menu, who's where, recent chat.
-- Paired and configured from the console, no personal account, always on, burn-in friendly (dark, shifting layout).
-
-### ⏳ Phase 7: Chores
-- Chore chart: who, what, how often; tick off on phones or the display; optional stars/points for children.
+### ⏳ Phase 7: Calendar
+- Shared family calendar, events as Markdown notes with tags; **CalDAV** so phone calendars (DAVx⁵ on Android, iOS natively) and Thunderbird sync both ways; outside calendars (school, sports) by ICS link.
 
 ### ⏳ Phase 8: Meals and menus
 - Weekly meal plans and recipes; ingredients to the shopping list; easy for an agent to plan.
+
+### ⏳ Chat, next steps
+- "Message" from a person's card on the map; chat on the Pebble (quick replies) and from the Index 01 ring; delete your own messages; mute a chat.
 
 ### ⏳ Later and parked
 - **Grandparents mode** (idea, to design): a third kind of family member, alongside parents and children, with its own set of features. To decide: which features it has.

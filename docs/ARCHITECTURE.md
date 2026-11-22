@@ -57,14 +57,14 @@ The app's first screen offers two paths:
    - A **parent invite** (made in the console, as today) → the person picks a username and password → **parent** device.
    - A **child join code** (made by a parent for a child they've created in the console) → no password; the device is bound to that child → **child** device. Codes are single-use and expire (e.g. 48 h); a lost device is revoked in the console and a new code issued.
    - **Signing in** with username and password works for parents (and for older children whose parents gave them a password).
-2. **Use as a family display**: for a wall tablet, kitchen console or Android TV.
+2. **Use as a family display / TV launcher**: for a wall tablet, kitchen console or Android TV.
    - The device shows a 6-character **pairing code** (and a QR linking to the console's approval page).
    - In the console: **Devices → Pending → Approve**, choose a name ("Kitchen") and what it shows (calendar, chores, menus, who's where, chat). Until approved it shows nothing but the code.
    - A display has **no personal account** and limited, read-mostly rights (it may tick off chores if allowed). It's unpaired from the console at any time.
 
 Every device gets its own token, stored hashed on the server, listed in **Devices** with: who (or which display), role, app version, last seen, and actions (rename, revoke, re-pair). Today each person has one token (one phone); Phase 1 moves tokens into a device list so a person can have a phone and a tablet.
 
-On Android TV the display mode is chosen automatically when the app starts on a TV (leanback launcher), and the setup screen is D-pad friendly.
+On Android TV the app offers itself as the **home screen** (see "TV launcher" below); its setup is D-pad friendly and starts with the server address (typed without http:// or https://; the app finds which one works).
 
 Parents and admins already log in to the console with their own accounts (0.16.0); the admin password is the main admin's owner/recovery credential.
 
@@ -161,10 +161,73 @@ where: Smile Dental
 - Access: participants read and post; a **parent** can read (not post in) any conversation with a child in it; the main admin reads all (`/api/admin/chat`). Parents peeking don't leave read receipts.
 - Backups: `VACUUM INTO backups/chat-<date>.db` daily.
 
-## Family display (Phase 6 design)
+## Tags, to-dos, routines and daily rhythms (Phase 4 design)
 
-- The app's display mode: a full-screen, always-on board with panels chosen in the console (today's agenda, chores with tick-off, this week's menu, who's where, recent chat).
-- Dark, low-motion design that slowly shifts to avoid burn-in; works with a D-pad on Android TV.
+Everything a person might do or attend can be **tagged** with people and groups, so each screen shows what's relevant: a kid's tablet shows Sam's chores and routine, the TV shows the family's, a parent's phone shows everyone's.
+
+- In the vault, tags are front-matter fields: `who: ["[[Sam]]"]` for people and `tags: [kids]` for groups (FamLogic groups and free-form tags). Task lines can carry inline tags too (`- [ ] Pack PE kit @Sam #school`).
+- **Time of day:** to-dos and chores may have `when: morning | afternoon | evening | HH:MM-HH:MM`, so screens show what matters now and older items fade.
+- **Routines** are checklists that recur (one Markdown note each):
+
+```markdown
+---
+type: routine
+name: Bedtime
+who: ["[[Sam]]", "[[Mia]]"]
+---
+- [ ] Bath
+- [ ] Pyjamas
+- [ ] Brush teeth
+- [ ] Two stories
+```
+
+- A **daily rhythm** (set in the console; stored as `Rhythms/<name>.md`) is a mini schedule saying which routine is current when, per day and per person or group:
+
+```markdown
+---
+type: rhythm
+who: ["#kids"]
+days: [mon, tue, wed, thu, fri]
+---
+- 07:00 [[Morning]]
+- 15:30 [[After school]]
+- 19:30 [[Bedtime]]
+```
+
+  Screens (TV, tablet, watch) switch to the current routine on their own; ticks reset when the routine comes round again. A separate rhythm can cover weekends, or a toddler's `13:00 [[Nap time]]`.
+
+## Voice and the agent bridge (Phase 5 design)
+
+Press-to-talk and read-aloud are meant to be a main way of using FamLogic on every device. FamLogic doesn't contain the AI: it is the **gateway** between family devices and an agent you run (Hermes, OpenClaw, or anything with a webhook or OpenAI-style chat API, on your home server or VPS).
+
+```
+ device (hold to talk) ──audio──▶ FamLogic server ──▶ speech-to-text (Whisper container, optional)
+                                        │                      │ text
+                                        ▼                      ▼
+                          agent (Hermes / OpenClaw…) ◀── {who: Sam, role: child, device: kitchen-tv, text}
+                                        │  uses FamLogic's API with a scoped key: tick chore, send message, read routine…
+                                        ▼ reply text
+ device ◀──audio or text── FamLogic ◀── text-to-speech (Piper container, optional)
+```
+
+- **Speech, server first:** if Whisper (speech-to-text) and Piper (text-to-speech) containers are configured, FamLogic uses them: private, consistent, and available to devices without their own speech services (Android TV, FOSS phones). Otherwise each device uses Android's own speech recognition and text-to-speech, and sends text.
+- **Who is talking** comes from the device's sign-in (a child's tablet, a parent's phone) or, on a shared TV, from a "Who's talking?" pick (or the agent asks). The agent gets the person, role and device, and a key limited to what that role may do (a child can tick their own chores and message family, not change settings).
+- **Agent connection** (Settings → AI & API): the agent's URL and type (webhook or OpenAI-compatible), a key for FamLogic's API, and per-role switches. FamLogic ships a skill file describing its API and Markdown conventions.
+- **Read aloud:** per device (kids' tablets, the TV), with quiet hours: new messages, the next chore, routine steps, and the agent's replies.
+- **Inputs:** a big talk button in the app (phones, tablets); a TV remote button mapped to FamLogic's talk shortcut with a button-remapper app; Pebble watches with a microphone (dictation → text → agent; the reply shows on the watch); the Index 01 ring's webhook (already sends transcriptions).
+- **Parents' summary:** optional, at a chosen time: chores done and missed, messages, who went where, from the agent (or a plain summary from FamLogic).
+
+## TV launcher (Phase 6 design)
+
+- On Android TV, FamLogic registers as a **home-screen app** (`HOME` intent, leanback). Set it as the TV's home screen and it becomes a persistent family dashboard; the settings screen connects it to your server, and a parent approves it in the console (no personal account).
+- **Top: a horizontally scrolling row of rounded cards, three in view**, moved with the D-pad: today's agenda, a small map of who's where, to-dos for this time of day, the **current routine** (switching with the daily rhythm: Morning, Nap time, Bedtime…), this week's menu, recent chat. Cards are chosen and ordered in the console per TV.
+- **Below: shortcuts** to the most-used apps (picked on the TV), so it fully replaces the stock launcher.
+- **Talk:** a remote button (via a button remapper) or an on-screen button opens press-to-talk.
+- Dark, low-motion, slowly shifting layout to avoid burn-in; serif headings that read well from the sofa.
+
+## Tablets
+
+- A two-pane layout: the map beside the signed-in person's chores, to-dos and current routine (filtered by their tags), plus chat. Kids' tablets get a big talk button and read-aloud. A tablet can also run as a wall display (the launcher layout, without replacing the home screen).
 
 ## Watches and the ring
 

@@ -81,7 +81,10 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
     val scope = rememberCoroutineScope()
     val autofill = LocalAutofillManager.current
 
-    val url = normalizeServerUrl(server)
+    // The address as typed, completed with a likely http:// or https://. Before talking to
+    // the server it's checked (and the other scheme tried), so nobody has to type either.
+    var url by remember(server) { mutableStateOf(normalizeServerUrl(server)) }
+    var checked by remember(server) { mutableStateOf(false) }
     val insecure = url.startsWith("http://") && !isPrivateHost(Uri.parse(url).host.orEmpty())
 
     /** Runs a server call with a spinner and friendly errors. */
@@ -90,6 +93,10 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
         error = null
         scope.launch {
             try {
+                if (!checked) {
+                    url = findServer(server)
+                    checked = true
+                }
                 block()
             } catch (e: ApiException) {
                 error = e.message
@@ -186,7 +193,8 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
                     value = server,
                     onValueChange = { server = it; error = null },
                     label = { Text("Server address") },
-                    placeholder = { Text("https://family.example.com") },
+                    placeholder = { Text("family.example.com or 192.168.1.5:8080") },
+                    supportingText = { Text("No need to type http:// or https://") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
                     modifier = Modifier.fillMaxWidth(),
@@ -393,12 +401,43 @@ fun suggestUsername(name: String): String =
     name.trim().lowercase().replace(Regex("\\s+"), ".").filter { it.isLetterOrDigit() || it in "._-" }.take(32)
 
 /** Accept "family.example.com" or "192.168.1.5:8080" and add a scheme. */
+/**
+ * Finds the server behind an address typed without http:// or https://: tries the likely
+ * one first (http for home-network and VPN addresses, https otherwise), then the other,
+ * and returns whichever answers like a FamLogic server.
+ */
+suspend fun findServer(input: String): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    val s = input.trim().trimEnd('/')
+    if (s.startsWith("http://") || s.startsWith("https://")) return@withContext s
+    val first = normalizeServerUrl(s)
+    val second = if (first.startsWith("https://")) "http://$s" else "https://$s"
+    for (candidate in listOf(first, second)) {
+        if (looksLikeServer(candidate)) return@withContext candidate
+    }
+    throw IOException("No FamLogic server answered at $s (tried https:// and http://). Check the address and port")
+}
+
+private fun looksLikeServer(base: String): Boolean = runCatching {
+    val conn = java.net.URL("$base/api/info").openConnection() as java.net.HttpURLConnection
+    try {
+        conn.connectTimeout = 5_000
+        conn.readTimeout = 5_000
+        conn.instanceFollowRedirects = true
+        conn.responseCode == 200 && conn.inputStream.bufferedReader().use { it.readText() }.contains("\"version\"")
+    } finally {
+        conn.disconnect()
+    }
+}.getOrDefault(false)
+
 fun normalizeServerUrl(input: String): String {
     val s = input.trim().trimEnd('/')
     if (s.isEmpty()) return ""
     if (s.startsWith("http://") || s.startsWith("https://")) return s
     val host = s.substringBefore('/').substringBefore(':')
-    return (if (isPrivateHost(host)) "http://" else "https://") + s
+    // An explicit port other than 443 is usually the container itself (http), e.g. 192.168.1.5:8080.
+    val port = s.substringBefore('/').substringAfter(':', "")
+    val plain = isPrivateHost(host) || (port.isNotEmpty() && port != "443")
+    return (if (plain) "http://" else "https://") + s
 }
 
 /** Home network, VPN (Tailscale) or local names, where plain http is reasonable. */

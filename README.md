@@ -1,11 +1,12 @@
 # FamLogic
 
-A self-hosted family hub: location sharing, chat and (soon) a shared calendar, to-dos, chores and meal plans, on **your own server**. Mostly made for my own family as a vibe-coding project; I perpetually do not know what I'm doing.
+A self-hosted family hub: location sharing, chat and (soon) a shared calendar, to-dos, chores, routines and meal plans, on **your own server**, with **press-to-talk voice** to your own AI agent across phones, tablets, the TV and the watch. Mostly made for my own family as a vibe-coding project; I perpetually do not know what I'm doing.
 
 - **Private:** no third-party accounts, no cloud, no ads, no tracking. Your family's data stays in one folder on your server.
 - **Modular:** at first setup you choose what your family uses, and you can change it any time.
 - **Works without Google:** the default app has no Google code at all (an optional Google edition adds a few extras).
 - **Kid-friendly:** younger children sign in with a code from a parent, no password; parents can see their children's chats.
+- **Voice first** *(coming)*: press and hold to talk, and hear things read out, on every device. It goes to an AI agent you host (such as Hermes or OpenClaw), so a child can say "I fed the cat" to tick off a chore, send a message, or hear what's next.
 - **Open source:** GPLv3.
 
 ## Devices
@@ -13,9 +14,9 @@ A self-hosted family hub: location sharing, chat and (soon) a shared calendar, t
 | Device | What it does |
 |---|---|
 | **Android phones** | The FamLogic app: map, chat, alerts, SOS, and everything else that's switched on. One app for parents and children. |
-| **Android tablets** | The same app, on a bigger screen. Wi-Fi-only tablets can share their location too. |
-| **Android TV / wall tablet** *(coming)* | A family display: today's calendar, chores, menus and who's where, always on. Paired and set up from the web console. |
-| **Pebble watches** | A watchapp (family list, radar and maps, check-in, hold-to-SOS, nudges) and a Family watchface, on every Pebble from the original to the Pebble 2 Duo, Time 2 and Round 2. |
+| **Android tablets** | The same app, on a bigger screen. Wi-Fi-only tablets can share their location too. *Coming:* a tablet layout with the map beside that person's chores and to-dos, and a big talk button for kids. |
+| **Android TV** *(coming)* | A **home-screen launcher**: set it as the TV's home screen and it becomes a family dashboard, with a scrolling row of cards (today's agenda, who's where, to-dos for this time of day, the current routine like "Morning" or "Bedtime") above shortcuts to your most-used apps. Connect it to your server in its settings; talk to your agent with a remote button. |
+| **Pebble watches** | A watchapp (family list, radar and maps, check-in, hold-to-SOS, nudges) and a Family watchface, on every Pebble from the original to the Pebble 2 Duo, Time 2 and Round 2. *Coming:* talk to your agent from the watch. |
 | **Pebble Index 01 ring** | Silent SOS, voice check-ins and voice place reminders. |
 | **Any web browser** | The web console: family and roles, devices, modules, the map and chat. |
 
@@ -25,9 +26,9 @@ A self-hosted family hub: location sharing, chat and (soon) a shared calendar, t
 |---|---|
 | **Thereabouts**: everyone on a map, SOS, check-ins, fences with arrive/leave alerts, trips, driving, Pebble and Index 01 ([guide](docs/THEREABOUTS.md)) | ✅ |
 | **Chat**: a family chat, group chats and one-to-one, with photos and read receipts; parents can read their children's chats ([guide](docs/CHAT.md)) | ✅ |
-| **Calendar** (with CalDAV sync), **To-dos & lists**, **Chores**, **Meals & menus** | planned |
-| **Family display** for Android TV and wall tablets | planned |
-| **AI & API access**: family content as Markdown (Obsidian-friendly), editable by AI agents such as Hermes with a cloud or local Ollama model | planned |
+| **Calendar** (with CalDAV sync), **To-dos & lists**, **Chores**, **Routines** (checklists that follow the family's daily rhythm), **Meals & menus**, all taggable to people or groups | planned |
+| **TV launcher** for Android TV, and a **tablet layout** | planned |
+| **Voice and AI**: press-to-talk and read-aloud everywhere, routed to your own agent (Hermes, OpenClaw…); family content as Markdown (Obsidian-friendly) that agents can edit; optional end-of-day summaries for parents | planned |
 
 See [ROADMAP.md](ROADMAP.md) for the order and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together.
 
