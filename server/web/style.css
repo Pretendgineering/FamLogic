@@ -1,47 +1,268 @@
-/* FamLogic dashboard: a purple Material You style, light or dark following the
-   system. Depth comes from tonal surfaces and soft shadows (no glows). */
+/* FamLogic console: serif headings (Liberation Serif) over clean sans text, in one of
+   the same palettes as the app (Theme.kt), each light or dark. Muted Dracula is the
+   default. app.js sets data-theme and data-dark on <html> from this browser's choice. */
+@font-face { font-family: "Liberation Serif"; src: url("/fonts/LiberationSerif-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Liberation Serif"; src: url("/fonts/LiberationSerif-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
 :root {
+  --serif: "Liberation Serif", "Times New Roman", Tinos, Georgia, serif;
+  --bg: #f6f4f8;
+  --surface: #ffffff;
+  --surface-2: #ece9f2;
+  --text: #282a36;
+  --muted: #615e77;
+  --line: #dcd8e6;
+  --accent: #6f5aa8;
+  --accent-text: #ffffff;
+  --accent-soft: #e4dcf5;
+  --accent-soft-text: #372a66;
+  --secondary: #a34f82;
+  --danger: #b53a55;
+  --sos: #c0394f;
+  --shadow: 0 1px 2px rgba(35, 20, 80, .06), 0 4px 14px rgba(35, 20, 80, .08);
+  --shadow-lg: 0 8px 30px rgba(35, 20, 80, .18);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-dark]) {
+    --bg: #22212c;
+    --surface: #2a2937;
+    --surface-2: #353445;
+    --text: #ecebf3;
+    --muted: #a7a4be;
+    --line: #403f53;
+    --accent: #b8a3e3;
+    --accent-text: #231b3a;
+    --accent-soft: #46405e;
+    --accent-soft-text: #e6dcff;
+    --secondary: #e3a3c8;
+    --danger: #e57a8e;
+    --sos: #e0607a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .28);
+    --shadow-lg: 0 10px 36px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+html[data-theme="dracula"][data-dark="0"] {
+  --bg: #f6f4f8;
+  --surface: #ffffff;
+  --surface-2: #ece9f2;
+  --text: #282a36;
+  --muted: #615e77;
+  --line: #dcd8e6;
+  --accent: #6f5aa8;
+  --accent-text: #ffffff;
+  --accent-soft: #e4dcf5;
+  --accent-soft-text: #372a66;
+  --secondary: #a34f82;
+  --danger: #b53a55;
+  --sos: #c0394f;
+  --shadow: 0 1px 2px rgba(35, 20, 80, .06), 0 4px 14px rgba(35, 20, 80, .08);
+  --shadow-lg: 0 8px 30px rgba(35, 20, 80, .18);
+  color-scheme: light;
+}
+html[data-theme="dracula"][data-dark="1"] {
+  --bg: #22212c;
+  --surface: #2a2937;
+  --surface-2: #353445;
+  --text: #ecebf3;
+  --muted: #a7a4be;
+  --line: #403f53;
+  --accent: #b8a3e3;
+  --accent-text: #231b3a;
+  --accent-soft: #46405e;
+  --accent-soft-text: #e6dcff;
+  --secondary: #e3a3c8;
+  --danger: #e57a8e;
+  --sos: #e0607a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .28);
+  --shadow-lg: 0 10px 36px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+html[data-theme="purple"][data-dark="0"] {
   --bg: #f4f1fb;
   --surface: #ffffff;
-  --surface-2: #ece6f8;      /* tonal container */
+  --surface-2: #e7e0f3;
   --text: #231f33;
-  --muted: #655f7a;
+  --muted: #5b5570;
   --line: #ddd6ee;
   --accent: #6e48d6;
   --accent-text: #ffffff;
-  --accent-soft: #e3d9fb;    /* tonal button */
-  --accent-soft-text: #3b2479;
+  --accent-soft: #e3d9fb;
+  --accent-soft-text: #2a1462;
+  --secondary: #7d5260;
   --danger: #c7354b;
   --sos: #c7354b;
   --shadow: 0 1px 2px rgba(35, 20, 80, .06), 0 4px 14px rgba(35, 20, 80, .08);
   --shadow-lg: 0 8px 30px rgba(35, 20, 80, .18);
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Dracula-inspired */
-    --bg: #1d1e28;
-    --surface: #262735;
-    --surface-2: #31324a;
-    --text: #f2f0fa;
-    --muted: #a4a2bf;
-    --line: #3a3b52;
-    --accent: #bd93f9;
-    --accent-text: #1d1e28;
-    --accent-soft: #433a64;
-    --accent-soft-text: #e4d6ff;
-    --danger: #ff6e7f;
-    --sos: #e25569;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .28);
-    --shadow-lg: 0 10px 36px rgba(0, 0, 0, .5);
-    color-scheme: dark;
-  }
+html[data-theme="purple"][data-dark="1"] {
+  --bg: #1d1e28;
+  --surface: #262735;
+  --surface-2: #31324a;
+  --text: #f2f0fa;
+  --muted: #a4a2bf;
+  --line: #3a3b52;
+  --accent: #bd93f9;
+  --accent-text: #2b1958;
+  --accent-soft: #433a64;
+  --accent-soft-text: #e4d6ff;
+  --secondary: #ff92df;
+  --danger: #ff6e7f;
+  --sos: #e25569;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .28);
+  --shadow-lg: 0 10px 36px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+html[data-theme="paper"][data-dark="0"] {
+  --bg: #f6f0e4;
+  --surface: #fffaf0;
+  --surface-2: #efe6d4;
+  --text: #2e2418;
+  --muted: #6e6050;
+  --line: #ddd0b8;
+  --accent: #8e2a2a;
+  --accent-text: #fffaf0;
+  --accent-soft: #f0d9cf;
+  --accent-soft-text: #5c1a1a;
+  --secondary: #7a6230;
+  --danger: #b3261e;
+  --sos: #b3261e;
+  --shadow: 0 1px 2px rgba(35, 20, 80, .06), 0 4px 14px rgba(35, 20, 80, .08);
+  --shadow-lg: 0 8px 30px rgba(35, 20, 80, .18);
+  color-scheme: light;
+}
+html[data-theme="paper"][data-dark="1"] {
+  --bg: #1f1b16;
+  --surface: #2a251f;
+  --surface-2: #352e26;
+  --text: #efe6d6;
+  --muted: #b3a690;
+  --line: #463d31;
+  --accent: #d98c7a;
+  --accent-text: #3a1610;
+  --accent-soft: #4d3128;
+  --accent-soft-text: #f6d6cc;
+  --secondary: #c9b27c;
+  --danger: #e57a6e;
+  --sos: #e0604f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .28);
+  --shadow-lg: 0 10px 36px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+html[data-theme="forest"][data-dark="0"] {
+  --bg: #f1f5f0;
+  --surface: #ffffff;
+  --surface-2: #e3ece1;
+  --text: #1f2a20;
+  --muted: #5c6b5c;
+  --line: #d3ded1;
+  --accent: #2f6b3f;
+  --accent-text: #ffffff;
+  --accent-soft: #d6ead9;
+  --accent-soft-text: #17401f;
+  --secondary: #6b6330;
+  --danger: #b3261e;
+  --sos: #c0392b;
+  --shadow: 0 1px 2px rgba(35, 20, 80, .06), 0 4px 14px rgba(35, 20, 80, .08);
+  --shadow-lg: 0 8px 30px rgba(35, 20, 80, .18);
+  color-scheme: light;
+}
+html[data-theme="forest"][data-dark="1"] {
+  --bg: #1a201b;
+  --surface: #222a23;
+  --surface-2: #2c362d;
+  --text: #e5eee4;
+  --muted: #9fb09e;
+  --line: #364337;
+  --accent: #8cc79a;
+  --accent-text: #0f2e17;
+  --accent-soft: #2f4733;
+  --accent-soft-text: #cfeed6;
+  --secondary: #c8c27a;
+  --danger: #e57a7a;
+  --sos: #e06060;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .28);
+  --shadow-lg: 0 10px 36px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+html[data-theme="ocean"][data-dark="0"] {
+  --bg: #eff4f8;
+  --surface: #ffffff;
+  --surface-2: #e0eaf2;
+  --text: #1a2633;
+  --muted: #586a7c;
+  --line: #d0dde8;
+  --accent: #1f5f8b;
+  --accent-text: #ffffff;
+  --accent-soft: #d3e5f3;
+  --accent-soft-text: #0f3654;
+  --secondary: #2d7a6a;
+  --danger: #b3261e;
+  --sos: #c0394f;
+  --shadow: 0 1px 2px rgba(35, 20, 80, .06), 0 4px 14px rgba(35, 20, 80, .08);
+  --shadow-lg: 0 8px 30px rgba(35, 20, 80, .18);
+  color-scheme: light;
+}
+html[data-theme="ocean"][data-dark="1"] {
+  --bg: #171e26;
+  --surface: #1f2833;
+  --surface-2: #29343f;
+  --text: #e3edf5;
+  --muted: #9db0c2;
+  --line: #34414e;
+  --accent: #7fb8e0;
+  --accent-text: #0b2a40;
+  --accent-soft: #23425b;
+  --accent-soft-text: #cfe6f7;
+  --secondary: #8fd3c0;
+  --danger: #e57a84;
+  --sos: #e0606e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .28);
+  --shadow-lg: 0 10px 36px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+html[data-theme="contrast"][data-dark="0"] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --text: #000000;
+  --muted: #2b2b2b;
+  --line: #000000;
+  --accent: #4b0096;
+  --accent-text: #ffffff;
+  --accent-soft: #ede0ff;
+  --accent-soft-text: #24004a;
+  --secondary: #005a73;
+  --danger: #b00000;
+  --sos: #c00000;
+  --shadow: 0 1px 2px rgba(35, 20, 80, .06), 0 4px 14px rgba(35, 20, 80, .08);
+  --shadow-lg: 0 8px 30px rgba(35, 20, 80, .18);
+  color-scheme: light;
+}
+html[data-theme="contrast"][data-dark="1"] {
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --surface-2: #1c1c1c;
+  --text: #ffffff;
+  --muted: #e0e0e0;
+  --line: #ffffff;
+  --accent: #ffd400;
+  --accent-text: #000000;
+  --accent-soft: #3d3500;
+  --accent-soft-text: #fff0a0;
+  --secondary: #7fe0ff;
+  --danger: #ff6b6b;
+  --sos: #ff4040;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .28);
+  --shadow-lg: 0 10px 36px rgba(0, 0, 0, .5);
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 [hidden] { display: none !important; }
-h1 { font-size: 1.3rem; margin: 0; letter-spacing: -.01em; }
+h1 { font-family: var(--serif); font-weight: 700; font-size: 1.45rem; margin: 0; letter-spacing: 0; }
 h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 .5rem; }
 .muted { color: var(--muted); font-size: .9rem; }
 .small { font-size: .8rem; }
@@ -94,7 +315,7 @@ label { display: block; margin: .75rem 0; }
 .rail .rail-sep + a { margin-top: 0; }
 .page { flex: 1; overflow-y: auto; padding: 22px 24px 32px 8px; min-width: 0; }
 .page-head { max-width: 760px; margin: 4px 4px 14px; }
-.page-head h1 { font-size: 1.55rem; margin-bottom: .2rem; }
+.page-head h1 { font-size: 1.85rem; margin-bottom: .2rem; }
 .page-head p { margin: .2rem 0; }
 .wide-panel { max-width: 760px; margin-bottom: 14px; padding: 14px 16px; }
 .panel-actions { display: flex; gap: .5rem; margin-bottom: .4rem; }
@@ -103,7 +324,7 @@ label { display: block; margin: .75rem 0; }
 .card-link:hover { box-shadow: var(--shadow-lg); }
 .card-link .ri { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft); color: var(--accent-soft-text); margin-bottom: .5rem; }
 .card-link .ri svg { width: 24px; height: 24px; }
-.card-link h3 { margin: 0 0 .2rem; font-size: 1.05rem; }
+.card-link h3 { margin: 0 0 .2rem; font-family: var(--serif); font-size: 1.2rem; }
 .card-link p { margin: 0; color: var(--muted); font-size: .9rem; }
 .card-link.sos { background: var(--sos); color: #fff; }
 .card-link.sos p { color: #fff; }
@@ -133,7 +354,7 @@ body.parent-mode .admin-only, body.owner-mode .member-only { display: none !impo
 .chat-list li.active { background: var(--accent-soft); }
 .chat-thread { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 0; overflow: hidden; }
 .chat-thread-head { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
-.chat-thread-head h2 { text-transform: none; letter-spacing: 0; color: var(--text); font-size: 1.05rem; margin: 0; }
+.chat-thread-head h2 { text-transform: none; letter-spacing: 0; color: var(--text); font-family: var(--serif); font-size: 1.3rem; margin: 0; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
 .msg { max-width: 72%; align-self: flex-start; }
 .msg.mine { align-self: flex-end; }
@@ -224,7 +445,7 @@ button.wide { width: 100%; }
 .list li.clickable { cursor: pointer; }
 .list li.clickable:hover { background: var(--surface-2); }
 .list .grow { flex: 1; min-width: 0; }
-.list .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list .title { font-family: var(--serif); font-weight: 700; font-size: 1.04rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .list .sub { color: var(--muted); font-size: .85rem; }
 .avatar {
   flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700;
@@ -259,7 +480,7 @@ button.wide { width: 100%; }
 dialog { border: 0; border-radius: 26px; background: var(--surface); color: var(--text); width: min(460px, calc(100% - 32px));
   padding: 1.4rem 1.6rem; box-shadow: var(--shadow-lg); }
 dialog::backdrop { background: rgba(10, 6, 25, .5); }
-dialog h2 { font-size: 1.15rem; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0 0 .5rem; }
+dialog h2 { font-family: var(--serif); font-size: 1.35rem; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0 0 .5rem; }
 dialog select { width: 100%; }
 .copy { display: flex; gap: .5rem; align-items: center; }
 .copy input { margin: 0; }
@@ -317,3 +538,7 @@ dialog select { width: 100%; }
 .avatar { position: relative; }
 .avatar.driving::after { content: "🚗"; position: absolute; right: -6px; bottom: -6px; width: 18px; height: 18px; border-radius: 50%;
   background: #fff; display: grid; place-items: center; font-size: 11px; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+
+/* Appearance (Home): this browser's palette and light/dark. */
+.appearance { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: .4rem; }
+.appearance select { width: auto; margin: 0; padding: .35em .7em; font-size: .85rem; }

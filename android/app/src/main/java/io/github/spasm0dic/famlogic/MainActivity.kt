@@ -29,12 +29,21 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         prefs = Prefs(this)
+        ThemeState.load(this)
         joined = prefs.joined
         features = prefs.serverFeatures
         handleIntent(intent)
 
         setContent {
             FamLogicTheme {
+                // Status and navigation bar icons follow the app's light/dark choice, not just the system's.
+                val dark = LocalDarkTheme.current
+                androidx.compose.runtime.SideEffect {
+                    androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !dark
+                        isAppearanceLightNavigationBars = !dark
+                    }
+                }
                 if (joined) {
                     HomeShell(
                         prefs = prefs,

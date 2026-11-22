@@ -187,6 +187,16 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("pebble_timeline", true)
         set(v) = sp.edit { putBoolean("pebble_timeline", v) }
 
+    /** This device's colour palette (see Theme.kt): dracula, purple, paper, forest, ocean or contrast. */
+    var appTheme: String
+        get() = sp.getString("app_theme", "dracula") ?: "dracula"
+        set(v) = sp.edit { putString("app_theme", v) }
+
+    /** "system", "light" or "dark". */
+    var darkMode: String
+        get() = sp.getString("dark_mode", "system") ?: "system"
+        set(v) = sp.edit { putString("dark_mode", v) }
+
     /** Whether the family has the Thereabouts (location) module on; from the server. */
     var locationModule: Boolean
         get() = sp.getBoolean("module_thereabouts", true)

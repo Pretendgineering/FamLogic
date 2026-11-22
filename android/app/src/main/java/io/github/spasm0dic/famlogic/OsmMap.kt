@@ -98,7 +98,7 @@ fun OsmMap(
 ) {
     val context = LocalContext.current
     val state = remember { MapState() }
-    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     state.onLongPress = onLongPress
     state.onPlaceClick = onPlaceClick
     state.onMemberClick = onMemberClick

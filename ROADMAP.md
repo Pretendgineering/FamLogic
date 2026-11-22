@@ -28,11 +28,11 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Chat: family chat, named groups and one-to-one, photos, read receipts, notifications with Reply, parents can read children's chats; stored in SQLite (`chat.db`).
 - App: a tab bar for the modules that are on (Map, Chat), hidden when only one is.
 
-### 🔨 Phase 3: Design language
+### ✅ Phase 3: Design language (0.17.0)
 - **Serif headings, sans text:** Liberation Serif (the free, metric-compatible Times New Roman, OFL-licensed and bundled, so it works offline) for titles, names, card headers and big numbers; a clean sans for body text and controls. "Firm but friendly": old meets new.
 - **Themes,** chosen per device (app) or per browser (console), each with light and dark: **Muted Dracula** (the default), Current purple, Warm paper, Forest, Ocean, and High contrast.
 
-### ⏳ Phase 4: Tasks, tags and the Markdown vault
+### 🔨 Phase 4: Tasks, tags and the Markdown vault
 - **Tags on everything:** to-dos, chores, routines, events and list items can be tagged to people (`@Sam`) and groups (`#kids`, `#parents`), so each person's screens show what's theirs.
 - The **vault** folder of Markdown files (Obsidian-friendly; see ARCHITECTURE.md → Vault), watched for edits made elsewhere.
 - **To-dos and lists:** shared lists (shopping, packing) and personal to-dos with due dates and **time of day** (morning, after school, evening), so screens show what matters now. Quick add from the app, console, Pebble and Index 01.

@@ -696,7 +696,7 @@ fun MapScreen(
                     onMapTap = { bubbleFor = null },
                     trail = shownTrip?.points ?: trail,
                     trailColor = members.find { it.id == selected }?.color ?: "#4363d8",
-                    tiles = MapStyles.resolve(mapStyle, isSystemInDarkTheme(), tileUrl, tileUrlDark, attribution, dimMap),
+                    tiles = MapStyles.resolve(mapStyle, LocalDarkTheme.current, tileUrl, tileUrlDark, attribution, dimMap),
                     camera = camera,
                     statusOf = statusOf,
                     modifier = Modifier.fillMaxSize(),

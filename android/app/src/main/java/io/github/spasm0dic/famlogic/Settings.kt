@@ -87,7 +87,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
     Alerts("Alerts", Icons.Filled.Notifications),
     Trail("Trail & trips", Icons.Filled.DateRange),
     Sharing("Sharing", Icons.Filled.Share),
-    Map("Map", Icons.Filled.Edit),
+    Map("Look & map", Icons.Filled.Edit),
     Account("Account", Icons.Filled.AccountCircle),
     Pebble("Pebble & Index", Icons.Filled.Star),
     About("About", Icons.Filled.Info),
@@ -206,7 +206,7 @@ private fun menuSummary(
     SettingsPage.Groups -> circles.joinToString(", ") { it.name }.ifEmpty { "Who sees whom" }
     SettingsPage.Fences -> if (places.isEmpty()) "Alerts when people arrive or leave" else places.joinToString(", ") { it.name }
     SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, low battery, who you hear about" else "$it ${if (it == 1) "person" else "people"} muted" }
-    SettingsPage.Map -> MapStyles.byId(prefs.mapStyle).title
+    SettingsPage.Map -> "${Palette.byId(prefs.appTheme).title} · ${MapStyles.byId(prefs.mapStyle).title}"
     SettingsPage.Pebble -> "Watch app, timeline, Index 01 ring"
     SettingsPage.Trail -> listOfNotNull(
         trailHours?.takeIf { it > 0 }?.let { "Trail $it h" },
@@ -680,6 +680,40 @@ private fun MapPage(prefs: Prefs, onChange: (String) -> Unit, onDimChange: (Bool
     var dim by remember { mutableStateOf(prefs.dimMap) }
     val haptics = LocalHapticFeedback.current
     var style by remember { mutableStateOf(prefs.mapStyle) }
+    SettingsCard("Colours") {
+        Hint("Only changes this device.")
+        Palette.entries.forEach { p ->
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = ThemeState.palette == p) {
+                    if (ThemeState.palette != p) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    prefs.appTheme = p.id
+                    ThemeState.palette = p // the whole app recolours straight away
+                }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = ThemeState.palette == p, onClick = null)
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(p.title, style = MaterialTheme.typography.titleMedium)
+                    Hint(p.description)
+                }
+            }
+        }
+    }
+    SettingsCard("Light or dark") {
+        listOf("system" to "Same as this phone", "light" to "Light", "dark" to "Dark").forEach { (id, label) ->
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = ThemeState.mode == id) {
+                    if (ThemeState.mode != id) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    prefs.darkMode = id
+                    ThemeState.mode = id
+                }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = ThemeState.mode == id, onClick = null)
+                Text(label, Modifier.padding(start = 12.dp))
+            }
+        }
+    }
     SettingsCard("Map style") {
         Hint("Only changes this phone. All are free maps from OpenStreetMap data.")
         MapStyles.all.forEach { s ->

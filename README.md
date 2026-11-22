@@ -7,6 +7,7 @@ A self-hosted family hub: location sharing, chat and (soon) a shared calendar, t
 - **Works without Google:** the default app has no Google code at all (an optional Google edition adds a few extras).
 - **Kid-friendly:** younger children sign in with a code from a parent, no password; parents can see their children's chats.
 - **Voice first** *(coming)*: press and hold to talk, and hear things read out, on every device. It goes to an AI agent you host (such as Hermes or OpenClaw), so a child can say "I fed the cat" to tick off a chore, send a message, or hear what's next.
+- **Looks like itself:** serif headings over clean sans text, in six colour themes (Muted Dracula by default, Warm paper, Forest, Ocean, High contrast, Purple), light or dark, chosen per device.
 - **Open source:** GPLv3.
 
 ## Devices
@@ -43,6 +44,8 @@ curl -O https://raw.githubusercontent.com/spasm0dic/thereabouts/main/docker-comp
 # edit docker-compose.yml: set ADMIN_PASSWORD (and FAMILY_NAME)
 docker compose up -d
 ```
+
+In the app (and anywhere else you enter the server), you can type just the address and port, such as `192.168.1.5:8080` or `family.example.com`: FamLogic works out `http://` or `https://` itself.
 
 Open `http://<server>:8080`, log in with the admin password, and choose your family's modules. On a NAS or app platform (TrueNAS, Unraid, Portainer…), create a container from `ghcr.io/spasm0dic/famlogic:latest` with port 8080, a persistent volume at `/data` and the settings below.
 
@@ -115,4 +118,4 @@ Official APKs are signed with one project key and published by CI when the versi
 - [docs/PEBBLE.md](docs/PEBBLE.md), [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md): Pebble design notes and store plans
 - [ROADMAP.md](ROADMAP.md)
 
-The common-password list in `server/commonpasswords.txt` comes from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, © 2018 Daniel Miessler).
+Headings use [Liberation Serif](https://github.com/liberationfonts/liberation-fonts) (SIL Open Font License 1.1; see `server/web/fonts/OFL.txt`). The common-password list in `server/commonpasswords.txt` comes from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, © 2018 Daniel Miessler).

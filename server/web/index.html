@@ -40,7 +40,11 @@
 
     <main class="page" data-page="home" hidden>
       <header class="page-head"><h1 id="home-title">FamLogic</h1><p class="muted" id="home-sub"></p>
-        <p class="muted small"><span id="whoami"></span> · <button type="button" class="link" id="logout-btn3">Log out</button></p></header>
+        <p class="muted small"><span id="whoami"></span> · <button type="button" class="link" id="logout-btn3">Log out</button></p>
+        <div class="appearance muted small">Look:
+          <select id="theme-select" aria-label="Colours"></select>
+          <select id="mode-select" aria-label="Light or dark"><option value="system">Same as this device</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        </div></header>
       <div class="cards" id="home-cards"></div>
     </main>
 

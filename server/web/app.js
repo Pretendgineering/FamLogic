@@ -2,6 +2,20 @@
 "use strict";
 
 const $ = (sel) => document.querySelector(sel);
+
+// ---- appearance: this browser's palette and light/dark (the same palettes as the app) ----
+const THEMES = [["dracula", "Muted Dracula"], ["purple", "Purple"], ["paper", "Warm paper"], ["forest", "Forest"], ["ocean", "Ocean"], ["contrast", "High contrast"]];
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+let themeId = "dracula", themeMode = "system";
+try { themeId = localStorage.getItem("theme") || "dracula"; themeMode = localStorage.getItem("themeMode") || "system"; } catch (_) {}
+const isDark = () => themeMode === "dark" || (themeMode === "system" && darkQuery.matches);
+function applyAppearance(early = false) {
+  document.documentElement.dataset.theme = THEMES.some(([id]) => id === themeId) ? themeId : "dracula";
+  document.documentElement.dataset.dark = isDark() ? "1" : "0";
+  if (!early) { applyTiles(); if (map) renderPlaces(); } // the map's dimming and fence colours follow
+}
+applyAppearance(true); // before anything shows, so the login page is already in the right colours
+darkQuery.addEventListener("change", () => applyAppearance());
 const REFRESH_MS = 10000;
 const STALE_MS = 30 * 60 * 1000; // a location older than this is shown faded
 
@@ -220,12 +234,10 @@ let dimMap = true;
 try { dimMap = localStorage.getItem("dimMap") !== "0"; } catch (_) {}
 try { mapStyle = localStorage.getItem("mapStyle") || "server"; } catch (_) {}
 let serverTiles = null, tileLayer = null, appliedTiles = "";
-const darkQuery = matchMedia("(prefers-color-scheme: dark)");
-
 function applyTiles() {
   if (!map || !serverTiles) return;
   const st = MAP_STYLES.find((s) => s.id === mapStyle) || MAP_STYLES[0];
-  const dark = darkQuery.matches;
+  const dark = isDark();
   const serverDark = serverTiles.tileUrlDark && serverTiles.tileUrlDark !== serverTiles.tileUrl ? serverTiles.tileUrlDark : "";
   const t = st.id === "server"
     ? { url: dark && serverDark ? serverDark : serverTiles.tileUrl, attribution: serverTiles.tileAttribution, maxZoom: 19, dim: dark && !serverDark }
@@ -238,7 +250,6 @@ function applyTiles() {
   tileLayer = L.tileLayer(t.url, { maxZoom: t.maxZoom, attribution: t.attribution, referrerPolicy: "strict-origin-when-cross-origin" }).addTo(map);
   map.setMaxZoom(t.maxZoom);
 }
-darkQuery.addEventListener("change", applyTiles);
 $("#map-style").replaceChildren(...MAP_STYLES.map((s) => el("option", { value: s.id }, s.title)));
 $("#map-style").value = MAP_STYLES.some((s) => s.id === mapStyle) ? mapStyle : "server";
 $("#dim-map").checked = dimMap;
@@ -1073,6 +1084,11 @@ $("#family-dependent").addEventListener("click", async () => {
   catch (err) { alert(err.message); }
 });
 $("#logout-btn3").addEventListener("click", () => $("#logout-btn").click());
+$("#theme-select").replaceChildren(...THEMES.map(([id, name]) => el("option", { value: id }, name)));
+$("#theme-select").value = document.documentElement.dataset.theme;
+$("#mode-select").value = themeMode;
+$("#theme-select").addEventListener("change", (e) => { themeId = e.target.value; try { localStorage.setItem("theme", themeId); } catch (_) {} applyAppearance(); });
+$("#mode-select").addEventListener("change", (e) => { themeMode = e.target.value; try { localStorage.setItem("themeMode", themeMode); } catch (_) {} applyAppearance(); });
 $("#family-invite").addEventListener("click", () => $("#invite-btn").click());
 
 function renderDevices() {
