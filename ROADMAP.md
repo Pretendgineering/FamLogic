@@ -61,6 +61,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Weekly meal plans and recipes; ingredients to the shopping list; easy for an agent to plan.
 
 ### ⏳ Later and parked
+- **Grandparents mode** (idea, to design): a third kind of family member, alongside parents and children, with its own set of features. To decide: which features it has.
 - **Pebble App Store listing** (draft in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md)), and **F-Droid / IzzyOnDroid** for the app.
 - **Shareable invite message** with an app download link, once the app is in a store.
 - **Profile pictures** (emoji icons cover the simple case).
