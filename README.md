@@ -1,6 +1,6 @@
 # FamLogic
 
-A self-hosted family hub: location sharing, chat and (soon) a shared calendar, to-dos, chores, routines and meal plans, on **your own server**, with **press-to-talk voice** to your own AI agent across phones, tablets, the TV and the watch. Mostly made for my own family as a vibe-coding project; I perpetually do not know what I'm doing.
+A self-hosted family hub: location sharing, chat and (soon) a shared calendar, to-dos, chores, routines and meal plans, on **your own server**, with **press-to-talk voice** to your own AI agent across phones, tablets, the TV and the watch.
 
 - **Private:** no third-party accounts, no cloud, no ads, no tracking. Your family's data stays in one folder on your server.
 - **Modular:** at first setup you choose what your family uses, and you can change it any time.
