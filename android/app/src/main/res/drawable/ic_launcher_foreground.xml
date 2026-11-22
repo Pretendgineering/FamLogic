@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- FamLogic: a house with a heart (home and family). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFF"
-        android:pathData="M54,31c-9.4,0 -17,7.4 -17,16.6C37,60.2 54,77 54,77s17,-16.8 17,-29.4C71,38.4 63.4,31 54,31zM54,54.2a6.7,6.7 0,1 1,0 -13.4a6.7,6.7 0,1 1,0 13.4z" />
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M54,29.5L80.5,52.5L75,52.5L75,77.5Q75,80 72.5,80L35.5,80Q33,80 33,77.5L33,52.5L27.5,52.5ZM54,73C42,64.5 43.5,55 49.5,55C51.8,55 53.3,56.6 54,58.3C54.7,56.6 56.2,55 58.5,55C64.5,55 66,64.5 54,73Z" />
 </vector>

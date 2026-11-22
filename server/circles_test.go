@@ -130,7 +130,7 @@ func TestDeleteCircleAndInvites(t *testing.T) {
 
 func TestUpgradeCreatesDefaultCircle(t *testing.T) {
 	// A data file from before circles: members without any circle.
-	path := filepath.Join(t.TempDir(), "thereabouts.json")
+	path := filepath.Join(t.TempDir(), "famlogic.json")
 	s, _ := OpenStore(path)
 	inv, _ := s.CreateInvite("Alex", "", time.Hour)
 	alex, _, _ := s.Join(inv.Code, "", "", "")
@@ -210,7 +210,7 @@ func TestCirclesOverHTTP(t *testing.T) {
 }
 
 func TestOldInvitesShowTheirCircle(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "thereabouts.json")
+	path := filepath.Join(t.TempDir(), "famlogic.json")
 	s, _ := OpenStore(path)
 	inv, _ := s.CreateInvite("Old", "", time.Hour) // made before circles existed
 	s2, _ := OpenStore(path)

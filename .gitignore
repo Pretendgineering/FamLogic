@@ -1,5 +1,5 @@
 server/data/
-server/thereabouts
+server/famlogic
 
 # Signing keys: never commit these (see docs/RELEASING.md)
 *.p12

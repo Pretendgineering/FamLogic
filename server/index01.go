@@ -192,7 +192,7 @@ func (s *Server) handleIndexWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Header.Get("X-Index-Test") == "true" {
-		writeJSON(w, http.StatusOK, map[string]string{"ok": "Thereabouts got the test for " + m.Name})
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "FamLogic got the test for " + m.Name})
 		return
 	}
 	text := indexTranscription(r, body)

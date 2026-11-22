@@ -1,3 +1,3 @@
-module github.com/spasm0dic/thereabouts/server
+module github.com/spasm0dic/famlogic/server
 
 go 1.24

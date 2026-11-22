@@ -1,14 +1,14 @@
 services:
-  thereabouts:
+  famlogic:
     # Use the published image, or comment this out and uncomment "build" to build it yourself.
-    image: ghcr.io/spasm0dic/thereabouts:latest
+    image: ghcr.io/spasm0dic/famlogic:latest
     # build: ./server
-    container_name: thereabouts
+    container_name: famlogic
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      # Password for the web dashboard (where you invite people). Required, 8+ characters.
+      # Password for the web console (where you invite people and choose modules). Required, 8+ characters.
       ADMIN_PASSWORD: "change-me-please"
       # Shown in the app and dashboard.
       FAMILY_NAME: "Our Family"
@@ -21,7 +21,8 @@ services:
       # How long an invite link works, in hours.
       # INVITE_HOURS: "72"
     volumes:
-      - thereabouts-data:/data
+      # Upgrading from Thereabouts? Keep your old volume name (thereabouts-data) here and below.
+      - famlogic-data:/data
 
 volumes:
-  thereabouts-data:
+  famlogic-data:

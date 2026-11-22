@@ -31,49 +31,49 @@ jobs:
       - name: Set up signing key
         id: signing
         env:
-          # The LIBRE360_* names are from before the project was renamed; either works.
-          KEYSTORE_B64: ${{ secrets.THEREABOUTS_KEYSTORE_B64 || secrets.LIBRE360_KEYSTORE_B64 }}
+          # THEREABOUTS_* and LIBRE360_* are the secret names from before the project was renamed; any works.
+          KEYSTORE_B64: ${{ secrets.FAMLOGIC_KEYSTORE_B64 || secrets.THEREABOUTS_KEYSTORE_B64 || secrets.LIBRE360_KEYSTORE_B64 }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
-            echo "::warning::THEREABOUTS_KEYSTORE_B64 secret not set: building with a throwaway debug key. This APK will not be published as a release."
+            echo "::warning::FAMLOGIC_KEYSTORE_B64 secret not set: building with a throwaway debug key. This APK will not be published as a release."
             echo "signed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # Lengths are printed (never contents) so a truncated copy-paste is easy to spot.
-          echo "THEREABOUTS_KEYSTORE_B64 is ${#KEYSTORE_B64} characters long (a 4096-bit key is usually about 5,600)."
+          echo "FAMLOGIC_KEYSTORE_B64 is ${#KEYSTORE_B64} characters long (a 4096-bit key is usually about 5,600)."
           if ! printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/release.p12" 2>/dev/null; then
-            echo "::error::THEREABOUTS_KEYSTORE_B64 is not valid base64. Re-copy the whole contents of thereabouts-release.b64 into the secret."
+            echo "::error::FAMLOGIC_KEYSTORE_B64 is not valid base64. Re-copy the whole contents of famlogic-release.b64 into the secret."
             exit 1
           fi
-          echo "THEREABOUTS_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+          echo "FAMLOGIC_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Check signing key
         if: steps.signing.outputs.signed == 'true'
         env:
-          STORE_PASSWORD: ${{ secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.THEREABOUTS_KEY_ALIAS || secrets.LIBRE360_KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.FAMLOGIC_KEYSTORE_PASSWORD || secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.FAMLOGIC_KEY_ALIAS || secrets.THEREABOUTS_KEY_ALIAS || secrets.LIBRE360_KEY_ALIAS }}
         run: |
           if [ -z "$STORE_PASSWORD" ]; then
-            echo "::error::The THEREABOUTS_KEYSTORE_PASSWORD secret is missing or empty (check its exact name)."
+            echo "::error::The FAMLOGIC_KEYSTORE_PASSWORD secret is missing or empty (check its exact name)."
             exit 1
           fi
           # No alias secret needed: use the first key in the file (whatever -alias it was made with).
           alias="$KEY_ALIAS"
           if [ -z "$alias" ]; then
-            alias=$(keytool -list -v -keystore "$THEREABOUTS_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD 2>/dev/null \
+            alias=$(keytool -list -v -keystore "$FAMLOGIC_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD 2>/dev/null \
               | sed -n 's/^Alias name: //p' | head -1)
             alias="${alias:-thereabouts}"
           fi
-          echo "THEREABOUTS_KEY_ALIAS=$alias" >> "$GITHUB_ENV"
-          if ! out=$(keytool -list -keystore "$THEREABOUTS_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD -alias "$alias" 2>&1); then
+          echo "FAMLOGIC_KEY_ALIAS=$alias" >> "$GITHUB_ENV"
+          if ! out=$(keytool -list -keystore "$FAMLOGIC_KEYSTORE" -storetype PKCS12 -storepass:env STORE_PASSWORD -alias "$alias" 2>&1); then
             case "$out" in
               *"password was incorrect"*)
-                echo "::error::The key file is fine but THEREABOUTS_KEYSTORE_PASSWORD doesn't match it. Re-enter the password from when you created the key." ;;
+                echo "::error::The key file is fine but FAMLOGIC_KEYSTORE_PASSWORD doesn't match it. Re-enter the password from when you created the key." ;;
               *"does not exist"*)
-                echo "::error::The key file has no key named '$alias'. Set the THEREABOUTS_KEY_ALIAS secret to the -alias you used, or delete it to auto-detect." ;;
+                echo "::error::The key file has no key named '$alias'. Set the FAMLOGIC_KEY_ALIAS secret to the -alias you used, or delete it to auto-detect." ;;
               *)
-                echo "::error::Couldn't read the key file: it looks incomplete or damaged ($(stat -c %s "$THEREABOUTS_KEYSTORE") bytes after decoding). The THEREABOUTS_KEYSTORE_B64 secret is probably cut off; re-copy the WHOLE contents of thereabouts-release.b64 into it." ;;
+                echo "::error::Couldn't read the key file: it looks incomplete or damaged ($(stat -c %s "$FAMLOGIC_KEYSTORE") bytes after decoding). The FAMLOGIC_KEYSTORE_B64 secret is probably cut off; re-copy the WHOLE contents of famlogic-release.b64 into it." ;;
             esac
             exit 1
           fi
@@ -81,29 +81,29 @@ jobs:
 
       - name: Build
         env:
-          THEREABOUTS_KEYSTORE_PASSWORD: ${{ secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
-          THEREABOUTS_KEY_PASSWORD: ${{ secrets.THEREABOUTS_KEY_PASSWORD || secrets.LIBRE360_KEY_PASSWORD }}
-          # THEREABOUTS_KEY_ALIAS comes from the "Check signing key" step.
+          FAMLOGIC_KEYSTORE_PASSWORD: ${{ secrets.FAMLOGIC_KEYSTORE_PASSWORD || secrets.THEREABOUTS_KEYSTORE_PASSWORD || secrets.LIBRE360_KEYSTORE_PASSWORD }}
+          FAMLOGIC_KEY_PASSWORD: ${{ secrets.FAMLOGIC_KEY_PASSWORD || secrets.THEREABOUTS_KEY_PASSWORD || secrets.LIBRE360_KEY_PASSWORD }}
+          # FAMLOGIC_KEY_ALIAS comes from the "Check signing key" step.
         run: ./gradlew --no-daemon assembleFossRelease assembleGoogleRelease lintFossDebug lintGoogleDebug
 
       - name: Show signing certificate
         id: cert
         run: |
-          # thereabouts.apk is the FOSS build (no Google); thereabouts-google.apk adds Google Play services.
-          mv app/build/outputs/apk/foss/release/app-foss-release.apk thereabouts.apk
-          mv app/build/outputs/apk/google/release/app-google-release.apk thereabouts-google.apk
+          # famlogic.apk is the FOSS build (no Google); famlogic-google.apk adds Google Play services.
+          mv app/build/outputs/apk/foss/release/app-foss-release.apk famlogic.apk
+          mv app/build/outputs/apk/google/release/app-google-release.apk famlogic-google.apk
           apksigner="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
-          "$apksigner" verify --print-certs thereabouts.apk | tee certs.txt
+          "$apksigner" verify --print-certs famlogic.apk | tee certs.txt
           sha=$(sed -n 's/.*certificate SHA-256 digest: //p' certs.txt | head -1)
           echo "sha256=$sha" >> "$GITHUB_OUTPUT"
           echo "Signing certificate SHA-256: \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: thereabouts-apk
+          name: famlogic-apk
           path: |
-            android/thereabouts.apk
-            android/thereabouts-google.apk
+            android/famlogic.apk
+            android/famlogic-google.apk
 
       # Every build on main whose versionName has no release yet becomes a GitHub release
       # (e.g. v0.1.1) with the APK attached, but only when signed with the release key.
@@ -121,12 +121,12 @@ jobs:
             exit 0
           fi
           cat > notes.md <<NOTES
-          Install \`thereabouts.apk\` on your Android phone. \`thereabouts-google.apk\` is the same app with Google Play services for quicker location fixes and driving detection from motion sensors; either installs over the other as an update. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/thereabouts:latest\`. See the README for setup.
+          Install \`famlogic.apk\` on your Android phone. \`famlogic-google.apk\` is the same app with Google Play services for quicker location fixes and driving detection from motion sensors; either installs over the other as an update. The server image is \`ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/famlogic:latest\`. See the README for setup (and "Upgrading from Thereabouts" if you used Thereabouts before).
 
-          Signing certificate SHA-256 (every official Thereabouts APK has this same fingerprint):
+          Signing certificate SHA-256 (every official FamLogic APK has this same fingerprint):
           \`$CERT_SHA256\`
           NOTES
-          gh release create "$tag" thereabouts.apk thereabouts-google.apk --target "$GITHUB_SHA" --title "Thereabouts $version" --notes-file notes.md
+          gh release create "$tag" famlogic.apk famlogic-google.apk --target "$GITHUB_SHA" --title "FamLogic $version" --notes-file notes.md
 
   # The Pebble watchapp and watchface (.pbw files), attached to the same release.
   # Kept separate from the APK so a Pebble SDK hiccup never blocks a phone release.
@@ -146,11 +146,11 @@ jobs:
         run: |
           (cd pebble/app && pebble build)
           (cd pebble/face && pebble build)
-          cp pebble/app/build/app.pbw thereabouts-watch.pbw
-          cp pebble/face/build/face.pbw thereabouts-face.pbw
+          cp pebble/app/build/app.pbw famlogic-watch.pbw
+          cp pebble/face/build/face.pbw famlogic-face.pbw
       - uses: actions/upload-artifact@v4
         with:
-          name: thereabouts-pebble
+          name: famlogic-pebble
           path: "*.pbw"
       - name: Attach to the release
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -159,7 +159,7 @@ jobs:
         run: |
           version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' android/app/build.gradle.kts)
           if gh release view "v$version" >/dev/null 2>&1; then
-            gh release upload "v$version" thereabouts-watch.pbw thereabouts-face.pbw --clobber
+            gh release upload "v$version" famlogic-watch.pbw famlogic-face.pbw --clobber
           else
             echo "No release v$version yet; the .pbw files are in the build artifacts."
           fi

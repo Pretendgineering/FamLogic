@@ -1,6 +1,6 @@
 {
-  "name": "thereabouts-face",
-  "author": "Thereabouts",
+  "name": "famlogic-face",
+  "author": "FamLogic",
   "version": "1.0.0",
   "keywords": [
     "pebble-app"
@@ -8,7 +8,7 @@
   "private": true,
   "dependencies": {},
   "pebble": {
-    "displayName": "Thereabouts Family",
+    "displayName": "FamLogic Family",
     "uuid": "a1f5e2c7-3d94-4b6e-8f02-5c9e7d1a3b64",
     "sdkVersion": "3",
     "enableMultiJS": false,
@@ -56,7 +56,7 @@
         "url": "https://github.com/Spasm0dic/Thereabouts/releases/latest",
         "apps": [
           {
-            "package": "io.github.spasm0dic.thereabouts"
+            "package": "io.github.spasm0dic.famlogic"
           }
         ]
       }

@@ -9,7 +9,7 @@ import (
 
 func newStoreWithMembers(t *testing.T, names ...string) (*Store, []*Member) {
 	t.Helper()
-	s, err := OpenStore(filepath.Join(t.TempDir(), "thereabouts.json"))
+	s, err := OpenStore(filepath.Join(t.TempDir(), "famlogic.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestLowBatteryRespectsSwitchAndPause(t *testing.T) {
 }
 
 func TestEventsSurviveRestartAndResetCursor(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "thereabouts.json")
+	path := filepath.Join(t.TempDir(), "famlogic.json")
 	s, _ := OpenStore(path)
 	s.EnsureDefaultCircle("Family")
 	inv, _ := s.CreateInvite("Alex", "", time.Hour)

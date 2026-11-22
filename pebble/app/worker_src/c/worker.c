@@ -1,6 +1,6 @@
-// Thereabouts fall detection (runs in the background while switched on in the
+// FamLogic fall detection (runs in the background while switched on in the
 // phone app). A fall looks like a moment of free fall (almost no acceleration)
-// followed shortly by a hard impact. When it sees one, it opens the Thereabouts
+// followed shortly by a hard impact. When it sees one, it opens the FamLogic
 // app, which counts down 30 seconds before sending an SOS; any button cancels.
 #include <pebble_worker.h>
 

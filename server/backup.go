@@ -26,7 +26,7 @@ func (s *Store) DailyBackup(dir string, keep int) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	name := filepath.Join(dir, "thereabouts-"+time.Now().Format("2006-01-02")+".json")
+	name := filepath.Join(dir, "famlogic-"+time.Now().Format("2006-01-02")+".json")
 	if _, err := os.Stat(name); err != nil {
 		b, err := s.Snapshot()
 		if err != nil {
@@ -46,7 +46,7 @@ func (s *Store) DailyBackup(dir string, keep int) error {
 	}
 	var backups []string
 	for _, e := range entries {
-		if n := e.Name(); strings.HasPrefix(n, "thereabouts-") && strings.HasSuffix(n, ".json") {
+		if n := e.Name(); (strings.HasPrefix(n, "famlogic-") || strings.HasPrefix(n, "thereabouts-")) && strings.HasSuffix(n, ".json") {
 			backups = append(backups, n)
 		}
 	}

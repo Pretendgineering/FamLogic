@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Thereabouts</title>
+  <title>FamLogic</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/style.css">
@@ -11,7 +11,7 @@
 <body>
   <section id="login" class="join" hidden>
     <form class="card" id="login-form">
-      <h1>Thereabouts</h1>
+      <h1>FamLogic</h1>
       <p class="muted">Log in to see your family and send invites.</p>
       <label>Admin password <input type="password" id="password" autocomplete="current-password" required autofocus></label>
       <p class="error" id="login-error"></p>
@@ -20,11 +20,94 @@
   </section>
 
   <section id="app" hidden>
-    <div class="layout">
+   <div class="shell">
+    <!-- The rail: FamLogic's sections. Modules that are switched off are hidden (Settings → Modules). -->
+    <nav class="rail" id="rail" aria-label="Sections">
+      <a class="rail-brand" href="#/home" title="FamLogic"><img src="/icon.svg" alt="FamLogic"></a>
+      <a href="#/home" data-view="home"><span class="ri" data-icon="home"></span><span>Home</span></a>
+      <a href="#/thereabouts" data-view="thereabouts" data-module="thereabouts"><span class="ri" data-icon="pin"></span><span>Thereabouts</span></a>
+      <a href="#/chat" data-view="chat" data-module="chat"><span class="ri" data-icon="chat"></span><span>Chat</span></a>
+      <a href="#/calendar" data-view="calendar" data-module="calendar"><span class="ri" data-icon="calendar"></span><span>Calendar</span></a>
+      <a href="#/todos" data-view="todos" data-module="todos"><span class="ri" data-icon="check"></span><span>To-dos</span></a>
+      <a href="#/chores" data-view="chores" data-module="chores"><span class="ri" data-icon="star"></span><span>Chores</span></a>
+      <a href="#/meals" data-view="meals" data-module="meals"><span class="ri" data-icon="meal"></span><span>Meals</span></a>
+      <span class="rail-sep"></span>
+      <a href="#/family" data-view="family"><span class="ri" data-icon="people"></span><span>Family</span></a>
+      <a href="#/devices" data-view="devices"><span class="ri" data-icon="device"></span><span>Devices</span></a>
+      <a href="#/settings" data-view="settings"><span class="ri" data-icon="gear"></span><span>Settings</span></a>
+    </nav>
+
+    <main class="page" data-page="home" hidden>
+      <header class="page-head"><h1 id="home-title">FamLogic</h1><p class="muted" id="home-sub"></p></header>
+      <div class="cards" id="home-cards"></div>
+    </main>
+
+    <main class="page" data-page="family" hidden>
+      <header class="page-head">
+        <h1>Family</h1>
+        <p class="muted">Everyone in your family's FamLogic. <strong>Parents</strong> manage the family; <strong>children</strong> get simpler sign-in (coming with the chat module: a join code from you, no password) and their chats can be seen by parents.</p>
+      </header>
+      <div class="panel wide-panel">
+        <div class="panel-actions"><button id="family-invite" class="tonal">+ Invite someone</button></div>
+        <ul class="list" id="family-list"></ul>
+      </div>
+    </main>
+
+    <main class="page" data-page="devices" hidden>
+      <header class="page-head">
+        <h1>Devices</h1>
+        <p class="muted">Phones signed in to FamLogic, and (soon) family displays.</p>
+      </header>
+      <div class="panel wide-panel">
+        <h2>Phones</h2>
+        <ul class="list" id="device-list"></ul>
+      </div>
+      <div class="panel wide-panel">
+        <h2>Family displays</h2>
+        <p class="muted">Coming with the <strong>Family display</strong> module. A wall tablet or Android TV running the FamLogic app chooses <em>Use as a family display</em> and shows a pairing code; you approve it here and pick what it shows (calendar, chores, menus, who's where). Displays have no personal account, and you can unpair one at any time.</p>
+      </div>
+    </main>
+
+    <main class="page" data-page="settings" hidden>
+      <header class="page-head"><h1>Settings</h1></header>
+      <nav class="tabs subtabs" role="tablist" id="settings-tabs">
+        <button role="tab" data-sub="modules">Modules</button>
+        <button role="tab" data-sub="server">Server</button>
+        <button role="tab" data-sub="agents">AI &amp; API</button>
+      </nav>
+      <section class="panel wide-panel" data-sub-panel="modules">
+        <p class="muted">Switch parts of FamLogic on or off for your whole family. Modules marked <em>coming soon</em> can be chosen now and switch on when they arrive.</p>
+        <ul class="list modules" id="module-list"></ul>
+        <div class="row"><button id="modules-save">Save</button><span class="muted small" id="modules-msg"></span></div>
+      </section>
+      <section class="panel wide-panel" data-sub-panel="server" hidden>
+        <dl class="facts" id="server-facts"></dl>
+        <div class="row">
+          <a class="button secondary" href="/api/admin/backup" download title="The whole data file. It contains password hashes: keep it somewhere safe.">Download backup</a>
+          <button id="logout-btn2" class="secondary">Log out</button>
+        </div>
+        <p class="muted small">Family name, admin password and other server options are set in <code>docker-compose.yml</code> (see the README).</p>
+      </section>
+      <section class="panel wide-panel" data-sub-panel="agents" hidden>
+        <p><strong>Coming soon.</strong> API keys for AI agents and automations, such as a Hermes agent driven by a cloud model or a local Ollama container.</p>
+        <ul class="plain">
+          <li>Chores, menus, to-dos and schedules will live as <strong>Markdown files</strong> in your data folder (an Obsidian-ready vault with links between people, chores and days), so you can browse them in Obsidian and agents can edit them.</li>
+          <li>Each key gets limited permissions (read only, or edit lists and chores, or post in chat) and can be revoked here.</li>
+          <li>A documented REST API, plus a ready-made skill file for agents.</li>
+        </ul>
+      </section>
+    </main>
+
+    <main class="page" data-page="module" hidden>
+      <header class="page-head"><h1 id="module-title"></h1><p class="muted" id="module-desc"></p></header>
+      <div class="panel wide-panel soon" id="module-soon"></div>
+    </main>
+
+    <div class="layout" data-page="thereabouts" hidden>
       <aside>
         <div class="brand">
           <img src="/icon.svg" alt="" class="brand-icon">
-          <div><h1 id="family-name">Thereabouts</h1><div class="muted small" id="server-version"></div></div>
+          <div><h1 id="family-name">FamLogic</h1><div class="muted small">Thereabouts · <span id="server-version"></span></div></div>
         </div>
 
         <div id="sos-banner" class="sos-banner" hidden></div>
@@ -73,8 +156,18 @@
       </aside>
       <div id="map"></div>
     </div>
+   </div>
     <div id="menu" class="menu" role="menu" hidden></div>
   </section>
+
+  <dialog id="setup-dialog">
+    <form method="dialog" id="setup-form">
+      <h2>Welcome to FamLogic</h2>
+      <p>Choose what your family wants to use. You can change this any time in <strong>Settings → Modules</strong>.</p>
+      <ul class="list modules" id="setup-modules"></ul>
+      <div class="row"><button type="submit">Start</button></div>
+    </form>
+  </dialog>
 
   <dialog id="invite-dialog">
     <form id="invite-form" method="dialog">

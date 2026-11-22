@@ -100,6 +100,9 @@ type Member struct {
 	// When they last stopped driving (unix ms), so a short stop doesn't
 	// announce "started driving" again.
 	DriveEndedAt int64 `json:"driveEndedAt,omitempty"`
+
+	// "parent" (the default) or "child" (see modules.go).
+	Role string `json:"role,omitempty"`
 }
 
 // SharesLowBattery reports whether others get told when this person's battery is low.
@@ -129,6 +132,9 @@ type data struct {
 	Reminders map[string]*Reminder `json:"reminders,omitempty"`
 	// Trails, per member, oldest point first (see trails.go).
 	Trails map[string][]TrailPoint `json:"trails,omitempty"`
+
+	// Which FamLogic modules are on (see modules.go); nil = from before modules.
+	Modules *ModuleSettings `json:"modules,omitempty"`
 
 	// Recent alerts for phones to pick up (see events.go).
 	LastEventID int64   `json:"lastEventId"`

@@ -90,7 +90,7 @@ func CheckPassword(pw, username, name string) error {
 		return errors.New("this password is too common and easy to guess")
 	}
 	lower := strings.ToLower(pw)
-	for _, word := range []string{username, name, "thereabouts"} {
+	for _, word := range []string{username, name, "famlogic", "thereabouts"} {
 		word = strings.ToLower(strings.TrimSpace(word))
 		if utf8.RuneCountInString(word) >= 3 && strings.Contains(lower, word) {
 			return errors.New("don't include your username, your name or the app's name in your password")

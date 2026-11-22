@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "Thereabouts"
+rootProject.name = "FamLogic"
 include(":app")

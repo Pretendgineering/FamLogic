@@ -1,4 +1,5 @@
-// Thereabouts server: a tiny, private family location sharing server.
+// FamLogic server: a small, private, self-hosted family hub. Modules: Thereabouts
+// (location sharing, SOS, fences, trips), and more to come (chat, planner, chores).
 package main
 
 import (
@@ -98,7 +99,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
-	dataFile := filepath.Join(cfg.DataDir, "thereabouts.json")
+	dataFile := filepath.Join(cfg.DataDir, "famlogic.json")
 	if err := migrateOldDataFile(cfg.DataDir, dataFile); err != nil {
 		log.Fatalf("moving old data file: %v", err)
 	}
@@ -130,7 +131,7 @@ func main() {
 	go store.KeepBackups(bg, filepath.Join(cfg.DataDir, "backups"), cfg.BackupDays)
 
 	go func() {
-		log.Printf("Thereabouts %s listening on %s (data in %s)", version, cfg.Listen, cfg.DataDir)
+		log.Printf("FamLogic %s listening on %s (data in %s)", version, cfg.Listen, cfg.DataDir)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
@@ -145,17 +146,21 @@ func main() {
 }
 
 // migrateOldDataFile renames the data file from before the project was called
-// Thereabouts (libre360.json), so upgrading keeps everyone's family and settings.
+// FamLogic (thereabouts.json, and before that libre360.json), so upgrading keeps
+// everyone's family and settings.
 func migrateOldDataFile(dir, newPath string) error {
-	oldPath := filepath.Join(dir, "libre360.json")
 	if _, err := os.Stat(newPath); err == nil {
 		return nil // already migrated (or a fresh install)
 	}
-	if _, err := os.Stat(oldPath); err != nil {
-		return nil // nothing to migrate
+	for _, old := range []string{"thereabouts.json", "libre360.json"} {
+		oldPath := filepath.Join(dir, old)
+		if _, err := os.Stat(oldPath); err != nil {
+			continue
+		}
+		log.Printf("Renaming %s to %s (the project is now called FamLogic)", oldPath, newPath)
+		return os.Rename(oldPath, newPath)
 	}
-	log.Printf("Renaming %s to %s (the project is now called Thereabouts)", oldPath, newPath)
-	return os.Rename(oldPath, newPath)
+	return nil // nothing to migrate
 }
 
 func runHealthcheck(listen string) int {

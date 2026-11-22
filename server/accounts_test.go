@@ -33,7 +33,7 @@ func TestPasswordRules(t *testing.T) {
 		{"aaaaaaaaaaaaaaaa", false, "repetitive"},
 		{"abababababab", false, "repetitive"},
 		{"taylor-likes-hiking", false, "username"},
-		{"my thereabouts pass", false, "username"},
+		{"my famlogic pass", false, "username"},
 		{strings.Repeat("abcdefghij", 13), false, "at most"},
 	}
 	for _, c := range cases {

@@ -21,7 +21,7 @@ type testEnv struct {
 
 func newEnv(t *testing.T) *testEnv {
 	t.Helper()
-	store, err := OpenStore(filepath.Join(t.TempDir(), "data", "thereabouts.json"))
+	store, err := OpenStore(filepath.Join(t.TempDir(), "data", "famlogic.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestFullFlow(t *testing.T) {
 }
 
 func TestStorePersists(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "thereabouts.json")
+	path := filepath.Join(t.TempDir(), "famlogic.json")
 	s, _ := OpenStore(path)
 	inv, _ := s.CreateInvite("Carol", "", time.Hour)
 	m, token, err := s.Join(inv.Code, "", "", "")
@@ -228,12 +228,18 @@ func TestAlertsOverHTTP(t *testing.T) {
 }
 
 func TestMigrateOldDataFile(t *testing.T) {
+	for _, oldName := range []string{"thereabouts.json", "libre360.json"} {
+		t.Run(oldName, func(t *testing.T) { testMigrateFrom(t, oldName) })
+	}
+}
+
+func testMigrateFrom(t *testing.T, oldName string) {
 	dir := t.TempDir()
-	old, _ := OpenStore(filepath.Join(dir, "libre360.json"))
+	old, _ := OpenStore(filepath.Join(dir, oldName))
 	inv, _ := old.CreateInvite("Alex", "", time.Hour)
 	_, token, _ := old.Join(inv.Code, "", "", "")
 
-	newPath := filepath.Join(dir, "thereabouts.json")
+	newPath := filepath.Join(dir, "famlogic.json")
 	if err := migrateOldDataFile(dir, newPath); err != nil {
 		t.Fatal(err)
 	}

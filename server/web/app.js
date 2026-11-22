@@ -1,4 +1,4 @@
-// Thereabouts web dashboard. Plain JS, no build step.
+// FamLogic web dashboard. Plain JS, no build step.
 "use strict";
 
 const $ = (sel) => document.querySelector(sel);
@@ -370,10 +370,10 @@ async function refresh() {
   try {
     const [data, invites] = await Promise.all([api("GET", "/api/admin/members"), api("GET", "/api/admin/invites")]);
     $("#family-name").textContent = data.server.name;
-    $("#server-version").textContent = `Thereabouts server ${data.server.version}`;
+    $("#server-version").textContent = `server ${data.server.version}`;
     serverFeatures = data.server.features || [];
     const sos = data.members.filter((m) => m.sosSince);
-    document.title = (sos.length ? "🆘 SOS · " : "") + `${data.server.name} · Thereabouts`;
+    document.title = (sos.length ? "🆘 SOS · " : "") + `${data.server.name} · FamLogic`;
     renderSOS(sos);
     ensureMap(data.server);
     circles = data.circles || [];
@@ -386,6 +386,7 @@ async function refresh() {
     setCount("#count-people", lastMembers.length, sos.length > 0);
     setCount("#count-fences", places.length);
     setCount("#count-groups", circles.length > 1 ? circles.length : 0);
+    if (view && view !== "thereabouts") renderView();
   } catch (err) {
     if (err.message !== "unauthorized") console.error(err);
   }
@@ -892,12 +893,250 @@ $("#copy-link").addEventListener("click", async () => {
   setTimeout(() => ($("#copy-link").textContent = "Copy"), 1500);
 });
 
+// ---- sections: the rail, and the pages besides Thereabouts ----
+
+// Simple line icons (inherit the text colour).
+const ICONS = {
+  home: '<path d="M3 11 12 4l9 7"/><path d="M5.5 9.5V20h4.5v-6h4v6h4.5V9.5"/>',
+  pin: '<path d="M12 21s-7-6.3-7-11.3a7 7 0 0 1 14 0C19 14.7 12 21 12 21z"/><circle cx="12" cy="9.7" r="2.6"/>',
+  chat: '<path d="M4 5.5h16v10.5H10l-6 4.5z"/>',
+  calendar: '<rect x="3.5" y="5.5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3.5v4M16 3.5v4"/>',
+  check: '<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="m8 12.3 2.8 2.8L16.2 9"/>',
+  star: '<path d="m12 3.5 2.6 5.6 6 .6-4.5 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6L3.4 9.7l6-.6z"/>',
+  meal: '<path d="M7 3.5v17M4.5 3.5v5a2.5 2.5 0 0 0 5 0v-5M17 20.5V3.5c-2.5 1.5-3.5 5-3.5 8.5h3.5"/>',
+  people: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 20c0-3.6 2.7-6.2 6-6.2s6 2.6 6 6.2"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.8 14.3c2.9.1 5.2 2.3 5.2 5.7"/>',
+  device: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+};
+const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+document.querySelectorAll("[data-icon]").forEach((s) => { s.innerHTML = icon(s.dataset.icon); });
+
+let modules = [];      // from /api/admin/modules: id, name, description, available, enabled
+let modulesLoaded = false;
+const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "star", meals: "meal", display: "device", agents: "gear" };
+const moduleInfo = (id) => modules.find((m) => m.id === id);
+const moduleOn = (id) => !modulesLoaded || !!(moduleInfo(id) || {}).enabled;
+
+// What's coming in each module, for its placeholder page.
+const MODULE_PLANS = {
+  chat: ["A family group chat, plus one-to-one chats.", "Photos, read receipts, and new messages as notifications through the same always-on connection SOS alerts use.", "Parents can see their children's chats; children are told this in the app.", "Children sign in with a join code from you: no password to forget."],
+  calendar: ["A shared family calendar, with CalDAV so phone calendars and other apps can sync both ways.", "Events stored as Markdown in your family's notes folder, so AI agents and Obsidian can read and edit them."],
+  todos: ["Quick to-dos and shared lists (shopping, packing) from the app, the web, a Pebble or the Index 01 ring.", "Stored as Markdown task lists (- [ ] Milk) in your family's notes folder."],
+  chores: ["A chore chart: who does what, how often, ticked off on phones or the family display.", "Optional points or stars for children.", "Each chore is a Markdown note linked to the people who do it, so it shows up in Obsidian's graph."],
+  meals: ["Weekly meal plans and recipes, with ingredients added to the shopping list.", "One Markdown note per week, easy for an AI agent to plan or adjust."],
+};
+
+let view = "";
+function viewFromHash() { return location.hash.replace(/^#\/?/, "").split("/")[0]; }
+
+function showView(name) {
+  if (!name) { try { name = localStorage.getItem("view") || ""; } catch (_) {} }
+  if (!name) name = "home";
+  const known = ["home", "family", "devices", "settings"].includes(name) || !!moduleInfo(name) || name === "thereabouts";
+  if (!known || ((moduleInfo(name) || name === "thereabouts") && !moduleOn(name))) name = "home";
+  view = name;
+  try { localStorage.setItem("view", name); } catch (_) {}
+  if (viewFromHash() !== name) history.replaceState(null, "", "#/" + name);
+  const pageName = moduleInfo(name) && name !== "thereabouts" ? "module" : name;
+  document.querySelectorAll("[data-page]").forEach((p) => { p.hidden = p.dataset.page !== pageName; });
+  document.querySelectorAll(".rail a[data-view]").forEach((a) => {
+    if (a.dataset.view === name) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  });
+  closeMenu();
+  if (name === "thereabouts" && map) setTimeout(() => map.invalidateSize(), 0);
+  renderView();
+}
+window.addEventListener("hashchange", () => showView(viewFromHash()));
+
+function renderRail() {
+  document.querySelectorAll(".rail a[data-module]").forEach((a) => {
+    const m = moduleInfo(a.dataset.module);
+    a.hidden = !!m && !m.enabled;
+    const soon = !!m && m.enabled && !m.available;
+    a.classList.toggle("soon", soon);
+    a.title = soon ? `${m.name}: coming soon` : "";
+  });
+}
+
+function renderView() {
+  if (view === "home") renderHome();
+  else if (view === "family") renderFamily();
+  else if (view === "devices") renderDevices();
+  else if (view === "settings") renderSettings();
+  else if (moduleInfo(view) && view !== "thereabouts") renderModulePage(view);
+}
+
+function card(href, iconName, title, text, cls = "") {
+  const a = el("a", { class: "card-link " + cls, href });
+  a.innerHTML = `<span class="ri">${icon(iconName)}</span>`;
+  a.append(el("h3", {}, title), el("p", {}, text));
+  return a;
+}
+
+function renderHome() {
+  $("#home-title").textContent = $("#family-name").textContent || "FamLogic";
+  const parents = lastMembers.filter((m) => m.role !== "child").length;
+  const kids = lastMembers.length - parents;
+  $("#home-sub").textContent = lastMembers.length ? `${lastMembers.length} ${lastMembers.length === 1 ? "person" : "people"}` + (kids ? ` · ${parents} ${parents === 1 ? "parent" : "parents"}, ${kids} ${kids === 1 ? "child" : "children"}` : "") : "Nobody has joined yet: invite your family from the Family page.";
+  const cards = [];
+  if (moduleOn("thereabouts")) {
+    const sos = lastMembers.filter((m) => m.sosSince);
+    const atFence = lastMembers.filter((m) => m.place && !m.paused).length;
+    const driving = lastMembers.filter(isDriving).length;
+    cards.push(sos.length
+      ? card("#/thereabouts", "pin", "SOS", `${sos.map((m) => m.name).join(", ")} ${sos.length === 1 ? "needs" : "need"} help. Open the map.`, "sos")
+      : card("#/thereabouts", "pin", "Thereabouts", [atFence ? `${atFence} at a fence` : null, driving ? `${driving} driving` : null, `${places.length} ${places.length === 1 ? "fence" : "fences"}`].filter(Boolean).join(" · ") || "Who's where, on the map"));
+  }
+  for (const m of modules) {
+    if (m.id === "thereabouts" || !m.enabled || !MODULE_ICONS[m.id] || !document.querySelector(`.rail a[data-view="${m.id}"]`)) continue;
+    cards.push(card("#/" + m.id, MODULE_ICONS[m.id], m.name, m.available ? m.description : "Coming soon. " + m.description));
+  }
+  const quiet = lastMembers.filter((m) => m.silent || (m.issues || []).length).length;
+  cards.push(card("#/family", "people", "Family", "People, parents and children, invites."));
+  cards.push(card("#/devices", "device", "Devices", quiet ? `${quiet} ${quiet === 1 ? "phone needs" : "phones need"} attention` : "All phones look fine"));
+  cards.push(card("#/settings", "gear", "Settings", "Modules, backups, AI and API access."));
+  $("#home-cards").replaceChildren(...cards);
+}
+
+function avatarOf(m) {
+  return el("div", { class: "avatar" + (m.emoji ? " emoji" : ""), style: `background:${m.color}` }, m.emoji || initial(m.name));
+}
+
+function renderFamily() {
+  const roles = serverFeatures.includes("roles");
+  $("#family-list").replaceChildren(...lastMembers.map((m) => {
+    const sel = roles ? el("select", { class: "role-select", "aria-label": `${m.name}'s role` },
+      el("option", { value: "parent" }, "Parent"), el("option", { value: "child" }, "Child")) : null;
+    if (sel) {
+      sel.value = m.role === "child" ? "child" : "parent";
+      sel.addEventListener("change", async () => {
+        try { await api("PUT", `/api/admin/members/${m.id}/role`, { role: sel.value }); refresh(); }
+        catch (err) { alert(err.message); sel.value = m.role || "parent"; }
+      });
+    }
+    return el("li", {},
+      avatarOf(m),
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, m.name),
+        el("div", { class: "sub" }, account(m))),
+      sel,
+      moreButton(`Options for ${m.name}`, [
+        ["Rename…", () => rename(m)],
+        ["Icon and colour…", () => openIconPicker(m)],
+        ["Reset sign-in…", () => resetSignIn(m)],
+        "-",
+        ["Remove from server…", () => removeMember(m), "danger"],
+      ]));
+  }));
+  if (!lastMembers.length) $("#family-list").append(el("li", { class: "muted" }, "Nobody yet. Invite the first person."));
+}
+$("#family-invite").addEventListener("click", () => $("#invite-btn").click());
+
+function renderDevices() {
+  const list = $("#device-list");
+  list.replaceChildren(...lastMembers.map((m) => el("li", {},
+    avatarOf(m),
+    el("div", { class: "grow" },
+      el("div", { class: "title" }, `${m.name}'s phone`),
+      m.app || m.lastContact ? health(m) : el("div", { class: "sub" }, "Hasn't reported yet")),
+    moreButton(`Options for ${m.name}'s phone`, [
+      ["Sign out this phone (new sign-in link)…", () => resetSignIn(m)],
+    ]))));
+  if (!lastMembers.length) list.append(el("li", { class: "muted" }, "No phones yet."));
+}
+
+// Settings: Modules, Server, AI & API.
+let settingsTab = "modules";
+document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.addEventListener("click", () => { settingsTab = b.dataset.sub; renderSettings(); }));
+
+function moduleRows(target, checked) {
+  target.replaceChildren(...modules.map((m) => {
+    const box = el("input", { type: "checkbox", "data-module": m.id });
+    box.checked = checked(m);
+    return el("li", {}, el("label", {},
+      box,
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, m.name, m.available ? null : el("span", { class: "badge" }, "coming soon")),
+        el("div", { class: "sub" }, m.description))));
+  }));
+}
+const chosenModules = (target) => Object.fromEntries([...target.querySelectorAll("input[data-module]")].map((b) => [b.dataset.module, b.checked]));
+
+function renderSettings() {
+  document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.sub === settingsTab)));
+  document.querySelectorAll("[data-sub-panel]").forEach((p) => { p.hidden = p.dataset.subPanel !== settingsTab; });
+  if (settingsTab === "modules" && !$("#module-list").contains(document.activeElement)) moduleRows($("#module-list"), (m) => m.enabled);
+  if (settingsTab === "server") {
+    const facts = [["Family", $("#family-name").textContent], ["Server", $("#server-version").textContent.replace(/^server /, "")],
+      ["Modules on", modules.filter((m) => m.enabled).map((m) => m.name + (m.available ? "" : " (soon)")).join(", ") || "none"],
+      ["Address search", serverFeatures.includes("geocode") ? "on" : "off"], ["Quiet-phone alerts", serverFeatures.includes("silence") ? "on" : "off"]];
+    $("#server-facts").replaceChildren(...facts.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]));
+  }
+}
+
+$("#modules-save").addEventListener("click", async () => {
+  try {
+    const res = await api("PUT", "/api/admin/modules", { enabled: chosenModules($("#module-list")), setupDone: true });
+    setModules(res);
+    $("#modules-msg").textContent = "Saved";
+    setTimeout(() => ($("#modules-msg").textContent = ""), 2000);
+    refresh();
+  } catch (err) { alert(err.message); }
+});
+$("#logout-btn2").addEventListener("click", () => $("#logout-btn").click());
+
+function renderModulePage(id) {
+  const m = moduleInfo(id);
+  $("#module-title").textContent = m.name;
+  $("#module-desc").textContent = m.description;
+  const box = $("#module-soon");
+  box.replaceChildren(
+    el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
+    el("ul", { class: "plain" }, ...(MODULE_PLANS[id] || []).map((t) => el("li", {}, t))));
+}
+
+function setModules(res) {
+  modules = res.modules || [];
+  modulesLoaded = true;
+  renderRail();
+}
+
+async function loadModules() {
+  try {
+    const res = await api("GET", "/api/admin/modules");
+    setModules(res);
+    if (!res.setupDone) openSetup();
+  } catch (err) {
+    // An older server: no modules, everything is Thereabouts.
+    if (err.message !== "unauthorized") modulesLoaded = false;
+  }
+}
+
+// First run: which modules does this family want?
+const setupDialog = $("#setup-dialog");
+function openSetup() {
+  moduleRows($("#setup-modules"), (m) => m.enabled);
+  if (!setupDialog.open) setupDialog.showModal();
+}
+$("#setup-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    setModules(await api("PUT", "/api/admin/modules", { enabled: chosenModules($("#setup-modules")), setupDone: true }));
+    setupDialog.close();
+    showView(view === "home" ? "home" : view);
+    refresh();
+  } catch (err) { alert(err.message); }
+});
+
 // ---- start ----
 
 async function start() {
   $("#login").hidden = true;
   $("#app").hidden = false;
+  await loadModules();
   await refresh();
+  showView(viewFromHash());
   if (map) map.invalidateSize();
   clearInterval(refreshTimer);
   refreshTimer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);

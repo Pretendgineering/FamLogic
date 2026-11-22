@@ -1,142 +1,85 @@
-# Roadmap
+# FamLogic roadmap
 
-Planned features, to build once the core (sharing, map, invites) has been proven on real phones.
+FamLogic is a self-hosted family hub built from modules. It grew out of Thereabouts (family location sharing), which is now its first module. How the pieces fit together is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Ground rules for every feature
+## Principles
 
-1. **Each feature can be switched on and off in the app.** All switches sit in one **Features** section in the app's Settings. Each has one plain sentence saying what it does and what it shares.
-2. **Sending and receiving are separate switches** where a feature has both sides. For example, "Let others see my trail" is separate from "Show other people's trails".
-3. **Switches that affect what others see are stored on the server**, so other phones respect them. Switches that only change your own phone (such as which alerts you get) are stored on the phone.
-4. **Off means off.** When "my trail" is off, the server doesn't record it at all, and switching it off deletes what was stored.
-5. **No new infrastructure.** Alerts arrive within seconds over a connection the app keeps to your own server (since 0.5.0), with the normal location updates as a fallback. Nobody has to install or host anything extra.
+1. **Self-hosted and private.** One small container, your data in one folder, no third-party accounts or cloud. Works without Google services (the Google edition only adds extras).
+2. **Modular.** Each family switches modules on at first setup (Settings → Modules). Apps hide what's off. A module that's off stores nothing.
+3. **One app for everyone.** The same APK becomes a parent's app, a child's app or a family display, depending on how the device joins and what a parent approves.
+4. **Markdown for family content.** Chores, lists, menus and schedules are Markdown files (with YAML front matter and `[[links]]`) in a vault folder: readable in Obsidian, editable by people and AI agents, easy to back up.
+5. **Agent-friendly.** A documented API with scoped keys, so an agent (Hermes with a cloud model or a local Ollama, or anything else) can add to-dos, plan meals or post a reminder in chat.
+6. **Kid-proof.** Children never need to manage a password; parents can see children's chats, and can revoke any device.
+7. **Off means off, and each switch says what it shares.** (From Thereabouts' ground rules: switches that affect others live on the server; personal alert choices live on the phone.)
 
-## Delivery mechanism (shared by alerts)
+## Prioritized plan
 
-The phone already contacts the server every interval to send its location. The reply to that request can carry any new events ("Sam arrived at Home", "Alex is at 10% battery", "SOS from Jordan"), and the app shows them as notifications.
+Status: ✅ done · 🔨 next · ⏳ queued
 
-- **Works on every phone** with no Google services and no push server.
-- **Latency** is up to one interval. That's fine for arrivals and battery, but not ideal for SOS.
-- **Instant delivery (0.5.0):** the app's background service also keeps a connection open to the server ("long polling"), which answers the moment there's a new alert. Alerts arrive within seconds, with no Google services and no extra app or server to set up. Location replies still carry alerts too, as a fallback.
+### ✅ Phase 0: FamLogic foundation (0.15.0)
+- Renamed Thereabouts → FamLogic everywhere (new Android app ID, Docker image `ghcr.io/spasm0dic/famlogic`, data file `famlogic.json` moved over automatically).
+- Module system on the server, first-run module chooser and Settings → Modules in the web console; apps learn which modules are on.
+- Web console restructured: rail navigation with Home, Thereabouts, module pages, Family, Devices and Settings (Modules, Server, AI & API).
+- Parent/child roles on every person, set in Family.
 
-## Features
+### 🔨 Phase 1: Accounts and devices
+- **Child sign-in without passwords:** a parent creates a child in the console and gets a one-time join code / QR. The child's device stays signed in; parents can re-issue or revoke it.
+- **Device registry:** each person can have several devices (phone, tablet); the console's Devices page lists them with role, app version, last seen, and Revoke.
+- **Device roles in one APK:** on first launch the app asks *Join my family* (parent or child, decided by the invite) or *Use as a family display* (shows a pairing code a parent approves in the console). See ARCHITECTURE.md → Devices.
+- **App home shell:** a bottom bar with the modules that are on (Map, Chat, Lists…); hidden while only one module is on.
 
-> Naming: in the app and dashboard, circles are called **Groups** and places are called **Fences** (since 0.8.0). The server's data and API keep the original names.
+### ⏳ Phase 2: Chat (first new module)
+- Family group chat and one-to-one chats (children only with family members).
+- Photos (stored on the server, resized), read receipts, typing-free and simple.
+- New messages arrive through the app's existing always-on connection (no Google push), as notifications with Reply.
+- Parents can read children's chats from the console; children are told so in the app.
+- Later: quick replies from the Pebble watch, "send a message" from the Index 01 ring.
 
-### 1. Places and geofences (arrive/leave alerts)
-- A **place** is a named area on the map: a circle with an adjustable radius, e.g. Home, School, Work. Anyone can add one by long-pressing the map or searching an address. Places belong to a circle (see Circles), so a work circle and a family circle each have their own.
-- **Geofence alerts**: "Sam arrived at School", "Alex left Work".
-- **Fine-grained alerts** (set on the phone):
-  - choose per person and per place whether to get alerts for **arrivals, departures or both**
-  - optional active hours (e.g. only alert about School between 7am and 5pm on weekdays)
-- **Switches:**
-  - "Announce when I arrive at or leave places" (stored on the server, default on)
-  - "Notify me when others arrive or leave" (on the phone, default on)
-- **Sensible behaviour:**
-  - the server detects arrivals and departures from location reports
-  - a small buffer zone stops someone standing at the edge of a place from triggering alerts over and over
-  - inaccurate fixes are ignored
-  - a departure must hold for a minute before it alerts, so a GPS blip doesn't trigger one
-- **Optional extra:** while you're near a place, the app checks your location more often, so arrivals register sooner without using more battery the rest of the time.
+### ⏳ Phase 3: Markdown vault and API
+- The vault folder in the data directory, Obsidian-friendly (see ARCHITECTURE.md → Vault), watched for edits made outside FamLogic.
+- API keys with scopes (read, lists, chores, calendar, chat-post), created and revoked in Settings → AI & API.
+- OpenAPI description, and a ready-made **skill file** for Hermes and other agents.
+- Optional later: an MCP endpoint.
 
-### 2. Trail / history
-- Shows where someone has been over the last few hours as a line on the map.
-- **Switches:**
-  - "Keep my trail for others to see": off by default, length 6/12/24 hours, stored on the server. Turning it off deletes the stored trail.
-  - "Show trails on the map" (on the phone)
-- The server deletes points older than the chosen length.
+### ⏳ Phase 4: To-dos and lists
+- Quick add from the app, the web console, the Pebble watch and the Index 01 ring ("add milk to the shopping list").
+- Shared lists (shopping, packing) and personal to-dos, assignable, with due dates; Markdown task lists underneath.
 
-### 3. Check-in button
-- One tap sends "I'm here and OK" with your location to everyone.
-- **Switches:**
-  - "Show check-in button" (on the phone)
-  - "Notify me about check-ins" (on the phone)
+### ⏳ Phase 5: Calendar
+- Shared family calendar; events as Markdown notes.
+- **CalDAV** so phone calendars (DAVx⁵ on Android, iOS natively) and Thunderbird sync both ways.
+- Subscribe to outside calendars (school, sports) by ICS link.
 
-### 4. SOS button
-- Press and hold for 3 seconds (so it can't go off in a pocket) to send an alert to everyone.
-- While SOS is active, your location updates every 15 seconds until you cancel it.
-- **Switches:**
-  - "Show SOS button" (on the phone)
-  - "Notify me about SOS alerts": stored on the phone, and the app warns before you turn it off
-- SOS notifications ignore per-person mutes.
+### ⏳ Phase 6: Family display
+- The app's display mode for a wall tablet, kitchen console or Android TV: today's agenda, chores, this week's menu, who's where, recent chat.
+- Paired and configured from the console, no personal account, always on, burn-in friendly (dark, shifting layout).
 
-### 5. Low-battery alerts ✅ (done in 0.2.0)
-- **Switches:**
-  - "Tell my family when my battery is low" (stored on the server)
-  - "Notify me when someone's battery is low" (on the phone)
-- Choice of threshold (15% or 10%). One alert per discharge, so no repeats until the phone has been back above 20%. No alerts while charging.
-- The phone sends an update the moment it crosses a level, so the alert doesn't wait for the next interval.
-- Since 0.5.0, alerts also reach you while your own sharing is paused: the background service stays connected for alerts only.
+### ⏳ Phase 7: Chores
+- Chore chart: who, what, how often; tick off on phones or the display; optional stars/points for children.
 
-### 6. QR code invites
-- The dashboard shows a QR code next to each invite link. Scanning it with the phone's camera opens the app, the same as tapping the link.
-- Purely a convenience on the dashboard, so it needs no switch.
-- Optional extra: a "Scan invite" button on the app's join screen.
+### ⏳ Phase 8: Meals and menus
+- Weekly meal plans and recipes; ingredients to the shopping list; easy for an agent to plan.
 
-### 7. Circles (share with different groups)
-Like Life360's circles: separate groups such as Family, Grandparents or Friends, where you choose what each one sees.
-- **Membership:** a person can be in several circles. You only see people you share a circle with, and only in the circles where they share.
-- **One sharing switch per circle in the app**, e.g. share with Family but pause sharing with Friends. The global pause switch still stops everything at once.
-- **Map switcher:** a circle picker at the top of the map, plus "All circles".
-- **Invites are for a circle.** The dashboard admin creates circles and invites people into them. A person already on the server can be added to another circle without reinstalling.
-- **What belongs to a circle:** places, check-ins, SOS and battery alerts all go to the circles you share with, with a per-circle choice for SOS.
-- **Upgrading:** existing servers become one circle named after `FAMILY_NAME`, so nothing changes until a second circle is created.
-- **Build timing:** this changes who-sees-whom everywhere, so it should land **before places and trails**. That way those features are built on circles from the start rather than retrofitted.
+### ⏳ Later and parked
+- **Pebble App Store listing** (draft in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md)), and **F-Droid / IzzyOnDroid** for the app.
+- **Shareable invite message** with an app download link, once the app is in a store.
+- **Profile pictures** (emoji icons cover the simple case).
+- **Google Find Hub trackers** (parked, Nov 2026): no official API; the only route is the unofficial GoogleFindMyTools approach with the admin's own Google account. Alternative: family phones listening for the family's own cheap Bluetooth tags.
+- **Home Assistant** integration (presence, chores done, display on a dashboard).
 
-### 8. Profile pictures on map pins
-Friendlier pins: your photo in the map bubble instead of an initial.
-- **Choosing a photo:** pick one in the app (Settings → Your photo) with a simple square crop. The phone shrinks it to about 256 px before uploading, so files stay tiny.
-- **Storage:** the server keeps it next to `thereabouts.json` in the data folder, so the one-folder backup still holds.
-- **Who sees it:** only people who share a circle with you.
-- **Where it shows:** map pins, the people list and the web dashboard. Pins fall back to the coloured initial when there's no photo.
-- **Switches:**
-  - "Use my photo" (on the server; turning it off deletes the photo)
-  - "Show photos on the map" (on the phone, for anyone who prefers plain pins)
-- The dashboard admin can remove a photo.
+## History: the Thereabouts module
 
-### 9. One-tap shareable invite message
-Make adding someone a single copy-paste. The dashboard's **Copy invite** button (and later an "Invite someone" button in the app) copies a complete, friendly message, for example:
+Built as the standalone Thereabouts app before FamLogic:
 
-> Join our family on Thereabouts!
-> 1. Get the app: https://f-droid.org/packages/io.github.spasm0dic.thereabouts/
-> 2. Then tap this link to join: https://family.example.com/join/ABCD-EFGH
-
-- The app-store link points at F-Droid or IzzyOnDroid once Thereabouts is listed there, with the GitHub release or Obtainium as the fallback before that.
-- The invite page (`/join/<code>`) shows the same download link, so a link opened on a phone without the app installed still makes sense.
-- Wait until the app is in a store, so the message doesn't send people to sideload an APK.
-
-## Queued for later (not started)
-
-These are parked until we decide to pick them up. Each needs a short design pass (and questions) first.
-
-### 11. Google Find Hub trackers
-- Show Bluetooth trackers registered in Google's Find Hub network (keys, bags, pets) on the family map.
-- **Research (Nov 2026):**
-  - **No official API.** Google offers no supported way for a third-party app to read Find Hub tracker locations. Its developer docs cover only making certified tracker hardware (Fast Pair / Find Hub Network Accessory spec).
-  - **Official sharing** is limited to temporary share links, e.g. for an airline to find a bag. They're not continuous and not machine-readable for us.
-  - **Unofficial route:** GoogleFindMyTools (GPL-3.0) reverse-engineers the network and can fetch and decrypt your own trackers' locations. A Home Assistant integration (GoogleFindMy-HA) is built on it.
-    - Setup needs a Google sign-in through Chrome to produce a secrets file (account tokens plus the end-to-end encryption keys). Users report having to regenerate it after updates.
-    - It is experimental and may break whenever Google changes things.
-- **Options:**
-  - **A.** An opt-in, clearly-experimental "Find Hub bridge" on the server, using that approach and the admin's own Google account. It would only fetch on a schedule.
-  - **B.** Skip Google. Instead, family phones listen for the family's own cheap Bluetooth tags and report where they heard them. This is private and FOSS, but only works near family phones.
-  - **C.** Drop it.
-- Decision: parked for now (Nov 2026). Revisit with options A/B above.
-
-## Build order
-
-1. ✅ **Delivery mechanism plus low-battery alerts** (0.2.0).
-2. ✅ **Accounts:** sign back in with a username and password (0.4.0).
-3. ✅ **Instant alerts, SOS and check-in** (0.5.0). The app's background service keeps a connection open to your own server, so alerts arrive in seconds without Google services or extra apps. This replaces the "optional UnifiedPush" idea: nobody has to install or host anything extra.
-4. ✅ **Circles** (0.6.0), called **Groups** in the app and dashboard from 0.8.0.
-5. ✅ **QR code invites** (0.6.0).
-6. ✅ **Places and geofences** with arrive/leave alerts (0.7.0). Not done yet: per-person mutes and active hours (e.g. only on school days).
-7. ✅ **Trail / history** (opt-in, 0.7.0).
-7a. ✅ **0.8.0:** places renamed **Fences** for users; address search for fences (through the server, to Nominatim); opt-in Wi-Fi positioning through beaconDB; Settings split into pages; purple Material You look; Check in and Show everyone in one row and a **Hold for SOS** bar.
-7b. ✅ **0.9.0:** per-person, per-group and per-fence alert switches; emoji icons instead of the initial; phone health in the dashboard and "phone went quiet" alerts; daily server backups and a download button; fence alert hours; battery saver.
-7c. ✅ **0.10.0:** trips: journeys between stops (kept 1, 3 or 7 days, opt-in), with fence or street names, distance, average and top speed, route on the map, optional "finished a trip" alerts, in the app (tap a person) and dashboard. Also: colour and emoji picker, keyless map styles, Settings reordered.
-7d. ✅ **0.11.0:** driving detection from GPS speed: "Driving" status and 🚗 badge, 1-minute updates while driving, optional "started driving" alert.
-7e. ✅ **0.12.0:** Pebble watchapp (family list, check-in with dictation, SOS from the watch, SOS alarm with siren, pick me up / call me, pause), Family watchface, timeline pins, opt-in fall detection and heart rate in SOS, watch battery; Index 01 ring webhooks (silent SOS, voice check-in, voice place reminders); SOS "seen" receipts and place reminders for everyone. See [docs/PEBBLE.md](docs/PEBBLE.md).
-7f. ✅ **0.13.0:** two builds: `thereabouts.apk` (FOSS, unchanged) and the **Google edition** (`thereabouts-google.apk`, called "Plus" in 0.13.0) with Google's fused location and activity recognition for driving, falling back to the FOSS behaviour without Play services. Same app ID and key, so either installs over the other. (Firebase push was left out: it would need a Firebase key on every self-hosted server.)
-7g. ✅ **0.14.0:** Pebble round two: redesigned Family watchface (grid, one-word places, scrolling names, red SOS screen), hold-Select SOS anywhere in the watchapp plus Quick Launch, radar and per-person street maps on the watch, nudges (where are you? ❤️ 👍, with "send where I am" replies) on watch and phone, light/dark watch themes, and setup steps in the app. Appstore listing drafted in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md).
-8. **Profile pictures** (later; emoji icons cover the simple case).
-9. **Shareable invite message** with an app download link (once the app is on F-Droid or IzzyOnDroid).
+1. ✅ **0.2.0:** alerts delivered with location replies; low-battery alerts.
+2. ✅ **0.4.0:** accounts: sign back in with a username and password.
+3. ✅ **0.5.0:** instant alerts over an always-on connection (no Google push), SOS and check-in.
+4. ✅ **0.6.0:** circles (called Groups) and QR code invites.
+5. ✅ **0.7.0:** places/geofences (called Fences) with arrive/leave alerts; opt-in trails.
+6. ✅ **0.8.0:** address search, opt-in Wi-Fi positioning (beaconDB), Settings pages, purple Material You look, Hold for SOS bar.
+7. ✅ **0.9.0:** per-person/group/fence alert switches, emoji icons, phone health, "phone went quiet" alerts, backups, fence alert hours, battery saver.
+8. ✅ **0.10.0:** trips (journeys between stops) with names, speeds, routes and optional alerts; colour and emoji picker; keyless map styles.
+9. ✅ **0.11.0:** driving detection from GPS speed.
+10. ✅ **0.12.0:** Pebble watchapp and Family watchface, timeline pins, fall detection and heart rate (opt-in), Index 01 ring webhooks, SOS "seen" receipts, place reminders. See [docs/PEBBLE.md](docs/PEBBLE.md).
+11. ✅ **0.13.0:** two builds: FOSS and the Google edition (fused location, activity recognition).
+12. ✅ **0.14.0:** Pebble round two: watchface grid, hold-Select SOS, radar and street maps on the watch, nudges, watch themes.

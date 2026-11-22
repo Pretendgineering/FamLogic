@@ -1,16 +1,21 @@
-# Thereabouts
+# FamLogic
 
-Simple alternative family tracker, mostly made for myself as a vibe coding project. I perpetually do not know what I'm doing.
+A self-hosted family hub, mostly made for myself as a vibe coding project. I perpetually do not know what I'm doing.
 
 ____________________
 
-Thereabouts does one thing: each phone reports where it is to **your own server**, and everyone in the family sees everyone else on an OpenStreetMap map. There are no third-party accounts, no cloud, no ads, no Google Play Services (unless you pick the optional Google edition), and no location history unless you turn it on. Sign-in happens only on your own server.
+FamLogic runs on **your own server** and is built from modules your family switches on at first setup (and can change any time):
 
-- **Server**: one small container (~19 MB) with no database to run. Everything is kept in one JSON file.
-- **Android app**: join with an invite link. You get a map of everyone, last-seen times, battery levels, distances and a "Directions" button.
-- **Web dashboard**: see the map from a computer, invite people, rename or remove them.
+- **Thereabouts** (available now): everyone on an OpenStreetMap map, SOS, check-ins, fences with arrive/leave alerts, trips, driving, plus Pebble watches and the Index 01 ring. FamLogic grew out of the Thereabouts family locator.
+- **Coming next:** family chat (group and one-to-one, with photos; parents can see children's chats), a shared calendar with CalDAV, to-dos and lists, a chore chart, meal plans, and a family display mode for a wall tablet or Android TV. Chores, lists, menus and schedules will be stored as Markdown, so you can browse them in Obsidian and AI agents (such as Hermes, with a cloud model or a local Ollama) can edit them through an API. See [ROADMAP.md](ROADMAP.md).
 
-> **Who runs the server?** You do. There's no central Thereabouts service. Every family runs its own server, and the app simply connects to whatever address you type in. The Docker image and APK published from this repo are just ready-made builds of the code: other people download them and run them on their own hardware, and none of their data ever touches anyone else's server. You can also build both yourself from this repo.
+There are no third-party accounts, no cloud, no ads, no Google Play Services (unless you pick the optional Google edition), and no location history unless you turn it on. Sign-in happens only on your own server.
+
+- **Server**: one small container (~19 MB) with no database to run. Everything is kept in one JSON file (plus, soon, a folder of Markdown notes).
+- **Android app**: join with an invite link. One app for parents and children (and, soon, family displays).
+- **Web console**: the admin side: family members and roles, devices, modules and settings, and the Thereabouts map.
+
+> **Who runs the server?** You do. There's no central FamLogic service. Every family runs its own server, and the app simply connects to whatever address you type in. The Docker image and APK published from this repo are just ready-made builds of the code: other people download them and run them on their own hardware, and none of their data ever touches anyone else's server. You can also build both yourself from this repo.
 
 ## What's in the box
 
@@ -37,7 +42,7 @@ Thereabouts does one thing: each phone reports where it is to **your own server*
 You need a machine that's always on (home server, NAS, Raspberry Pi 4/5, cheap VPS) with Docker.
 
 ```sh
-curl -O https://raw.githubusercontent.com/spasm0dic/thereabouts/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/spasm0dic/thereabouts/main/docker-compose.yml   # the repo will be renamed to famlogic
 # edit docker-compose.yml: set ADMIN_PASSWORD and FAMILY_NAME
 docker compose up -d
 ```
@@ -50,7 +55,7 @@ If the logs say `can't write to /data`, the container's user can't write to the 
 
 ### Updating the server
 
-New versions are published as `ghcr.io/spasm0dic/thereabouts:latest`. **Restarting the container does not download a newer `latest`**, so pull it first:
+New versions are published as `ghcr.io/spasm0dic/famlogic:latest`. **Restarting the container does not download a newer `latest`**, so pull it first:
 
 ```sh
 docker compose pull && docker compose up -d
@@ -73,7 +78,7 @@ If the app says the server is out of date (for example SOS or Check in are missi
 | `TILE_ATTRIBUTION` | `© OpenStreetMap contributors` | Credit shown on the map. Keep it matching your tile server. |
 | `INVITE_HOURS` | `72` | How long an invite link works. |
 | `LISTEN` | `:8080` | Address and port inside the container. |
-| `DATA_DIR` | `/data` | Where `thereabouts.json` is kept. Back up this one file. |
+| `DATA_DIR` | `/data` | Where `famlogic.json` is kept. Back up this one file. |
 | `BACKUP_DAYS` | `7` | Daily copies of the data file kept in `DATA_DIR/backups`. `0` turns them off. |
 | `SILENCE_HOURS` | `6` | Tell people when a phone that shares its location hasn't been in touch for this many hours. `0` turns it off. |
 
@@ -94,11 +99,11 @@ Phones need to reach the server from anywhere, not just your Wi-Fi.
 
 ## 2. Install the app
 
-Download `thereabouts.apk` from the [Releases](../../releases) page (or from the latest run of the **Android** workflow under the Actions tab) and install it. Android will ask you to allow installing from your browser or file manager.
+Download `famlogic.apk` from the [Releases](../../releases) page (or from the latest run of the **Android** workflow under the Actions tab) and install it. Android will ask you to allow installing from your browser or file manager.
 
 **Two builds, pick one per phone:**
-- **`thereabouts.apk`** (FOSS): no Google code at all. Works on every phone, including GrapheneOS and others without Google.
-- **`thereabouts-google.apk`** (Google edition): the same app with Google Play services added for:
+- **`famlogic.apk`** (FOSS): no Google code at all. Works on every phone, including GrapheneOS and others without Google.
+- **`famlogic-google.apk`** (Google edition): the same app with Google Play services added for:
   - **quicker, better location fixes** (Google's fused location, which also uses Wi-Fi and cell towers, so it's better indoors);
   - **driving from motion sensors** (Google's activity recognition): more accurate than GPS speed and notices sooner. It asks for the "Physical activity" permission once; Settings → Sharing → **Google Play services** has the switch.
 
@@ -106,18 +111,20 @@ Download `thereabouts.apk` from the [Releases](../../releases) page (or from the
 
 Both are signed with the same key and are the same app to Android, so you can switch by installing one over the other: you stay signed in and keep your settings. You can't have both installed at once.
 
-**Updating automatically with [Obtainium](https://github.com/ImranR98/Obtainium):** add this repository's GitHub URL. Each release has two APKs, so to keep the right one, set **Filter APKs by regular expression** in the app's Obtainium settings to `^thereabouts\.apk$` (FOSS) or `^thereabouts-google\.apk$` (Google edition). Obtainium ignores the Pebble `.pbw` files.
+**Updating automatically with [Obtainium](https://github.com/ImranR98/Obtainium):** add this repository's GitHub URL. Each release has two APKs, so to keep the right one, set **Filter APKs by regular expression** in the app's Obtainium settings to `^famlogic\.apk$` (FOSS) or `^famlogic-google\.apk$` (Google edition). Obtainium ignores the Pebble `.pbw` files.
 
-**GrapheneOS and other phones without Google:** this works as-is, because the app uses Android's own location service. Without a network location provider, the app uses GPS, so indoor fixes can be slower and battery use a little higher. Turning on GrapheneOS's own network location (Settings → Location) lets the app use Wi-Fi positioning instead, which saves battery. Also set Thereabouts's battery usage to **Unrestricted** when the app asks.
+**GrapheneOS and other phones without Google:** this works as-is, because the app uses Android's own location service. Without a network location provider, the app uses GPS, so indoor fixes can be slower and battery use a little higher. Turning on GrapheneOS's own network location (Settings → Location) lets the app use Wi-Fi positioning instead, which saves battery. Also set FamLogic's battery usage to **Unrestricted** when the app asks.
 
 ## 3. Add your family
 
-1. In the dashboard, click **Invite someone**, type their name, and pick the group they're joining (if you have more than one).
+The first time you log in to the web console, FamLogic asks which **modules** your family wants (you can change this any time in **Settings → Modules**). Then:
+
+1. In the console, open **Family** (or the Thereabouts page) and click **Invite someone**, type their name, and pick the group they're joining (if you have more than one).
 2. Send them the link (text message, Signal, email...), or let them scan the QR code with their phone.
-3. On their phone they tap the link, then **Open in Thereabouts**. They choose a **username and password** (a password manager is the easy way to keep them), then tap **Join**.
+3. On their phone they tap the link, then **Open in FamLogic**. They choose a **username and password** (a password manager is the easy way to keep them), then tap **Join**.
 4. The app asks for location access. Choose **Allow all the time**, and say yes to the battery prompt, so that sharing keeps working when the phone is locked.
 
-Do the same for your own phone.
+Do the same for your own phone. In **Family**, mark each person as a **Parent** or a **Child** (children get simpler sign-in, and parents can see their chats, once the chat module arrives).
 
 If tapping the link doesn't open the app, they can open the app and type the server address and the code shown on the invite page.
 
@@ -160,14 +167,14 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 
 ### Pebble watches and the Index 01 ring
 
-Optional extras, all running through the Thereabouts phone app (no Google services needed). Settings → **Pebble & Index** has the switches.
+Optional extras, all running through the FamLogic phone app (Thereabouts module) (no Google services needed). Settings → **Pebble & Index** has the switches.
 
-**Installing:** Settings → **Pebble & Index** → **Set up your watch** walks you through it: tap **Download the watchapp** (and **Download the watchface**), then open the downloaded file and choose **Open with Pebble**. The files are also on the [releases page](../../releases) (`thereabouts-watch.pbw`, `thereabouts-face.pbw`). It works on every Pebble, old and new (Pebble 2 Duo, Time 2 and Round 2 included). **Watch look** there chooses light, dark or the same as your phone.
+**Installing:** Settings → **Pebble & Index** → **Set up your watch** walks you through it: tap **Download the watchapp** (and **Download the watchface**), then open the downloaded file and choose **Open with Pebble**. The files are also on the [releases page](../../releases) (`famlogic-watch.pbw`, `famlogic-face.pbw`). It works on every Pebble, old and new (Pebble 2 Duo, Time 2 and Round 2 included). **Watch look** there chooses light, dark or the same as your phone.
 
 **Pebble watchapp**:
 - **Your family at a glance**: everyone with their status ("At Home", "Driving", "12 min ago"), with a coloured ring for what they're doing: amber driving, green moving, purple staying put, grey not heard from lately. Select a person for **Pick me up**, **Call me**, **Nudge** (Where are you? / a heart / thumbs up) or **I've seen your SOS**.
 - **Hold Select anywhere for SOS**: after a moment a red panel counts 3, 2, 1 with a gentle buzz each second and a bar filling up; at zero it sends, buzzes twice and says **Sent**. Let go to cancel. While your SOS is on, the same hold (2 seconds) says you're OK.
-- **Even faster:** on the watch, Settings → Quick Launch → pick Up or Down → Thereabouts, and turn on **Quick Launch opens SOS** in the phone app. Then it's: hold Up on the watchface, then hold Select.
+- **Even faster:** on the watch, Settings → Quick Launch → pick Up or Down → FamLogic, and turn on **Quick Launch opens SOS** in the phone app. Then it's: hold Up on the watchface, then hold Select.
 - **Radar and maps**: press Up at the top of the list for a radar with you in the middle and everyone in their real direction (distances are squeezed so near and far people both fit; anyone very far away sits on the outer ring). Select steps through people. Keep pressing Up for a small street map of each person (Select zooms out); Down goes back. Maps are drawn by your phone from your chosen map style, so the first one takes a few seconds. The original 2013 Pebble shows the radar only.
 - **You** (top row): **Check in** with a preset or by speaking on watches with a microphone, **Pause/Resume sharing**, and **SOS**.
 - **SOS from others** opens the watchapp full screen with a repeating buzz, plus a siren on watches with a speaker (Duo, Time 2), until you press Select (which also sends "seen") or Back.
@@ -188,17 +195,23 @@ Optional extras, all running through the Thereabouts phone app (no Google servic
 
 ### Backups and restoring
 
-The server writes a copy of `thereabouts.json` to `DATA_DIR/backups` once a day and keeps the last 7. **Download backup** at the bottom of the dashboard gives you a copy right now. Backups contain password and device-token hashes (not the passwords themselves), so keep them as safe as the server.
+The server writes a copy of `famlogic.json` to `DATA_DIR/backups` once a day and keeps the last 7. **Download backup** at the bottom of the dashboard gives you a copy right now. Backups contain password and device-token hashes (not the passwords themselves), so keep them as safe as the server.
 
-To restore: stop the container, replace `DATA_DIR/thereabouts.json` with the backup (rename it to `thereabouts.json`), and start it again.
+To restore: stop the container, replace `DATA_DIR/famlogic.json` with the backup (rename it to `famlogic.json`), and start it again.
+
+## Upgrading from Thereabouts
+
+Thereabouts became **FamLogic** in version 0.15.0; location sharing lives on as FamLogic's Thereabouts module.
+
+- **Server:** change the image to `ghcr.io/spasm0dic/famlogic:latest` and redeploy. Keep the same data folder: on first start the server renames `thereabouts.json` to `famlogic.json`, so your family, fences, invites and settings carry over, and your family goes straight to the console (no first-run setup) with Thereabouts switched on. You'll need to log in to the console once more.
+  - If you used the example `docker-compose.yml` with a *named volume*, keep your old volume name (`thereabouts-data`) under `volumes:` so the data isn't left behind.
+- **App:** FamLogic has a new Android package name, so it installs as a separate app next to Thereabouts. On each phone: install FamLogic, sign in with your username and password (or a new invite from the console), then uninstall Thereabouts. Your old account and history are kept, since they're on your server. Invite links from before (`thereabouts://…`, `libre360://…`) still open FamLogic.
+- **Pebble:** install the FamLogic watchapp and watchface from the new release; they replace the Thereabouts ones on the watch.
+- **Index 01 ring:** your ring links keep working (they're on your server).
 
 ## Upgrading from Libre360
 
-The project was renamed from Libre360 to Thereabouts in version 0.3.0.
-
-- **Server:** change the image to `ghcr.io/spasm0dic/thereabouts:latest` and redeploy. Keep the same data folder: the server renames `libre360.json` to `thereabouts.json` on first start, so your family, invites and settings carry over. You'll need to log in to the dashboard once more.
-  - If you used the example `docker-compose.yml` with a *named volume*, keep your old volume name (`libre360-data`) under `volumes:` so the data isn't left behind.
-- **App:** Thereabouts has a new Android package name, so it installs as a separate app. Install Thereabouts, join with a new invite, then uninstall Libre360 and remove Libre360's entry from the dashboard. Invite links sent before the rename (`libre360://…`) still open the new app.
+The project was called Libre360 before 0.3.0. The server still renames an old `libre360.json`; for the app, install FamLogic and join with a new invite.
 
 ## Building from source
 
@@ -220,7 +233,7 @@ cd android
 
 Official APKs are all signed with one project key, so updates install cleanly over each other. To set up the key, cut a release or get the app onto F-Droid, see **[docs/RELEASING.md](docs/RELEASING.md)**. In short: bump `versionName`/`versionCode` in `android/app/build.gradle.kts`, merge to `main`, and CI publishes a signed GitHub release with the APK.
 
-Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/thereabouts:latest`.
+Every push to `main` also publishes the server image as `ghcr.io/spasm0dic/famlogic:latest`.
 
 ## How it works
 

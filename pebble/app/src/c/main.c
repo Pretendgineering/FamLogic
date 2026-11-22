@@ -1,4 +1,4 @@
-// Thereabouts for Pebble: see everyone at a glance, check in, send or answer an
+// FamLogic for Pebble: see everyone at a glance, check in, send or answer an
 // SOS, ask for a pick-up, nudge someone. Above the top of the list: a radar of
 // everyone around you, then a small street map of each person. Holding SELECT
 // anywhere starts an SOS. The phone app (PebbleKit 2) does all the talking to the

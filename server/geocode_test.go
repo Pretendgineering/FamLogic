@@ -25,7 +25,7 @@ func TestGeocodeProxy(t *testing.T) {
 	if err != nil || len(res) != 1 || res[0].Lat != 40.1 || res[0].Name != "10 Main St, Springfield" {
 		t.Fatalf("got %v, %v", res, err)
 	}
-	if gotQ != "10 Main St" || !strings.HasPrefix(gotUA, "Thereabouts/") {
+	if gotQ != "10 Main St" || !strings.HasPrefix(gotUA, "FamLogic/") {
 		t.Fatalf("upstream saw q=%q ua=%q", gotQ, gotUA)
 	}
 	// Cached: no second upstream call.
@@ -68,7 +68,7 @@ func TestGeocodeOverHTTP(t *testing.T) {
 	}
 
 	// Turned on, pointing at the fake geocoder.
-	store, _ := OpenStore(t.TempDir() + "/thereabouts.json")
+	store, _ := OpenStore(t.TempDir() + "/famlogic.json")
 	store.EnsureDefaultCircle("Family")
 	srv := httptest.NewServer(NewServer(Config{AdminPassword: "correct horse", GeocoderURL: upstream.URL, InviteTTL: time.Hour}, store, nil).Routes())
 	defer srv.Close()

@@ -25,7 +25,7 @@ jobs:
         working-directory: server
 
   image:
-    # Publishes ghcr.io/<owner>/thereabouts for amd64 and arm64 (e.g. Raspberry Pi 4/5).
+    # Publishes ghcr.io/<owner>/famlogic for amd64 and arm64 (e.g. Raspberry Pi 4/5).
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -41,7 +41,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/thereabouts
+          images: ghcr.io/${{ github.repository_owner }}/famlogic
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}

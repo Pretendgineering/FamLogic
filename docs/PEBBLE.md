@@ -1,9 +1,11 @@
 # Pebble companion: design notes
 
+(Part of FamLogic's Thereabouts module. The watch apps are called "FamLogic" and "FamLogic Family" on the watch.)
+
 Status: **built in 0.12.0** (November 2026). Everything in "Feature ideas" below shipped. How to use it is in the README ("Pebble watches and the Index 01 ring").
 
 ## How it's built
-- `pebble/app`: the C watchapp (all platforms) with a background worker (`worker_src`) for fall detection. `pebble/face`: the Family watchface. CI builds both into `thereabouts-watch.pbw` and `thereabouts-face.pbw` on each release.
+- `pebble/app`: the C watchapp (all platforms) with a background worker (`worker_src`) for fall detection. `pebble/face`: the Family watchface. CI builds both into `famlogic-watch.pbw` and `famlogic-face.pbw` on each release.
 - The phone app talks to the watch with the PebbleKit Android 2 protocol, ported minimally (two AIDL files in `android/app/src/main/aidl`, `pebble/PebbleKit.kt`) because the library needs a newer compileSdk and Kotlin. `PebbleListenerService` receives from the watch; `PebbleBridge` sends people, alerts and timeline pins.
 - Messages use small integer keys (listed at the top of `PebbleBridge.kt` and `main.c`; keep them in sync).
 - The Index 01 ring calls the server directly (`POST /api/index/{token}/{sos|checkin|remind}`), so it works without the watchapp. Requests are checked with the HMAC signature when present, and repeats are ignored.
@@ -39,19 +41,19 @@ The original research follows.
   - **CloudPebble** (a browser IDE) is back.
   - The `pebble-tool` command-line tool installs with `uv` and needs Python 3.13 (not 3.14), and comes with QEMU emulators for every platform.
 - **Talking to our Android app: PebbleKit Android 2** (`pebble-dev/PebbleKitAndroid2`).
-  - It's a Kotlin library. The watchapp's `package.json` lists Android companion packages (`"android": [{ "package": "io.github.spasm0dic.thereabouts", "url": … }]`), and the Pebble app connects to the first one installed.
+  - It's a Kotlin library. The watchapp's `package.json` lists Android companion packages (`"android": [{ "package": "io.github.spasm0dic.famlogic", "url": … }]`), and the Pebble app connects to the first one installed.
   - Our app adds a provider entry to its manifest and can choose to talk only to our watchapp.
   - The Pebble app keeps our app awake while the watchapp is open, and no "starter" app is needed on the watch.
   - It needs Pebble/Core app 1.0.7.7 or newer. Version 1.14 (September 2026) added data logging from the watch to the phone over PebbleKit 2.
   - Old "classic" PebbleKit broadcasts are off by default in the new app, so we use PebbleKit 2.
   - Messages are AppMessage dictionaries (small integer keys → ints, strings or byte arrays). Keep them small, because watches have very little memory.
 - **Timeline pins:** the Pebble Time 2 has the timeline (down button) with pins from apps. Whether apps can still push pins, through the phone or a web API, **is unclear: verify**.
-- **No Google needed:** all of this works in the FOSS build of Thereabouts.
+- **No Google needed:** all of this works in the FOSS build of FamLogic.
 
 ## Proposed shape
 
 - A **watchapp in C**, so one codebase covers flint, emery, gabbro and the older watches, with layouts for rectangular and round screens.
-- The **Thereabouts phone app is the bridge.** It already has everything (people, alerts, SOS, check-in), so the watch never talks to the server.
+- The **FamLogic phone app is the bridge.** It already has everything (people, alerts, SOS, check-in), so the watch never talks to the server.
 - The phone pushes a compact snapshot on change, plus alerts. The watch sends actions back.
 - For the **Index 01**, a small **webhook endpoint on our server**: the ring's phone app calls it directly, so it also works when the watchapp isn't open.
 

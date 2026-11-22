@@ -132,7 +132,7 @@ func (g *geocoder) reverse(lat, lon float64) (string, error) {
 	q.Set("zoom", "17")
 	u.RawQuery = q.Encode()
 	req, _ := http.NewRequest(http.MethodGet, u.String(), nil)
-	req.Header.Set("User-Agent", "Thereabouts/"+version+" (self-hosted family locator; https://github.com/Spasm0dic/Thereabouts)")
+	req.Header.Set("User-Agent", "FamLogic/"+version+" (self-hosted family locator; https://github.com/Spasm0dic/Thereabouts)")
 	resp, err := g.client.Do(req)
 	if err != nil {
 		return "", err
@@ -200,7 +200,7 @@ func (g *geocoder) Search(q, lang string) ([]GeoResult, error) {
 	u.RawQuery = params.Encode()
 	req, _ := http.NewRequest(http.MethodGet, u.String(), nil)
 	// Nominatim asks every app to identify itself.
-	req.Header.Set("User-Agent", "Thereabouts/"+version+" (self-hosted family locator; https://github.com/Spasm0dic/Thereabouts)")
+	req.Header.Set("User-Agent", "FamLogic/"+version+" (self-hosted family locator; https://github.com/Spasm0dic/Thereabouts)")
 	if lang != "" {
 		req.Header.Set("Accept-Language", lang)
 	}

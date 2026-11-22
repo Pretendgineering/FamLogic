@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	adminCookie     = "thereabouts_admin"
+	adminCookie     = "famlogic_admin"
 	adminSessionTTL = 30 * 24 * time.Hour
 	maxBody         = 64 << 10
 )
@@ -91,6 +91,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/admin/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/admin/members", s.admin(s.handleAdminMembers))
 	mux.HandleFunc("GET /api/admin/backup", s.admin(s.handleAdminBackup))
+	mux.HandleFunc("GET /api/admin/modules", s.admin(s.handleAdminModules))
+	mux.HandleFunc("PUT /api/admin/modules", s.admin(s.handleAdminSetModules))
+	mux.HandleFunc("PUT /api/admin/members/{id}/role", s.admin(s.handleAdminSetRole))
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
@@ -173,6 +176,7 @@ type publicMember struct {
 	Name   string    `json:"name"`
 	Color  string    `json:"color"`
 	Emoji  string    `json:"emoji,omitempty"`
+	Role   string    `json:"role"` // "parent" or "child"
 	Paused bool      `json:"paused"`
 	Loc    *Location `json:"loc"`
 	// When this person's active SOS started (unix ms); absent if no SOS.
@@ -191,7 +195,7 @@ type publicMember struct {
 func toPublic(ms []Member) []publicMember {
 	out := make([]publicMember, len(ms))
 	for i, m := range ms {
-		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
+		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Role: m.role(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
 		if out[i].Circles == nil {
 			out[i].Circles = []string{}
 		}
@@ -202,7 +206,8 @@ func toPublic(ms []Member) []publicMember {
 // serverFeatures tells apps what this server can do, so a newer app talking to
 // an older server can hide what won't work instead of failing.
 var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails",
-	"emoji", "status", "schedules", "trips", "driving", "sos-seen", "requests", "nudges", "reminders", "index01"}
+	"emoji", "status", "schedules", "trips", "driving", "sos-seen", "requests", "nudges", "reminders", "index01",
+	"modules", "roles"}
 
 func (s *Server) serverInfo() map[string]any {
 	features := slices.Clone(serverFeatures)
@@ -212,6 +217,7 @@ func (s *Server) serverInfo() map[string]any {
 	if s.cfg.SilenceAfter > 0 {
 		features = append(features, "silence")
 	}
+	features = append(features, s.store.moduleFeatures()...)
 	return map[string]any{
 		"name":            s.cfg.FamilyName,
 		"version":         version,
@@ -944,7 +950,7 @@ func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", `attachment; filename="thereabouts-backup-`+time.Now().Format("2006-01-02")+`.json"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="famlogic-backup-`+time.Now().Format("2006-01-02")+`.json"`)
 	_, _ = w.Write(b)
 }
 
@@ -1339,7 +1345,7 @@ func (s *Server) handleAdminDeletePlace(w http.ResponseWriter, r *http.Request) 
 
 var joinTmpl = template.Must(template.New("join").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{if .Reset}}Sign back in to{{else}}Join{{end}} {{.Family}} on Thereabouts</title><link rel="stylesheet" href="/style.css"></head>
+<title>{{if .Reset}}Sign back in to{{else}}Join{{end}} {{.Family}} on FamLogic</title><link rel="stylesheet" href="/style.css"></head>
 <body class="join"><main class="card">
 {{if .Invalid}}
 <h1>This link has expired</h1>
@@ -1350,13 +1356,13 @@ var joinTmpl = template.Must(template.New("join").Parse(`<!doctype html>
 <p>Use this link to choose a new password for <strong>{{.Name}}</strong> in <strong>{{.Family}}</strong> and sign in on this phone. It works once.</p>
 {{else}}
 <h1>Join {{.Family}}</h1>
-<p>You've been invited to share your location with <strong>{{.Family}}</strong> using Thereabouts.</p>
+<p>You've been invited to share your location with <strong>{{.Family}}</strong> using FamLogic.</p>
 {{end}}
 <ol>
-<li>Install the Thereabouts app on your Android phone.</li>
+<li>Install the FamLogic app on your Android phone.</li>
 <li>Tap the button below to open it with everything filled in.</li>
 </ol>
-<p><a class="button" href="{{.AppLink}}">Open in Thereabouts</a></p>
+<p><a class="button" href="{{.AppLink}}">Open in FamLogic</a></p>
 <p class="muted">Button not working? Open the app and enter these by hand:</p>
 <dl><dt>Server</dt><dd><code>{{.Server}}</code></dd><dt>Invite code</dt><dd><code>{{.Code}}</code></dd></dl>
 {{end}}
@@ -1371,7 +1377,7 @@ func (s *Server) handleJoinPage(w http.ResponseWriter, r *http.Request) {
 		"Family":  s.cfg.FamilyName,
 		"Server":  base,
 		"Code":    code,
-		"AppLink": template.URL("thereabouts://join?" + q.Encode()),
+		"AppLink": template.URL("famlogic://join?" + q.Encode()),
 		"Invalid": !ok,
 		"Reset":   ok && member != nil,
 		"Name":    "",

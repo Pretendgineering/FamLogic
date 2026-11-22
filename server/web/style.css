@@ -1,4 +1,4 @@
-/* Thereabouts dashboard: a purple Material You style, light or dark following the
+/* FamLogic dashboard: a purple Material You style, light or dark following the
    system. Depth comes from tonal surfaces and soft shadows (no glows). */
 :root {
   --bg: #f4f1fb;
@@ -75,9 +75,53 @@ label { display: block; margin: .75rem 0; }
 .card dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem .8rem; }
 .card dd { margin: 0; overflow-wrap: anywhere; }
 
-/* Main layout: everything you do is in the sidebar; the map fills the rest. */
+/* The shell: a rail of sections on the left, the chosen page on the right. */
 #app { height: 100%; }
-.layout { height: 100%; display: flex; min-height: 0; }
+.shell { height: 100%; display: flex; min-height: 0; }
+.rail { flex: none; width: 92px; display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 14px 8px; overflow-y: auto; }
+.rail a { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px 7px; border-radius: 16px; color: var(--muted); text-decoration: none; font-size: .72rem; font-weight: 600; text-align: center; }
+.rail a .ri { display: grid; place-items: center; width: 52px; height: 30px; border-radius: 999px; transition: background .15s; }
+.rail a svg { width: 22px; height: 22px; }
+.rail a:hover { color: var(--text); }
+.rail a:hover .ri { background: var(--surface-2); }
+.rail a[aria-current="page"] { color: var(--text); }
+.rail a[aria-current="page"] .ri { background: var(--accent-soft); color: var(--accent-soft-text); }
+.rail a .ri { position: relative; }
+.rail a.soon .ri::after { content: ""; position: absolute; top: 3px; right: 11px; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .7; }
+.rail .rail-brand { padding: 0 0 10px; }
+.rail .rail-brand img { width: 40px; height: 40px; }
+.rail .rail-sep { height: 1px; background: var(--line); margin: 8px 10px; }
+.rail .rail-sep + a { margin-top: 0; }
+.page { flex: 1; overflow-y: auto; padding: 22px 24px 32px 8px; min-width: 0; }
+.page-head { max-width: 760px; margin: 4px 4px 14px; }
+.page-head h1 { font-size: 1.55rem; margin-bottom: .2rem; }
+.page-head p { margin: .2rem 0; }
+.wide-panel { max-width: 760px; margin-bottom: 14px; padding: 14px 16px; }
+.panel-actions { display: flex; gap: .5rem; margin-bottom: .4rem; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; max-width: 980px; }
+.card-link { display: block; background: var(--surface); border-radius: 20px; padding: 16px; box-shadow: var(--shadow); color: var(--text); text-decoration: none; }
+.card-link:hover { box-shadow: var(--shadow-lg); }
+.card-link .ri { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft); color: var(--accent-soft-text); margin-bottom: .5rem; }
+.card-link .ri svg { width: 24px; height: 24px; }
+.card-link h3 { margin: 0 0 .2rem; font-size: 1.05rem; }
+.card-link p { margin: 0; color: var(--muted); font-size: .9rem; }
+.card-link.sos { background: var(--sos); color: #fff; }
+.card-link.sos p { color: #fff; }
+.badge { display: inline-block; font-size: .7rem; font-weight: 700; padding: .1rem .5rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); vertical-align: middle; margin-left: .3rem; }
+.badge.on { background: var(--accent-soft); color: var(--accent-soft-text); }
+.modules li { align-items: flex-start; }
+.modules input[type=checkbox] { width: 20px; height: 20px; margin: .2rem .2rem 0 0; flex: none; accent-color: var(--accent); }
+.modules label { display: flex; gap: .6rem; margin: 0; cursor: pointer; flex: 1; }
+.subtabs { max-width: 420px; margin: 0 4px 14px; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+.plain { padding-left: 1.2rem; margin: .5rem 0 0; }
+.plain li { margin: .35rem 0; }
+.soon p { margin: .3rem 0 .6rem; }
+.role-select { width: auto; margin: 0; padding: .35em .7em; font-size: .85rem; }
+#setup-dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+.layout { flex: 1; height: 100%; display: flex; min-height: 0; min-width: 0; }
 aside { width: 360px; flex: none; overflow-y: auto; padding: 16px 12px 12px 16px; display: flex; flex-direction: column; gap: 12px; }
 #map { flex: 1; min-height: 300px; margin: 16px 16px 16px 4px; border-radius: 22px; box-shadow: var(--shadow); overflow: hidden; }
 .brand { display: flex; align-items: center; gap: .7rem; padding: 2px 4px 4px; }
@@ -117,6 +161,12 @@ button.wide { width: 100%; }
 .tabs .count.alert { color: var(--danger); font-weight: 700; }
 
 @media (max-width: 720px) {
+  /* The rail becomes a strip along the top. */
+  .shell { flex-direction: column; height: auto; min-height: 100%; }
+  .rail { flex-direction: row; width: auto; padding: 8px 8px 4px; overflow-x: auto; gap: 0; position: sticky; top: 0; z-index: 1000; background: var(--bg); }
+  .rail a { min-width: 72px; }
+  .rail .rail-brand, .rail .rail-sep { display: none; }
+  .page { padding: 12px 16px 24px; overflow: visible; }
   /* One column: name and any SOS first, then the map, then the controls. */
   .layout { flex-direction: column; height: auto; min-height: 100%; padding: 12px 16px 16px; gap: 12px; }
   aside { display: contents; }

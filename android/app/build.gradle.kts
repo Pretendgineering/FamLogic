@@ -5,31 +5,31 @@ plugins {
 }
 
 android {
-    namespace = "io.github.spasm0dic.thereabouts"
+    namespace = "io.github.spasm0dic.famlogic"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "io.github.spasm0dic.thereabouts"
+        applicationId = "io.github.spasm0dic.famlogic"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "0.14.0"
+        versionCode = 26
+        versionName = "0.15.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo
     // (see docs/RELEASING.md). Without them, release builds are signed with the local
     // debug key: fine for trying things out, but such APKs can't update a real install.
-    val keystorePath = System.getenv("THEREABOUTS_KEYSTORE")
+    val keystorePath = System.getenv("FAMLOGIC_KEYSTORE")
     signingConfigs {
         if (!keystorePath.isNullOrBlank()) {
             create("release") {
-                val password = System.getenv("THEREABOUTS_KEYSTORE_PASSWORD")
-                    ?: error("THEREABOUTS_KEYSTORE is set but THEREABOUTS_KEYSTORE_PASSWORD is not")
+                val password = System.getenv("FAMLOGIC_KEYSTORE_PASSWORD")
+                    ?: error("FAMLOGIC_KEYSTORE is set but FAMLOGIC_KEYSTORE_PASSWORD is not")
                 storeFile = file(keystorePath)
                 storePassword = password
-                keyAlias = System.getenv("THEREABOUTS_KEY_ALIAS")?.ifBlank { null } ?: "thereabouts"
+                keyAlias = System.getenv("FAMLOGIC_KEY_ALIAS")?.ifBlank { null } ?: "thereabouts" // the alias in the existing release key
                 // PKCS12 keystores use the same password for the key; allow a separate one anyway.
-                keyPassword = System.getenv("THEREABOUTS_KEY_PASSWORD")?.ifBlank { null } ?: password
+                keyPassword = System.getenv("FAMLOGIC_KEY_PASSWORD")?.ifBlank { null } ?: password
             }
         }
     }

@@ -147,13 +147,13 @@ func TestDailyBackups(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "backups")
 	os.MkdirAll(dir, 0o700)
 	for _, d := range []string{"2026-01-01", "2026-01-02", "2026-01-03"} {
-		os.WriteFile(filepath.Join(dir, "thereabouts-"+d+".json"), []byte("{}"), 0o600)
+		os.WriteFile(filepath.Join(dir, "famlogic-"+d+".json"), []byte("{}"), 0o600)
 	}
 	if err := s.DailyBackup(dir, 2); err != nil {
 		t.Fatal(err)
 	}
 	entries, _ := os.ReadDir(dir)
-	if len(entries) != 2 || entries[1].Name() != "thereabouts-"+time.Now().Format("2006-01-02")+".json" {
+	if len(entries) != 2 || entries[1].Name() != "famlogic-"+time.Now().Format("2006-01-02")+".json" {
 		t.Fatalf("backups: %v", entries)
 	}
 	b, _ := os.ReadFile(filepath.Join(dir, entries[1].Name()))

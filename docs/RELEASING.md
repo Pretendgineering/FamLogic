@@ -6,7 +6,7 @@ Every Android app is signed with a private key. Android remembers the signature 
 
 Three things follow from that:
 
-- **One key, forever.** Every Thereabouts APK must be signed with the same key so updates install over each other and nobody loses their settings or membership.
+- **One key, forever.** Every FamLogic APK (and before it, every Thereabouts APK) must be signed with the same key so updates install over each other and nobody loses their settings or membership.
 - **Lose the key, and updates break.** Everyone would have to uninstall and reinstall. Back it up.
 - **Leak the key, and someone could sign fake updates.** Keep it private: never commit it, never paste it into chats or issues.
 
@@ -45,6 +45,8 @@ From your computer, open the share and the `thereabouts-key` folder. In the GitH
 
 | Name | Value |
 |---|---|
+> The key and its secrets keep their original names from when the project was called Thereabouts: CI reads `FAMLOGIC_*`, then `THEREABOUTS_*`, then `LIBRE360_*` secrets, so nothing needs re-entering. A new setup can use either name.
+
 | `THEREABOUTS_KEYSTORE_B64` | the entire contents of `thereabouts-release.b64`: open it in a text editor, select all, copy. It's one long line. |
 | `THEREABOUTS_KEYSTORE_PASSWORD` | the password from step 1 |
 
@@ -65,7 +67,7 @@ If the secret is missing or wrong, the build warns about a throwaway key (or fai
 
 1. Bump `versionCode` (by 1) and `versionName` in `android/app/build.gradle.kts`. Android uses `versionCode` to decide what counts as an update.
 2. Merge to `main`.
-3. CI builds, signs and publishes a GitHub release `v<versionName>` with `thereabouts.apk` attached.
+3. CI builds, signs and publishes a GitHub release `v<versionName>` with `famlogic.apk` and `famlogic-google.apk` attached.
 
 ## Getting updates on your phone automatically
 

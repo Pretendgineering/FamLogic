@@ -1,4 +1,4 @@
-// Thereabouts Family watchface: the time, and a grid of up to 8 people below it.
+// FamLogic Family watchface: the time, and a grid of up to 8 people below it.
 // Each person is their initial in their colour, ringed by what they're doing
 // (amber driving, green moving, purple still, grey not heard from lately), next to
 // one word for where they are ("Home", "Driving", "Out", "3h"). Long fence names
@@ -126,7 +126,7 @@ static void draw_grid(Layer *layer, GContext *g) {
   int n = shown();
   if (n == 0) {
     graphics_context_set_text_color(g, PBL_IF_COLOR_ELSE(GColorDarkGray, fg()));
-    graphics_draw_text(g, "Open Thereabouts on your phone", fonts_get_system_font(FONT_KEY_GOTHIC_14),
+    graphics_draw_text(g, "Open FamLogic on your phone", fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        GRect(16, s_grid_top + 10, screen.size.w - 32, 40), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
     return;
   }
