@@ -54,7 +54,7 @@ Both are signed with the same key and are the same app to Android, so you can sw
 
 Optional extras, all running through the FamLogic phone app (Thereabouts module) (no Google services needed). Settings → **Pebble & Index** has the switches.
 
-**Installing:** Settings → **Pebble & Index** → **Set up your watch** walks you through it: tap **Download the watchapp** (and **Download the watchface**), then open the downloaded file and choose **Open with Pebble**. The files are also on the [releases page](https://github.com/Spasm0dic/Thereabouts/releases/latest) (`famlogic-watch.pbw`, `famlogic-face.pbw`). It works on every Pebble, old and new (Pebble 2 Duo, Time 2 and Round 2 included). **Watch look** there chooses light, dark or the same as your phone.
+**Installing:** Settings → **Pebble & Index** → **Set up your watch** walks you through it: tap **Download the watchapp** (and **Download the watchface**), then open the downloaded file and choose **Open with Pebble**. The files are also on the [releases page](https://github.com/Spasm0dic/FamLogic/releases/latest) (`famlogic-watch.pbw`, `famlogic-face.pbw`). It works on every Pebble, old and new (Pebble 2 Duo, Time 2 and Round 2 included). **Watch look** there chooses light, dark or the same as your phone.
 
 **Pebble watchapp**:
 - **Your family at a glance**: everyone with their status ("At Home", "Driving", "12 min ago"), with a coloured ring for what they're doing: amber driving, green moving, purple staying put, grey not heard from lately. Select a person for **Pick me up**, **Call me**, **Nudge** (Where are you? / a heart / thumbs up) or **I've seen your SOS**.

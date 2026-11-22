@@ -8,7 +8,7 @@ A self-hosted family hub: location sharing, chat and (soon) a shared calendar, t
 - **Kid-friendly:** younger children sign in with a code from a parent, no password; parents can see their children's chats.
 - **Voice first** *(coming)*: press and hold to talk, and hear things read out, on every device. It goes to an AI agent you host (such as Hermes or OpenClaw), so a child can say "I fed the cat" to tick off a chore, send a message, or hear what's next.
 - **Looks like itself:** serif headings over clean sans text, in six colour themes (Muted Dracula by default, Warm paper, Forest, Ocean, High contrast, Purple), light or dark, chosen per device.
-- **Open source:** GPLv3.
+- **Open source:** [AGPLv3](LICENSE). Use it, change it and share it freely; if you run a changed version for others (for example as a hosted service), you must offer them your changes too. For other licensing, contact the maintainer.
 
 ## Devices
 
@@ -40,7 +40,7 @@ See [ROADMAP.md](ROADMAP.md) for the order and [docs/ARCHITECTURE.md](docs/ARCHI
 Any always-on machine with Docker: a home server, NAS, Raspberry Pi 4/5 or small VPS (amd64 or arm64).
 
 ```sh
-curl -O https://raw.githubusercontent.com/spasm0dic/thereabouts/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/spasm0dic/famlogic/main/docker-compose.yml
 # edit docker-compose.yml: set ADMIN_PASSWORD (and FAMILY_NAME)
 docker compose up -d
 ```
@@ -55,7 +55,7 @@ Open `http://<server>:8080`, log in with the admin password, and choose your fam
 
 ### 2. Install the app
 
-Download **`famlogic.apk`** from the [latest release](https://github.com/Spasm0dic/Thereabouts/releases/latest) onto each phone or tablet and open it.
+Download **`famlogic.apk`** from the [latest release](https://github.com/Spasm0dic/FamLogic/releases/latest) onto each phone or tablet and open it.
 
 - **`famlogic-google.apk`** (the Google edition) is the same app plus Google Play services for quicker indoor location and driving detection from motion sensors. Either installs over the other.
 - **Automatic updates** with [Obtainium](https://github.com/ImranR98/Obtainium): add this repository and set *Filter APKs by regular expression* to `^famlogic\.apk$` (or `^famlogic-google\.apk$`).
@@ -117,5 +117,9 @@ Official APKs are signed with one project key and published by CI when the versi
 - [docs/API.md](docs/API.md): the HTTP API
 - [docs/PEBBLE.md](docs/PEBBLE.md), [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md): Pebble design notes and store plans
 - [ROADMAP.md](ROADMAP.md)
+
+## License
+
+FamLogic is free software under the [GNU Affero General Public License v3.0](LICENSE) (versions up to 0.17.0 were released under GPLv3). Running a modified version as a service for others requires offering them its source; every FamLogic server links to its source in the web console and the app.
 
 Headings use [Liberation Serif](https://github.com/liberationfonts/liberation-fonts) (SIL Open Font License 1.1; see `server/web/fonts/OFL.txt`). The common-password list in `server/commonpasswords.txt` comes from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, © 2018 Daniel Miessler).

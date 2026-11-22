@@ -71,7 +71,7 @@ If the secret is missing or wrong, the build warns about a throwaway key (or fai
 
 ## Getting updates on your phone automatically
 
-[Obtainium](https://github.com/ImranR98/Obtainium) installs apps straight from GitHub releases and checks for updates. Install it (from F-Droid or its GitHub page) and add `https://github.com/Spasm0dic/Thereabouts`. New releases then arrive like any other app update. This works today, before Thereabouts is in any app store.
+[Obtainium](https://github.com/ImranR98/Obtainium) installs apps straight from GitHub releases and checks for updates. Install it (from F-Droid or its GitHub page) and add `https://github.com/Spasm0dic/FamLogic`. New releases then arrive like any other app update. This works today, before Thereabouts is in any app store.
 
 ## F-Droid and other app stores
 

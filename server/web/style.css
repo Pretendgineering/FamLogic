@@ -542,3 +542,5 @@ dialog select { width: 100%; }
 /* Appearance (Home): this browser's palette and light/dark. */
 .appearance { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: .4rem; }
 .appearance select { width: auto; margin: 0; padding: .35em .7em; font-size: .85rem; }
+.source-note { margin: 1rem 0 0; text-align: center; }
+.muted a { color: inherit; }

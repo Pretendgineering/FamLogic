@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.spasm0dic.famlogic"
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
-        versionName = "0.17.0"
+        versionCode = 29
+        versionName = "0.17.1"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo

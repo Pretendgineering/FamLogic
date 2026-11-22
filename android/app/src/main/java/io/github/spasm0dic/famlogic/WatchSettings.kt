@@ -40,8 +40,8 @@ import io.github.spasm0dic.famlogic.pebble.PebbleKit
 import kotlinx.coroutines.launch
 import java.io.IOException
 
-private const val WATCHAPP = "https://github.com/Spasm0dic/Thereabouts/releases/latest/download/famlogic-watch.pbw"
-private const val WATCHFACE = "https://github.com/Spasm0dic/Thereabouts/releases/latest/download/famlogic-face.pbw"
+private const val WATCHAPP = "https://github.com/Spasm0dic/FamLogic/releases/latest/download/famlogic-watch.pbw"
+private const val WATCHFACE = "https://github.com/Spasm0dic/FamLogic/releases/latest/download/famlogic-face.pbw"
 
 private fun open(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }

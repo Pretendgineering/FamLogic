@@ -225,6 +225,9 @@ private fun menuSummary(
 
 private fun plural(n: Int, word: String) = if (n == 1) "$n $word" else "$n ${word}s"
 
+/** Where FamLogic's source code is (the AGPL asks that users can get it). */
+const val SOURCE_URL = "https://github.com/Spasm0dic/FamLogic"
+
 // ---------------------------------------------------------------- pages
 
 @Composable
@@ -870,7 +873,11 @@ private fun AboutPage(prefs: Prefs, perms: PermissionState, serverVersion: Strin
     }
     SettingsCard("FamLogic") {
         Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
-        Hint("Free software (GPLv3). Map data © OpenStreetMap contributors.")
+        Hint("Free software under the GNU AGPLv3. Map data © OpenStreetMap contributors.")
+        val context = LocalContext.current
+        TextButton(onClick = {
+            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(SOURCE_URL))) }
+        }) { Text("Source code") }
     }
     if (confirmLeave) {
         AlertDialog(
