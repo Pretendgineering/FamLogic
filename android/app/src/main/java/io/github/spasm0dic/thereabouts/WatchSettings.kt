@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -31,13 +33,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.github.spasm0dic.thereabouts.pebble.PebbleBridge
 import io.github.spasm0dic.thereabouts.pebble.PebbleKit
 import kotlinx.coroutines.launch
 import java.io.IOException
 
-private const val RELEASES = "https://github.com/Spasm0dic/Thereabouts/releases/latest"
+private const val WATCHAPP = "https://github.com/Spasm0dic/Thereabouts/releases/latest/download/thereabouts-watch.pbw"
+private const val WATCHFACE = "https://github.com/Spasm0dic/Thereabouts/releases/latest/download/thereabouts-face.pbw"
+
+private fun open(context: Context, url: String) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+        .onFailure { Toast.makeText(context, "No browser to open $url", Toast.LENGTH_LONG).show() }
+}
+
+/** A numbered setup step; **bold** marks words to look for on screen. */
+@Composable
+private fun Step(n: Int, text: String) {
+    Row(Modifier.padding(vertical = 4.dp)) {
+        Text("$n.", style = MaterialTheme.typography.titleSmall, modifier = Modifier.width(28.dp))
+        Text(bold(text), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private fun bold(text: String) = androidx.compose.ui.text.buildAnnotatedString {
+    text.split("**").forEachIndexed { i, part ->
+        if (i % 2 == 1) withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)) { append(part) }
+        else append(part)
+    }
+}
 
 /** Settings > Pebble & Index: the watch app, its options, and the Index 01 ring links. */
 @Composable
@@ -49,19 +74,35 @@ internal fun PebblePage(prefs: Prefs, canIndex: Boolean) {
     var heartRate by remember { mutableStateOf(prefs.pebbleHeartRate) }
     var falls by remember { mutableStateOf(prefs.pebbleFalls) }
 
-    SettingsCard("Pebble watch") {
-        Text(
-            if (hasPebbleApp) "The Pebble app is installed. Install the Thereabouts watchapp (and the Family watchface, if you like) on your watch."
-            else "Install the Pebble app and pair your watch first, then the Thereabouts watchapp.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-            FilledTonalButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES))) }) { Text("Get the watchapp") }
-            if (hasPebbleApp) {
-                TextButton(onClick = { scope.launch { PebbleKit.startApp(context, PebbleBridge.APP_UUID) } }) { Text("Open on watch") }
-            }
+    SettingsCard("Set up your watch") {
+        Step(1, if (hasPebbleApp) "The Pebble app is installed ✓" else "Install the Pebble app (by Core Devices) and pair your watch.")
+        Step(2, "Download the watchapp. When it's downloaded, tap it (or find it in Downloads) and choose **Open with Pebble**: the Pebble app installs it on your watch.")
+        FilledTonalButton(onClick = { open(context, WATCHAPP) }, modifier = Modifier.padding(start = 28.dp, bottom = 4.dp)) { Text("Download the watchapp") }
+        Step(3, "Optional: the Family watchface, the same way.")
+        OutlinedButton(onClick = { open(context, WATCHFACE) }, modifier = Modifier.padding(start = 28.dp, bottom = 4.dp)) { Text("Download the watchface") }
+        Step(4, "Optional, for a faster SOS: on the watch, open Settings → Quick Launch, pick the Up (or Down) button and choose Thereabouts. Then turn on \"Quick Launch opens SOS\" below.")
+        if (hasPebbleApp) {
+            TextButton(onClick = { scope.launch { PebbleKit.startApp(context, PebbleBridge.APP_UUID) } }) { Text("Open Thereabouts on the watch") }
         }
         if (prefs.watchBattery > 0) Hint("Watch battery: ${prefs.watchBattery}% (shown to the people who can see you)")
+    }
+    SettingsCard("Watch look") {
+        var theme by remember { mutableStateOf(prefs.pebbleTheme) }
+        listOf("system" to "Same as this phone", "light" to "Light", "dark" to "Dark").forEach { (id, label) ->
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = theme == id) {
+                    theme = id
+                    prefs.pebbleTheme = id
+                    PebbleBridge.push(context)
+                    PebbleBridge.push(context, PebbleBridge.FACE_UUID)
+                }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = theme == id, onClick = null)
+                Text(label, Modifier.padding(start = 12.dp))
+            }
+        }
+        Hint("Black-and-white watches (Pebble 2 Duo and older) always use black and white.")
     }
     SettingsCard("On the watch") {
         SwitchRow(
@@ -69,6 +110,13 @@ internal fun PebblePage(prefs: Prefs, canIndex: Boolean) {
             detail = "Arrivals, check-ins, trips and reminders appear in the watch's timeline.",
             checked = timeline,
             onChange = { timeline = it; prefs.pebbleTimeline = it },
+        )
+        var quickSos by remember { mutableStateOf(prefs.pebbleQuickSos) }
+        SwitchRow(
+            title = "Quick Launch opens SOS",
+            detail = "Opening Thereabouts with the watch's Quick Launch (holding Up or Down on the watchface) goes straight to the SOS screen: then hold Select. Anywhere in the watchapp, holding Select also starts an SOS.",
+            checked = quickSos,
+            onChange = { quickSos = it; prefs.pebbleQuickSos = it; PebbleBridge.push(context) },
         )
         SwitchRow(
             title = "Send my heart rate with an SOS",
@@ -102,10 +150,12 @@ private fun IndexRingCard(prefs: Prefs) {
         }
     }
     SettingsCard("Pebble Index 01 ring") {
-        Hint(
-            "In the Pebble app: Index 01 settings → Webhook. Pick a gesture, paste one of these links, and choose " +
-                "\"Transcription only\" (or \"Both\"). Set the gesture to \"Webhook only\" so it does just this.",
-        )
+        Step(1, "Copy one of the links below (each does one thing).")
+        Step(2, "In the Pebble app, open your Index 01's settings and go to **Webhook**.")
+        Step(3, "Pick a gesture (for example **Double-click and hold** for the discreet SOS, **Hold and talk** for check-ins), paste the link, and choose **Transcription only** (or **Both**).")
+        Step(4, "Set that gesture to **Webhook only**, so it does just this.")
+        Step(5, "Optional: turn on **Sign requests** and paste the signing secret from below.")
+        Step(6, "If the Pebble app offers a test, use it: Thereabouts answers that it got the test, and nothing is sent to your family.")
         val l = links
         when {
             error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)

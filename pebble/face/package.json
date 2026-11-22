@@ -36,7 +36,17 @@
       "TEXT": 8,
       "KIND": 9,
       "NUM": 10,
-      "INITIAL": 11
+      "INITIAL": 11,
+      "STATE": 12,
+      "BEARING": 13,
+      "DIST": 14,
+      "LABEL": 15,
+      "DATA": 16,
+      "W": 17,
+      "H": 18,
+      "STRIDE": 19,
+      "CHUNK": 20,
+      "RADIUS": 21
     },
     "resources": {
       "media": []

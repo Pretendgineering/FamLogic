@@ -187,6 +187,16 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("pebble_timeline", true)
         set(v) = sp.edit { putBoolean("pebble_timeline", v) }
 
+    /** The watch's look: "system" (follow the phone's dark mode), "light" or "dark". */
+    var pebbleTheme: String
+        get() = sp.getString("pebble_theme", "system") ?: "system"
+        set(v) = sp.edit { putString("pebble_theme", v) }
+
+    /** Opening the watchapp with Pebble's Quick Launch goes straight to the SOS screen. */
+    var pebbleQuickSos: Boolean
+        get() = sp.getBoolean("pebble_quick_sos", false)
+        set(v) = sp.edit { putBoolean("pebble_quick_sos", v) }
+
     /** Feature: "Sam started driving". Off by default. */
     var notifyDriving: Boolean
         get() = sp.getBoolean("notify_driving", false)

@@ -532,6 +532,7 @@ fun MapScreen(
             status = statusOf(m),
             canTrips = supports("trips"),
             canRequests = features?.contains("requests") == true,
+            canNudges = features?.contains("nudges") == true,
             onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
             onShowTrip = { t ->
                 sheetFor = null

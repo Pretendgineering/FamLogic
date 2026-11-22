@@ -8,6 +8,8 @@ Status: **built in 0.12.0** (November 2026). Everything in "Feature ideas" below
 - Messages use small integer keys (listed at the top of `PebbleBridge.kt` and `main.c`; keep them in sync).
 - The Index 01 ring calls the server directly (`POST /api/index/{token}/{sos|checkin|remind}`), so it works without the watchapp. Requests are checked with the HMAC signature when present, and repeats are ignored.
 - Tested in the Pebble emulators (basalt, gabbro). Still to try on real hardware: the phone↔watch bridge, fall detection tuning, heart rate.
+- 0.14.0 added: protocol v2 (movement state, one-word labels, bearing and distance from you, fences, light/dark, miles), hold-Select SOS everywhere (an overlay layer moved onto whichever window is showing, timed by the clock rather than timer ticks), Quick Launch → SOS screen, the radar (log scale, far outliers pinned to the rim) and street maps (`pebble/PebbleMap.kt` renders the user's tiles, stretches their pale colours and converts them to the watch's 64 colours or dithered black and white; sent in pieces of about 2 KB), nudges, and the redesigned watchface (2-column grid, per-label layers so long names can scroll inside their slot).
+- Appstore listing: see [PEBBLE-APPSTORE.md](PEBBLE-APPSTORE.md) (draft).
 
 ---
 

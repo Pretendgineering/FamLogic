@@ -202,7 +202,7 @@ func toPublic(ms []Member) []publicMember {
 // serverFeatures tells apps what this server can do, so a newer app talking to
 // an older server can hide what won't work instead of failing.
 var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails",
-	"emoji", "status", "schedules", "trips", "driving", "sos-seen", "requests", "reminders", "index01"}
+	"emoji", "status", "schedules", "trips", "driving", "sos-seen", "requests", "nudges", "reminders", "index01"}
 
 func (s *Server) serverInfo() map[string]any {
 	features := slices.Clone(serverFeatures)

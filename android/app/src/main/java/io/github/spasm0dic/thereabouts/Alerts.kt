@@ -95,8 +95,8 @@ object Alerts {
             }
             "request" -> {
                 if (e.memberId in prefs.mutedPeople) return
-                val title = if (e.kind == "call") "${e.name} asks you to call them" else "${e.name} asks you to pick them up"
-                notify(context, CHANNEL_ALERTS, eventId(e), title, "Tap to see where they are.", e.memberId)
+                val (title, text) = requestText(e)
+                notify(context, CHANNEL_ALERTS, eventId(e), title, text, e.memberId, hereFor = if (e.kind == "where") e.memberId else "")
             }
             "reminder" -> {
                 val at = if (e.kind == "leave") "Leaving ${e.place}" else "At ${e.place}"
@@ -160,6 +160,16 @@ object Alerts {
         )
     }
 
+    /** Requests ("pick me up", "call me") and nudges (where are you, heart, thumbs up, here I am). */
+    fun requestText(e: AppEvent): Pair<String, String> = when (e.kind) {
+        "call" -> "${e.name} asks you to call them" to "Tap to see where they are."
+        "where" -> "${e.name} asks where you are" to "Tap \"Send where I am\" to tell just them."
+        "heart" -> "${e.name} sent you ❤️" to "Just a nudge."
+        "thumbs" -> "${e.name} sent you 👍" to "Just a nudge."
+        "here" -> "${e.name}: here I am" to (if (e.place.isNotEmpty()) "At ${e.place}. " else "") + "Tap to see them on the map."
+        else -> "${e.name} asks you to pick them up" to "Tap to see where they are."
+    }
+
     private fun eventId(e: AppEvent) = (e.id % 1_000_000).toInt() + 1000
 
     /** One notification slot per person for SOS, so "is OK" replaces their SOS. */
@@ -211,6 +221,8 @@ object Alerts {
         sos: Boolean = false,
         /** Adds an "I've seen it" button that tells this person (their SOS). */
         seenFor: String = "",
+        /** Adds a "Send where I am" button that answers this person's "where are you?". */
+        hereFor: String = "",
     ) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -238,6 +250,14 @@ object Alerts {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             b.addAction(0, "I've seen it", seen)
+        }
+        if (hereFor.isNotEmpty()) {
+            val here = PendingIntent.getBroadcast(
+                context, id, Intent(context, SeenReceiver::class.java)
+                    .setAction(SeenReceiver.ACTION_HERE).putExtra(SeenReceiver.EXTRA_MEMBER, hereFor).putExtra(SeenReceiver.EXTRA_ID, id),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            b.addAction(0, "Send where I am", here)
         }
         val n = b.build()
         // SOS keeps ringing until the notification is opened or swiped away.

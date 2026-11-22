@@ -46,6 +46,7 @@ fun PersonSheet(
     status: String,
     canTrips: Boolean,
     canRequests: Boolean = false,
+    canNudges: Boolean = false,
     onDirections: () -> Unit,
     onShowTrip: (Trip) -> Unit,
     onDismiss: () -> Unit,
@@ -88,9 +89,15 @@ fun PersonSheet(
                 fun ask(kind: String) {
                     scope.launch {
                         val msg = try {
-                            Api(prefs.serverUrl, prefs.token).request(m.id, kind, currentLocation(context))
+                            // Only "pick me up" needs a fresh location; nudges use your last shared one.
+                            Api(prefs.serverUrl, prefs.token).request(m.id, kind, if (kind == "pickup") currentLocation(context) else null)
                             haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
-                            if (kind == "call") "Asked ${m.name} to call you" else "Asked ${m.name} to pick you up"
+                            when (kind) {
+                                "call" -> "Asked ${m.name} to call you"
+                                "where" -> "Asked ${m.name} where they are"
+                                "heart", "thumbs" -> "Sent"
+                                else -> "Asked ${m.name} to pick you up"
+                            }
                         } catch (e: IOException) {
                             e.message ?: "Couldn't send"
                         }
@@ -100,6 +107,13 @@ fun PersonSheet(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     androidx.compose.material3.OutlinedButton(onClick = { ask("pickup") }, modifier = Modifier.weight(1f)) { Text("Pick me up") }
                     androidx.compose.material3.OutlinedButton(onClick = { ask("call") }, modifier = Modifier.weight(1f)) { Text("Call me") }
+                }
+                if (canNudges) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.OutlinedButton(onClick = { ask("where") }, modifier = Modifier.weight(1f)) { Text("Where are you?") }
+                        androidx.compose.material3.OutlinedButton(onClick = { ask("heart") }) { Text("❤️") }
+                        androidx.compose.material3.OutlinedButton(onClick = { ask("thumbs") }) { Text("👍") }
+                    }
                 }
             }
             if (!isMe) {

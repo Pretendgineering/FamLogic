@@ -13,7 +13,7 @@ import (
 
 const (
 	EventSOSSeen  = "sos_seen" // to the person with the SOS: someone has seen it
-	EventRequest  = "request"  // to one person: Kind "pickup" or "call"
+	EventRequest  = "request"  // to one person: Kind is one of RequestKinds
 	EventReminder = "reminder" // to the person who set it, on arriving or leaving
 )
 
@@ -54,10 +54,15 @@ func (s *Store) sosSeenNamesLocked(m *Member) []string {
 	return out
 }
 
-// Request asks one person to pick the sender up or call them. It carries the
-// sender's last location, so the other person knows where to go.
+// RequestKinds are what one person can send another: requests ("pick me up",
+// "call me") and nudges ("where are you?", a heart, a thumbs up, and "here I am",
+// the answer to "where are you?").
+var RequestKinds = map[string]bool{"pickup": true, "call": true, "where": true, "heart": true, "thumbs": true, "here": true}
+
+// Request sends one person a request or nudge. It carries the sender's last
+// location, so the other person knows where they are.
 func (s *Store) Request(fromID, toID, kind string, loc *Location) error {
-	if kind != "pickup" && kind != "call" {
+	if !RequestKinds[kind] {
 		return ErrBadRequest
 	}
 	s.mu.Lock()
@@ -69,8 +74,15 @@ func (s *Store) Request(fromID, toID, kind string, loc *Location) error {
 	}
 	s.applyFixLocked(from, loc)
 	e := Event{Type: EventRequest, MemberID: from.ID, Name: from.Name, To: to.ID, Kind: kind}
-	if from.Loc != nil {
+	// The location sent with the request (shared with this one person even while
+	// paused), else their last one unless they've paused sharing.
+	if loc != nil {
+		e.Lat, e.Lon, e.Acc = loc.Lat, loc.Lon, loc.Accuracy
+	} else if from.Loc != nil && !from.Paused {
 		e.Lat, e.Lon, e.Acc = from.Loc.Lat, from.Loc.Lon, from.Loc.Accuracy
+	}
+	if !from.Paused && from.Loc != nil {
+		e.Place = s.placeNameForLocked(from, to)
 	}
 	s.addEventLocked(e)
 	return s.saveLocked()

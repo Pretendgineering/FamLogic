@@ -4,7 +4,7 @@ import java.util.Locale
 
 /** Distances and speeds in miles where people use them (US, UK roads, Liberia, Myanmar), else km. */
 object Units {
-    private val imperial get() = Locale.getDefault().country in setOf("US", "GB", "LR", "MM")
+    val imperial get() = Locale.getDefault().country in setOf("US", "GB", "LR", "MM")
 
     /** "350 m", "4.2 km", "0.3 mi", "12 mi" */
     fun distance(meters: Double): String = if (imperial) {

@@ -162,16 +162,23 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 
 Optional extras, all running through the Thereabouts phone app (no Google services needed). Settings → **Pebble & Index** has the switches.
 
-**Pebble watchapp** (`thereabouts-watch.pbw` on the [releases page](../../releases)): open the file on your phone and the Pebble app installs it. It works on every Pebble, old and new (Pebble 2 Duo, Time 2 and Round 2 included).
-- **Your family at a glance**: everyone with their status ("At Home", "Driving", "12 min ago"). Select a person for **Pick me up**, **Call me** or **I've seen your SOS**.
-- **You** (top row): **Check in** with a preset ("Made it", "On my way", "Running late", "All good") or by speaking on watches with a microphone; **Pause/Resume sharing**; and **SOS**: hold Select for 3 seconds (the watch counts down with buzzes). Holding again for 2 seconds ends it.
-- **SOS from others** opens the watchapp full screen with a repeating buzz, plus a siren on watches with a speaker (Duo, Time 2), until you press Select (which also sends "seen") or Back.
-- **Timeline pins** for arrivals, departures, check-ins, trips, reminders and requests (on by default).
-- **Heart rate in SOS** (off by default, Time 2 and other heart-rate watches): your SOS includes your latest heart rate.
-- **Fall detection** (off by default, experimental): a hard fall starts a 30-second countdown on the watch; press any button to cancel, otherwise it sends an SOS. False alarms are possible, so try it before relying on it.
-- Your watch battery shows in your status ("watch 40%") so others know if it's about to die.
+**Installing:** Settings → **Pebble & Index** → **Set up your watch** walks you through it: tap **Download the watchapp** (and **Download the watchface**), then open the downloaded file and choose **Open with Pebble**. The files are also on the [releases page](../../releases) (`thereabouts-watch.pbw`, `thereabouts-face.pbw`). It works on every Pebble, old and new (Pebble 2 Duo, Time 2 and Round 2 included). **Watch look** there chooses light, dark or the same as your phone.
 
-**Family watchface** (`thereabouts-face.pbw`): the time, the date, and a row of family dots: filled at a fence, hollow when out, grey when not heard from for a while, a white ring while driving and a red ring during an SOS.
+**Pebble watchapp**:
+- **Your family at a glance**: everyone with their status ("At Home", "Driving", "12 min ago"), with a coloured ring for what they're doing: amber driving, green moving, purple staying put, grey not heard from lately. Select a person for **Pick me up**, **Call me**, **Nudge** (Where are you? / a heart / thumbs up) or **I've seen your SOS**.
+- **Hold Select anywhere for SOS**: after a moment a red panel counts 3, 2, 1 with a gentle buzz each second and a bar filling up; at zero it sends, buzzes twice and says **Sent**. Let go to cancel. While your SOS is on, the same hold (2 seconds) says you're OK.
+- **Even faster:** on the watch, Settings → Quick Launch → pick Up or Down → Thereabouts, and turn on **Quick Launch opens SOS** in the phone app. Then it's: hold Up on the watchface, then hold Select.
+- **Radar and maps**: press Up at the top of the list for a radar with you in the middle and everyone in their real direction (distances are squeezed so near and far people both fit; anyone very far away sits on the outer ring). Select steps through people. Keep pressing Up for a small street map of each person (Select zooms out); Down goes back. Maps are drawn by your phone from your chosen map style, so the first one takes a few seconds. The original 2013 Pebble shows the radar only.
+- **You** (top row): **Check in** with a preset or by speaking on watches with a microphone, **Pause/Resume sharing**, and **SOS**.
+- **SOS from others** opens the watchapp full screen with a repeating buzz, plus a siren on watches with a speaker (Duo, Time 2), until you press Select (which also sends "seen") or Back.
+- **"Where are you?"**: when someone asks, the watchapp (if open) offers **Tell them where I am**, which tells only them. The phone notification has the same button.
+- **Timeline pins** for arrivals, departures, check-ins, trips, reminders and requests (on by default).
+- **Heart rate in SOS** (off by default, Time 2 and other heart-rate watches) and **fall detection** (off by default, experimental: a hard fall starts a 30-second countdown; press any button to cancel).
+- Your watch battery shows in your status ("watch 40%").
+
+**Family watchface**: the time on top and a grid of up to 8 people (6 on the small round Pebble Time Round): each person's initial in their colour, ringed like in the watchapp, next to one word for where they are ("Home", "Driving", "Out", "3h"). Long fence names scroll like an LED sign for a few seconds after you flick your wrist. During someone's SOS the whole face turns red with their name and where they are; the watchapp sounds the alarm.
+
+**Nudges** work from the phone too: long-press someone for **Where are you?**, ❤️ or 👍.
 
 **Index 01 ring**: Settings → Pebble & Index → **Index 01 ring** gives you three private links: **SOS**, **Check in** and **Remind**. In the Pebble app, set a ring gesture's webhook to one of them (for example "double-click and hold" → SOS, "hold and talk" → Check in), and paste the **signing secret** if the app asks for one.
 - **SOS** starts a silent SOS: your family is alerted as usual (with what you said, if anything) but your phone doesn't ring.

@@ -211,3 +211,28 @@ func TestIndexRingWebhooks(t *testing.T) {
 		t.Fatalf("old link after reset: %d", c)
 	}
 }
+
+func TestNudgesAndPausedLocation(t *testing.T) {
+	s, ms := newStoreWithMembers(t, "Sam", "Mom")
+	sam, mom := ms[0].ID, ms[1].ID
+	_, cm := s.EventsFor(mom, -1)
+	s.UpdateLocation(sam, Location{Lat: 51.5, Lon: -0.1, Accuracy: 10, Battery: 80, Time: time.Now().UnixMilli()})
+	for _, k := range []string{"where", "heart", "thumbs", "here"} {
+		if err := s.Request(sam, mom, k, nil); err != nil {
+			t.Fatalf("%s: %v", k, err)
+		}
+	}
+	evs, _ := s.EventsFor(mom, cm)
+	if len(evs) != 4 || evs[3].Kind != "here" || evs[3].Lat != 51.5 {
+		t.Fatalf("nudges: %+v", evs)
+	}
+	// Paused: their old location isn't revealed by a nudge.
+	paused := true
+	s.UpdateMember(sam, MemberPatch{Paused: &paused})
+	_, cm = s.EventsFor(mom, -1)
+	s.Request(sam, mom, "heart", nil)
+	evs, _ = s.EventsFor(mom, cm)
+	if len(evs) != 1 || evs[0].Lat != 0 {
+		t.Fatalf("paused nudge leaked a location: %+v", evs)
+	}
+}

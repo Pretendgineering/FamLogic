@@ -20,6 +20,8 @@ data class MemberLocation(
     val driving: Boolean = false,
     /** Their Pebble watch's battery, or 0 if none. */
     val watch: Int = 0,
+    /** Speed at this fix (m/s), 0 if unknown. */
+    val speed: Double = 0.0,
 )
 
 data class Member(
@@ -612,6 +614,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
                     saving = it.optBoolean("saving", false),
                     driving = it.optBoolean("driving", false),
                     watch = it.optInt("watch", 0),
+                    speed = it.optDouble("speed", 0.0),
                 )
             },
         )
