@@ -107,6 +107,9 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
         prefs.serverUrl = url
         prefs.token = res.token
         prefs.memberId = res.member.id
+        prefs.role = res.member.role
+        prefs.access = res.member.access
+        prefs.serverFeatures = res.server.features ?: emptySet()
         prefs.username = res.username
         prefs.familyName = res.server.name
         prefs.tileUrl = res.server.tileUrl
@@ -228,6 +231,41 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
                     )
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     BusyButton("Continue", busy, enabled = url.isNotEmpty() && code.isNotBlank()) { checkCode() }
+                }
+
+                // ---- step 2: a younger child's code (no password) ----
+                invite!!.passwordless && invite!!.isReset -> {
+                    val inv = invite!!
+                    Text("Hi, ${inv.name}!", style = MaterialTheme.typography.titleLarge)
+                    Text("This code from your parent signs this device in as you. No password needed.")
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    BusyButton("Sign in this device", busy, enabled = true) {
+                        run { signedIn(Api(url).join(code.trim(), "", "", "")) }
+                    }
+                    TextButton(onClick = { invite = null; error = null }) { Text("Use a different code") }
+                }
+                invite!!.passwordless -> {
+                    val inv = invite!!
+                    Text("Joining ${inv.server.name}", style = MaterialTheme.typography.titleLarge)
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it.take(40); error = null },
+                        label = { Text("Your name") },
+                        supportingText = { Text("Shown to your family") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "No password needed: this device stays signed in. If you get a new phone, ask a parent for a new code.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    BusyButton("Join", busy, enabled = name.isNotBlank()) {
+                        run { signedIn(Api(url).join(code.trim(), name.trim(), "", "")) }
+                    }
+                    TextButton(onClick = { invite = null; error = null }) { Text("Use a different code") }
                 }
 
                 // ---- step 2: a reset link from the admin ----

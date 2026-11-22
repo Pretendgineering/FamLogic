@@ -17,4 +17,7 @@ object Modules {
     /** A server from before modules (no "modules" feature) is all Thereabouts. */
     fun on(features: Set<String>?, id: String): Boolean =
         features == null || "modules" !in features || "module:$id" in features
+
+    /** For modules newer than Thereabouts: only when the server says it's on. */
+    fun has(features: Set<String>?, id: String): Boolean = features != null && "module:$id" in features
 }

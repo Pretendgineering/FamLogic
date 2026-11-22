@@ -124,7 +124,21 @@ The first time you log in to the web console, FamLogic asks which **modules** yo
 3. On their phone they tap the link, then **Open in FamLogic**. They choose a **username and password** (a password manager is the easy way to keep them), then tap **Join**.
 4. The app asks for location access. Choose **Allow all the time**, and say yes to the battery prompt, so that sharing keeps working when the phone is locked.
 
-Do the same for your own phone. In **Family**, mark each person as a **Parent** or a **Child** (children get simpler sign-in, and parents can see their chats, once the chat module arrives).
+Do the same for your own phone.
+
+### Roles, children and the web console
+
+When you invite someone, choose how they join: **Parent**, **Older child** or **Younger child**. In **Family** you can change it later, and add family members who **don't use the app** (such as a baby) so chores and events can include them.
+
+| Role | Signs in with | Can |
+|---|---|---|
+| **Admin** | username + password | everything a parent can, plus the console's admin pages (invites, modules, devices, backups). Only the **main admin** (the `ADMIN_PASSWORD`) makes or removes admins. |
+| **Parent** | username + password | the whole app, and the web console's parent tools (the map, chat, and reading their children's chats) |
+| **Older child** | username + password | the app, without family settings |
+| **Younger child** | a one-time **join code** from a parent (no password) | the app, without family settings. Lost or new phone: **Family → ⋯ → New join code**. |
+| **Doesn't use the app** | – | is part of the family (for chores and events), but isn't on the map or in chat |
+
+**Web console:** parents and admins log in with their own FamLogic username and password; the main admin can still log in with just the admin password (leave the username empty).
 
 If tapping the link doesn't open the app, they can open the app and type the server address and the code shown on the invite page.
 
@@ -164,6 +178,15 @@ If tapping the link doesn't open the app, they can open the app and type the ser
 - **SOS "seen"**: when someone has an SOS, their banner (and the alert) has a **Seen** button. The person in trouble then sees "Seen by Mom, Sam", so they know help knows.
 - **Pick me up / Call me**: long-press a person and tap **Pick me up** (sends them your location) or **Call me**. Only that person gets it.
 - **Place reminders** (Settings → Fences → Reminders): "When I get to School, remind me to sign the form". A reminder is for you only, fires once when you arrive at (or leave) that fence, then disappears.
+
+### Chat
+
+Switch on **Chat** in Settings → Modules (on by default for new families). Then:
+- Everyone who uses the app is in the **Family** chat. Start **one-to-one** chats or named **group** chats with the **+** button (app) or **New** (console).
+- Send text and **photos** (shrunk and cleaned of location data on your server). You see **Seen by …** under your latest message.
+- New messages arrive as notifications with a **Reply** button, through the same always-on connection as SOS alerts (no Google push).
+- **Parents can read any chat one of their children is in** (marked *Watching*), but can't post in it. Children see a note saying so. The main admin can read every chat.
+- Messages are kept in `chat.db` and photos in `media/` in the data folder, both included in the daily backups (`backups/chat-<date>.db`; copy `media/` along with them).
 
 ### Pebble watches and the Index 01 ring
 

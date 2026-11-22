@@ -48,7 +48,7 @@ object Alerts {
         fresh.forEach {
             show(context, prefs, it)
             // The watch: SOS alarm screen, timeline pins (mutes apply, except to SOS).
-            if (it.type == "sos" || it.memberId !in prefs.mutedPeople) PebbleBridge.onAlert(context, it)
+            if (it.type != "chat" && (it.type == "sos" || it.memberId !in prefs.mutedPeople)) PebbleBridge.onAlert(context, it)
         }
         // Only ever move forward: replies from the service and the map can arrive out of order.
         if (batch.cursor > seen) prefs.eventCursor = batch.cursor
@@ -98,6 +98,7 @@ object Alerts {
                 val (title, text) = requestText(e)
                 notify(context, CHANNEL_ALERTS, eventId(e), title, text, e.memberId, hereFor = if (e.kind == "where") e.memberId else "")
             }
+            "chat" -> ChatNotify.show(context, e)
             "reminder" -> {
                 val at = if (e.kind == "leave") "Leaving ${e.place}" else "At ${e.place}"
                 notify(context, CHANNEL_ALERTS, eventId(e), e.note, "Reminder · $at", "")
@@ -202,6 +203,8 @@ object Alerts {
     }
 
     /** Opens the map centred on [memberId]. */
+    fun clearChat(context: Context, conv: String) = ChatNotify.clear(context, conv)
+
     fun openMapIntent(context: Context, memberId: String?, requestCode: Int): PendingIntent =
         PendingIntent.getActivity(
             context, requestCode,

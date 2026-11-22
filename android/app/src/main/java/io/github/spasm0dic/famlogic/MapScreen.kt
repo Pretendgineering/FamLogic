@@ -125,6 +125,7 @@ fun MapScreen(
     onFocusHandled: () -> Unit = {},
     joinCircleCode: String? = null,
     onJoinCircleHandled: () -> Unit = {},
+    onFeatures: (Set<String>) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -207,7 +208,11 @@ fun MapScreen(
                 prefs.locationModule = locationOn
                 LocationService.start(context)
             }
-            res.members.find { it.id == prefs.memberId }?.let { prefs.role = it.role }
+            res.members.find { it.id == prefs.memberId }?.let { prefs.role = it.role; prefs.access = it.access }
+            if (res.features != prefs.serverFeatures) {
+                prefs.serverFeatures = res.features
+                onFeatures(res.features)
+            }
             serverVersion = res.server.version
             trailHours = res.trailHours
             // Keep the selected person's trail up to date.
@@ -613,7 +618,7 @@ fun MapScreen(
                     "OK",
                 ) { outdatedDismissed = true }
                 !sharing -> Banner("You're not sharing your location right now.", "Resume") { setSharing(true) }
-                hasPassword == false -> Banner(
+                hasPassword == false && prefs.canUsePassword -> Banner(
                     "Set a password so you can sign back in on a new phone.",
                     "Set up",
                 ) { showSettings = true }

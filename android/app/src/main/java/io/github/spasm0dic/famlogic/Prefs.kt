@@ -197,6 +197,19 @@ class Prefs(context: Context) {
         get() = sp.getString("role", "parent") ?: "parent"
         set(v) = sp.edit { putString("role", v) }
 
+    /** admin, parent, older_child or younger_child; from the server. */
+    var access: String
+        get() = sp.getString("access", "parent") ?: "parent"
+        set(v) = sp.edit { putString("access", v) }
+
+    /** Younger children sign in with a parent's code, never a password. */
+    val canUsePassword: Boolean get() = access != "younger_child"
+
+    /** What the family's server can do, and which modules are on (its "features"). */
+    var serverFeatures: Set<String>
+        get() = sp.getStringSet("server_features", null) ?: emptySet()
+        set(v) = sp.edit { putStringSet("server_features", v) }
+
     /** The watch's look: "system" (follow the phone's dark mode), "light" or "dark". */
     var pebbleTheme: String
         get() = sp.getString("pebble_theme", "system") ?: "system"

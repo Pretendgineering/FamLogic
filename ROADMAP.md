@@ -22,18 +22,19 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Web console restructured: rail navigation with Home, Thereabouts, module pages, Family, Devices and Settings (Modules, Server, AI & API).
 - Parent/child roles on every person, set in Family.
 
-### 🔨 Phase 1: Accounts and devices
-- **Child sign-in without passwords:** a parent creates a child in the console and gets a one-time join code / QR. The child's device stays signed in; parents can re-issue or revoke it.
+### ✅ Phase 1a and 2: Roles and Chat (0.16.0)
+- Roles: admin, parent, older child (may use a password), younger child (one-time join code, no password), and family members who don't use the app. Only the main admin grants admin.
+- Web console login with your own account; parents get parent tools, admins the admin pages.
+- Chat: family chat, named groups and one-to-one, photos, read receipts, notifications with Reply, parents can read children's chats; stored in SQLite (`chat.db`).
+- App: a tab bar for the modules that are on (Map, Chat), hidden when only one is.
+
+### 🔨 Phase 1b: Devices
 - **Device registry:** each person can have several devices (phone, tablet); the console's Devices page lists them with role, app version, last seen, and Revoke.
 - **Device roles in one APK:** on first launch the app asks *Join my family* (parent or child, decided by the invite) or *Use as a family display* (shows a pairing code a parent approves in the console). See ARCHITECTURE.md → Devices.
-- **App home shell:** a bottom bar with the modules that are on (Map, Chat, Lists…); hidden while only one module is on.
 
-### ⏳ Phase 2: Chat (first new module)
-- Family group chat and one-to-one chats (children only with family members).
-- Photos (stored on the server, resized), read receipts, typing-free and simple.
-- New messages arrive through the app's existing always-on connection (no Google push), as notifications with Reply.
-- Parents can read children's chats from the console; children are told so in the app.
-- Later: quick replies from the Pebble watch, "send a message" from the Index 01 ring.
+### ⏳ Chat, next steps
+- "Message" from a person's card on the map; chat on the Pebble (quick replies) and from the Index 01 ring.
+- Delete your own messages; mute a chat.
 
 ### ⏳ Phase 3: Markdown vault and API
 - The vault folder in the data directory, Obsidian-friendly (see ARCHITECTURE.md → Vault), watched for edits made outside FamLogic.

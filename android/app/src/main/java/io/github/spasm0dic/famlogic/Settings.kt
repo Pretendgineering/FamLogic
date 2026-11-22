@@ -917,6 +917,10 @@ private fun AccountSection(prefs: Prefs, username: String, hasPassword: Boolean?
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    if (!prefs.canUsePassword) {
+        Text("You're signed in with a code from your parent, so there's no password. If you get a new phone, ask them for a new code.")
+        return
+    }
     when (hasPassword) {
         null -> Text("Loading…", style = MaterialTheme.typography.bodySmall)
         true -> Text("Signed in as $username. Use this username and your password to sign in on a new phone.")

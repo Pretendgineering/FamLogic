@@ -43,10 +43,11 @@ Defined in `server/modules.go`. Each module has an id (stable, stored), a name, 
 
 ## People, roles and devices
 
-### Roles (built)
-- Every person is a **parent** or a **child** (`role` on members; people from before roles are parents). Set in the console's Family page (`PUT /api/admin/members/{id}/role`).
-- **Parents:** full app; can use the web console (with the admin password today; see "Later" below).
-- **Children:** simpler sign-in, and (with Chat) parents can read their chats. Children can't change family settings.
+### Roles (built in 0.16.0; `server/roles.go`)
+- `role` is parent, child or dependent (doesn't use the app); `admin` (parents only) opens the console's admin pages; `passwordAllowed` makes a child an "older child". The console shows one choice: Admin / Parent / Older child / Younger child / Doesn't use the app.
+- Only the **main admin** (logged in with `ADMIN_PASSWORD`) grants or removes admin.
+- **Younger children** join with a passwordless invite and get new devices with a passwordless re-issued code (`RedeemDeviceCode`); the server refuses password sign-in and password setting for them.
+- **Console sessions** name who's logged in (`exp.m-<id>.sig`, or the original `exp.sig` for the main admin). Admin endpoints need admin; a parent's session also works on the app's own API (`device()` accepts it), which is how the console gives parents exactly what their phone shows.
 
 ### Devices and how one APK becomes the right app (Phase 1 design)
 
@@ -65,7 +66,7 @@ Every device gets its own token, stored hashed on the server, listed in **Device
 
 On Android TV the display mode is chosen automatically when the app starts on a TV (leanback launcher), and the setup screen is D-pad friendly.
 
-**Later:** parents sign in to the web console with their own username and password (instead of one shared admin password), and the admin password becomes a recovery/owner credential.
+Parents and admins already log in to the console with their own accounts (0.16.0); the admin password is the main admin's owner/recovery credential.
 
 ## Vault: family content as Markdown (Phase 3 design)
 
@@ -151,12 +152,14 @@ where: Smile Dental
 - FamLogic serves CalDAV at `/dav/` (one family calendar plus one per person), backed by the vault's `Calendar/` notes. Phones sync with DAVx⁵ (Android) or natively (iOS), plus Thunderbird and others.
 - Outside calendars (school, clubs) are added by ICS link and shown read-only.
 
-## Chat (Phase 2 design)
+## Chat (built in 0.16.0)
 
-- Conversations: the family group, plus one-to-one chats. Children can only chat with family members.
-- Messages are stored in the server's database (a chat history in a JSON file would grow too big; the plan is an embedded, pure-Go SQLite, so there's still nothing extra to run) and photos in `media/`, resized and stripped of location data.
-- Delivery uses the same always-on connection as SOS alerts (no Google push), with notifications, Reply, and read receipts.
-- Parents can read children's conversations in the console; the child's app says so.
+- `server/chat.go` (storage) and `server/chat_http.go` (API). Conversations: the **family** chat (everyone who uses the app, computed live), named **groups**, and **direct** one-to-one chats (one per pair).
+- Stored in `chat.db`, an embedded pure-Go SQLite (modernc.org/sqlite, so the container still has no CGO and nothing extra to run): tables `conversations`, `conversation_members`, `messages`, `reads`. Photos are re-encoded to JPEG (≤1600 px, which also drops EXIF location) into `media/`.
+- API: `GET /api/chat`, `POST /api/chat/direct`, `POST /api/chat/groups`, `PATCH /api/chat/{id}` (rename, add, remove/leave), `GET|POST /api/chat/{id}/messages` (JSON or multipart with a photo), `POST /api/chat/{id}/read`, `GET /api/chat-media/{name}`.
+- Delivery: each message adds a `chat` event addressed to each other participant (`Event.To`), so it travels the same long-poll stream as SOS; the app shows it as a messaging-style notification with Reply.
+- Access: participants read and post; a **parent** can read (not post in) any conversation with a child in it; the main admin reads all (`/api/admin/chat`). Parents peeking don't leave read receipts.
+- Backups: `VACUUM INTO backups/chat-<date>.db` daily.
 
 ## Family display (Phase 6 design)
 

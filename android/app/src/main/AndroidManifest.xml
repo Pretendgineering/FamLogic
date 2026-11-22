@@ -65,6 +65,9 @@
 
         <!-- "I've seen it" on SOS notifications -->
         <receiver
+            android:name=".ChatReplyReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".SeenReceiver"
             android:exported="false" />
 

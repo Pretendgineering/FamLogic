@@ -43,8 +43,10 @@ data class Member(
     /** Whether they keep a trail you can look at, and trips. */
     val trail: Boolean = false,
     val trips: Boolean = false,
-    /** "parent" or "child" (servers before roles: everyone is a parent). */
+    /** "parent", "child" or "dependent" (servers before roles: everyone is a parent). */
     val role: String = "parent",
+    /** admin, parent, older_child, younger_child or dependent. */
+    val access: String = "parent",
 )
 
 /** A note to yourself for arriving at (or leaving) a fence. */
@@ -153,6 +155,10 @@ data class AppEvent(
     /** Where it happened (SOS, check-in), or 0/0 if unknown. */
     val lat: Double = 0.0,
     val lon: Double = 0.0,
+    /** Chat: the conversation, its title ("" for one-to-one) and the message id. */
+    val conv: String = "",
+    val title: String = "",
+    val message: Long = 0,
 )
 
 /**
@@ -185,7 +191,15 @@ data class MembersResponse(
 data class JoinResponse(val token: String, val member: Member, val server: ServerInfo, val username: String)
 
 /** What an invite code is for: joining as someone new, or resetting an existing person's sign-in. */
-data class InviteInfo(val isReset: Boolean, val name: String, val username: String, val server: ServerInfo, val circle: String = "")
+data class InviteInfo(
+    val isReset: Boolean,
+    val name: String,
+    val username: String,
+    val server: ServerInfo,
+    val circle: String = "",
+    /** A younger child's code: no username or password, it just signs this device in. */
+    val passwordless: Boolean = false,
+)
 
 /** The server rejected our token: this phone was removed from the family. */
 /**
@@ -221,6 +235,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             username = o.optString("username"),
             server = parseServer(o.getJSONObject("server")),
             circle = o.optString("circle"),
+            passwordless = o.optBoolean("passwordless", false),
         )
     }
 
@@ -502,6 +517,117 @@ class Api(private val baseUrl: String, private val token: String = "") {
     private fun locationJson(l: android.location.Location) = JSONObject()
         .put("lat", l.latitude).put("lon", l.longitude).put("acc", l.accuracy.toDouble()).put("time", l.time)
 
+    // ---- chat (the chat module)
+
+    suspend fun chats(): List<ChatConversation> {
+        val arr = request("GET", "/api/chat").optJSONArray("conversations") ?: return emptyList()
+        return (0 until arr.length()).map { parseConversation(arr.getJSONObject(it)) }
+    }
+
+    suspend fun chatThread(conv: String, after: Long = 0, before: Long = 0): ChatThread {
+        val q = when {
+            after > 0 -> "?after=$after"
+            before > 0 -> "?before=$before"
+            else -> ""
+        }
+        val o = request("GET", "/api/chat/${enc(conv)}/messages$q")
+        val msgs = o.optJSONArray("messages")
+        val reads = o.optJSONObject("reads")
+        return ChatThread(
+            conversation = parseConversation(o.getJSONObject("conversation")),
+            messages = (0 until (msgs?.length() ?: 0)).map { parseMessage(msgs!!.getJSONObject(it)) },
+            reads = reads?.keys()?.asSequence()?.associateWith { reads.optLong(it) } ?: emptyMap(),
+            canPost = o.optBoolean("canPost", false),
+        )
+    }
+
+    suspend fun chatSend(conv: String, text: String): ChatMessage =
+        parseMessage(request("POST", "/api/chat/${enc(conv)}/messages", JSONObject().put("text", text)))
+
+    /** Sends a photo (JPEG bytes) with an optional caption. */
+    suspend fun chatSendPhoto(conv: String, jpeg: ByteArray, text: String): ChatMessage = withContext(Dispatchers.IO) {
+        val boundary = "famlogic" + System.nanoTime()
+        val body = java.io.ByteArrayOutputStream().apply {
+            fun line(s: String) = write((s + "\r\n").toByteArray())
+            if (text.isNotBlank()) {
+                line("--$boundary"); line("Content-Disposition: form-data; name=\"text\""); line(""); line(text)
+            }
+            line("--$boundary"); line("Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\""); line("Content-Type: image/jpeg"); line("")
+            write(jpeg); line("")
+            line("--$boundary--")
+        }.toByteArray()
+        val (code, bytes) = raw("POST", "/api/chat/${enc(conv)}/messages", body, "multipart/form-data; boundary=$boundary")
+        val text2 = String(bytes)
+        if (code >= 400) throw ApiException(code, runCatching { JSONObject(text2).getString("error") }.getOrNull() ?: "Couldn't send ($code)")
+        parseMessage(JSONObject(text2))
+    }
+
+    suspend fun chatRead(conv: String, upTo: Long) {
+        request("POST", "/api/chat/${enc(conv)}/read", JSONObject().put("upTo", upTo))
+    }
+
+    suspend fun chatDirect(to: String): ChatConversation =
+        parseConversation(request("POST", "/api/chat/direct", JSONObject().put("to", to)))
+
+    suspend fun chatGroup(name: String, members: List<String>): ChatConversation =
+        parseConversation(request("POST", "/api/chat/groups", JSONObject().put("name", name).put("members", org.json.JSONArray(members))))
+
+    suspend fun chatRename(conv: String, name: String) {
+        request("POST", "/api/chat/${enc(conv)}/update", JSONObject().put("name", name))
+    }
+
+    suspend fun chatLeave(conv: String, me: String) {
+        request("POST", "/api/chat/${enc(conv)}/update", JSONObject().put("remove", org.json.JSONArray(listOf(me))))
+    }
+
+    /** A chat photo's bytes (they need this phone's token, so they're loaded here). */
+    suspend fun chatPhoto(name: String): ByteArray {
+        val (code, bytes) = raw("GET", "/api/chat-media/${enc(name)}", null, null)
+        if (code >= 400) throw ApiException(code, "Couldn't load the photo")
+        return bytes
+    }
+
+    private fun parseMessage(o: JSONObject) = ChatMessage(
+        id = o.getLong("id"), conv = o.optString("conv"), sender = o.optString("sender"),
+        text = o.optString("text"), photo = o.optString("photo"), time = o.optLong("time"),
+    )
+
+    private fun parseConversation(o: JSONObject): ChatConversation {
+        val members = o.optJSONArray("members")
+        return ChatConversation(
+            id = o.getString("id"), kind = o.optString("kind"), title = o.optString("title"),
+            members = (0 until (members?.length() ?: 0)).map { members!!.getString(it) },
+            last = o.optJSONObject("last")?.let { parseMessage(it) },
+            unread = o.optInt("unread", 0), oversight = o.optBoolean("oversight", false),
+            createdBy = o.optString("createdBy"),
+        )
+    }
+
+    /** A request whose body and answer are raw bytes. */
+    private suspend fun raw(method: String, path: String, body: ByteArray?, contentType: String?): Pair<Int, ByteArray> =
+        withContext(Dispatchers.IO) {
+            val conn = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
+            try {
+                conn.requestMethod = method
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 60_000
+                conn.setRequestProperty("User-Agent", "FamLogic-Android/${BuildConfig.VERSION_NAME}")
+                if (token.isNotEmpty()) conn.setRequestProperty("Authorization", "Bearer $token")
+                if (body != null) {
+                    conn.doOutput = true
+                    conn.setRequestProperty("Content-Type", contentType)
+                    conn.setFixedLengthStreamingMode(body.size)
+                    conn.outputStream.use { it.write(body) }
+                }
+                val code = conn.responseCode
+                if (code == 401 && token.isNotEmpty()) throw UnauthorizedException(signedInElsewhere = false)
+                val bytes = (if (code >= 400) conn.errorStream else conn.inputStream)?.use { it.readBytes() } ?: ByteArray(0)
+                code to bytes
+            } finally {
+                conn.disconnect()
+            }
+        }
+
     /** Like [request], for endpoints that answer with a JSON list. */
     private suspend fun requestArray(method: String, path: String): org.json.JSONArray {
         val wrapped = request(method, path, wrapArray = true)
@@ -577,6 +703,9 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 duration = e.optLong("duration", 0),
                 lat = e.optDouble("lat", 0.0),
                 lon = e.optDouble("lon", 0.0),
+                conv = e.optString("conv"),
+                title = e.optString("title"),
+                message = e.optLong("message", 0),
             )
         }
         return EventBatch(events, o.getLong("cursor"), since)
@@ -606,6 +735,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             trail = o.optBoolean("trail", false),
             trips = o.optBoolean("trips", false),
             role = o.optString("role", "parent").ifEmpty { "parent" },
+            access = o.optString("access", "parent").ifEmpty { "parent" },
             loc = l?.let {
                 MemberLocation(
                     lat = it.getDouble("lat"),
@@ -623,3 +753,29 @@ class Api(private val baseUrl: String, private val token: String = "") {
         )
     }
 }
+
+// ---- chat
+
+data class ChatMessage(val id: Long, val conv: String, val sender: String, val text: String, val photo: String, val time: Long)
+
+data class ChatConversation(
+    val id: String,
+    /** "family", "group" or "direct". */
+    val kind: String,
+    /** "Family", the group's name, or the other person's name. */
+    val title: String,
+    val members: List<String>,
+    val last: ChatMessage?,
+    val unread: Int,
+    /** A parent looking at a child's chat: read only. */
+    val oversight: Boolean,
+    val createdBy: String = "",
+)
+
+data class ChatThread(
+    val conversation: ChatConversation,
+    val messages: List<ChatMessage>,
+    /** How far each person has read (message id), for "Seen by". */
+    val reads: Map<String, Long>,
+    val canPost: Boolean,
+)

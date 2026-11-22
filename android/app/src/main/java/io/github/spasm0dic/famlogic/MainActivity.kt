@@ -21,25 +21,40 @@ class MainActivity : ComponentActivity() {
     private var invite by mutableStateOf<Pair<String, String>?>(null) // server, code from an invite link
     private var focusMember by mutableStateOf<String?>(null) // from tapping an alert about someone
     private var joinCircleCode by mutableStateOf<String?>(null) // an invite link opened while signed in
+    private var features by mutableStateOf<Set<String>>(emptySet()) // what the server does, and which modules are on
+    private var tab by mutableStateOf(Tab.Map)
+    private var openChat by mutableStateOf<String?>(null) // from tapping a chat notification
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         prefs = Prefs(this)
         joined = prefs.joined
+        features = prefs.serverFeatures
         handleIntent(intent)
 
         setContent {
             FamLogicTheme {
                 if (joined) {
-                    MapScreen(
+                    HomeShell(
                         prefs = prefs,
-                        onLeft = { joined = false },
-                        focusMember = focusMember,
-                        onFocusHandled = { focusMember = null },
-                        joinCircleCode = joinCircleCode,
-                        onJoinCircleHandled = { joinCircleCode = null },
-                    )
+                        features = features,
+                        tab = tab,
+                        onTab = { tab = it },
+                    ) { current ->
+                        when (current) {
+                            Tab.Chat -> ChatScreen(prefs, openRequest = openChat, onOpenHandled = { openChat = null })
+                            Tab.Map -> MapScreen(
+                                prefs = prefs,
+                                onLeft = { joined = false },
+                                focusMember = focusMember,
+                                onFocusHandled = { focusMember = null },
+                                joinCircleCode = joinCircleCode,
+                                onJoinCircleHandled = { joinCircleCode = null },
+                                onFeatures = { features = it },
+                            )
+                        }
+                    }
                 } else {
                     SetupScreen(
                         prefs = prefs,
@@ -67,7 +82,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        intent?.getStringExtra(Alerts.EXTRA_FOCUS_MEMBER)?.let { focusMember = it }
+        intent?.getStringExtra(Alerts.EXTRA_FOCUS_MEMBER)?.let { focusMember = it; tab = Tab.Map }
+        intent?.getStringExtra(ChatNotify.EXTRA_OPEN_CHAT)?.let { openChat = it; tab = Tab.Chat }
         val data: Uri = intent?.data ?: return
         // libre360:// is from before the project was renamed; old invite links still work.
         if (data.scheme !in setOf("famlogic", "thereabouts", "libre360") || data.host != "join") return
