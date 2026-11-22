@@ -228,7 +228,7 @@ func TestAlertsOverHTTP(t *testing.T) {
 }
 
 func TestMigrateOldDataFile(t *testing.T) {
-	for _, oldName := range []string{"thereabouts.json", "libre360.json"} {
+	for _, oldName := range []string{"thereabouts.json"} {
 		t.Run(oldName, func(t *testing.T) { testMigrateFrom(t, oldName) })
 	}
 }

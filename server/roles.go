@@ -14,7 +14,7 @@ import (
 //     password (PasswordAllowed); "younger" ones join with a one-time code from a
 //     parent and stay signed in on their device;
 //   - a non-user ("dependent"): a family member who doesn't use the app, such as a
-//     baby, so chores and events can still be about them.
+//     baby, so events and reminders can still be about them.
 // On top of that, Admin gives a person the web console's admin pages (modules,
 // devices, invites, server). Only the main admin (the admin password) grants it.
 // People from before roles existed are parents.

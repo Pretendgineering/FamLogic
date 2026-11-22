@@ -71,7 +71,7 @@ In the web console, open **Family → Invite someone**, choose their role, and s
 | **Parent** | username + password | the whole app, and the console's parent tools (the map, chat, their children's chats) |
 | **Older child** | username + password | the app, without family settings |
 | **Younger child** | a one-time code from a parent | the app, without family settings. New phone: **Family → ⋯ → New join code** |
-| **Doesn't use the app** | – | part of the family for chores and events (e.g. a baby) |
+| **Doesn't use the app** | – | part of the family, so events and reminders can include them (e.g. a baby's check-ups), without signing in |
 
 Parents and admins log in to the web console with their own username and password; the main admin can also use the admin password alone.
 
@@ -97,7 +97,7 @@ Set in `docker-compose.yml` (or your container's environment).
 
 - **Update the server:** `docker compose pull && docker compose up -d` (restarting alone doesn't fetch a newer image). The running version shows in the console's Settings → Server.
 - **Backups:** everything is in the data folder: `famlogic.json` (people and settings), `chat.db` (messages) and `media/` (photos). The server keeps daily copies of the first two in `backups/`, and **Settings → Server → Download backup** saves one now. To restore, stop the container, put the files back, and start it.
-- **Coming from Thereabouts or Libre360?** See [docs/UPGRADING.md](docs/UPGRADING.md): your family, fences and settings carry over.
+- **Coming from Thereabouts?** See [docs/UPGRADING.md](docs/UPGRADING.md): your family, fences and settings carry over.
 
 ## Building from source
 

@@ -31,7 +31,7 @@ jobs:
       - name: Set up signing key
         id: signing
         env:
-          # THEREABOUTS_* and LIBRE360_* are the secret names from before the project was renamed; any works.
+          # Older secret names from before the project was renamed also work.
           KEYSTORE_B64: ${{ secrets.FAMLOGIC_KEYSTORE_B64 || secrets.THEREABOUTS_KEYSTORE_B64 || secrets.LIBRE360_KEYSTORE_B64 }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then

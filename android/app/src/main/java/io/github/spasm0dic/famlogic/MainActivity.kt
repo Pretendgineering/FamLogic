@@ -94,8 +94,8 @@ class MainActivity : ComponentActivity() {
         intent?.getStringExtra(Alerts.EXTRA_FOCUS_MEMBER)?.let { focusMember = it; tab = Tab.Map }
         intent?.getStringExtra(ChatNotify.EXTRA_OPEN_CHAT)?.let { openChat = it; tab = Tab.Chat }
         val data: Uri = intent?.data ?: return
-        // libre360:// is from before the project was renamed; old invite links still work.
-        if (data.scheme !in setOf("famlogic", "thereabouts", "libre360") || data.host != "join") return
+        // thereabouts:// is from before the project was renamed; old invite links still work.
+        if (data.scheme !in setOf("famlogic", "thereabouts") || data.host != "join") return
         val server = data.getQueryParameter("server").orEmpty()
         val code = data.getQueryParameter("code").orEmpty()
         if (server.isEmpty() && code.isEmpty()) return

@@ -46,14 +46,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- Invite links: famlogic://join?server=...&code=...
-                 (libre360:// is the project's old name; links sent before the rename still work.) -->
+                 (thereabouts:// is the project's old name; links sent before the rename still work.) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="famlogic" />
                 <data android:scheme="thereabouts" />
-                <data android:scheme="libre360" />
                 <data android:host="join" />
             </intent-filter>
         </activity>

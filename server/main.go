@@ -146,13 +146,12 @@ func main() {
 }
 
 // migrateOldDataFile renames the data file from before the project was called
-// FamLogic (thereabouts.json, and before that libre360.json), so upgrading keeps
-// everyone's family and settings.
+// FamLogic (thereabouts.json), so upgrading keeps everyone's family and settings.
 func migrateOldDataFile(dir, newPath string) error {
 	if _, err := os.Stat(newPath); err == nil {
 		return nil // already migrated (or a fresh install)
 	}
-	for _, old := range []string{"thereabouts.json", "libre360.json"} {
+	for _, old := range []string{"thereabouts.json"} {
 		oldPath := filepath.Join(dir, old)
 		if _, err := os.Stat(oldPath); err != nil {
 			continue

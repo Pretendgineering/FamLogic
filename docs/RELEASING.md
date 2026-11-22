@@ -45,12 +45,12 @@ From your computer, open the share and the `thereabouts-key` folder. In the GitH
 
 | Name | Value |
 |---|---|
-> The key and its secrets keep their original names from when the project was called Thereabouts: CI reads `FAMLOGIC_*`, then `THEREABOUTS_*`, then `LIBRE360_*` secrets, so nothing needs re-entering. A new setup can use either name.
+> The key and its secrets keep their original names from when the project was called Thereabouts: CI reads `FAMLOGIC_*` secrets, falling back to the older `THEREABOUTS_*` names, so nothing needs re-entering. A new setup can use either name.
 
 | `THEREABOUTS_KEYSTORE_B64` | the entire contents of `thereabouts-release.b64`: open it in a text editor, select all, copy. It's one long line. |
 | `THEREABOUTS_KEYSTORE_PASSWORD` | the password from step 1 |
 
-CI finds the key's alias by itself, so there's nothing else to set. (Secrets made before the rename, named `LIBRE360_KEYSTORE_B64` and `LIBRE360_KEYSTORE_PASSWORD`, still work, so there's no need to redo them.)
+CI finds the key's alias by itself, so there's nothing else to set.
 
 ### 3. Back it up, then clean up
 
