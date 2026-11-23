@@ -11,6 +11,13 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +38,20 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
         content(Tab.Map)
         return
     }
+    // The selected tab is unmistakable, even for someone who can't read yet: a solid filled icon on a
+    // bold coloured pill, a bold underlined label; the others are outlines in a muted colour.
+    val colors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+        indicatorColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
+    )
+    @Composable fun label(text: String, on: Boolean) = Text(
+        text,
+        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+        textDecoration = if (on) TextDecoration.Underline else null,
+    )
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -38,14 +59,29 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
                     selected = current == Tab.Map,
                     onClick = { if (current != Tab.Map) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); onTab(Tab.Map) },
                     // With location sharing off, the first tab is just the family's home (settings and alerts).
-                    icon = { Icon(if (locationOn) Icons.Filled.LocationOn else Icons.Filled.Home, contentDescription = null) },
-                    label = { Text(if (locationOn) "Map" else "Family") },
+                    icon = {
+                        val on = current == Tab.Map
+                        Icon(
+                            when {
+                                locationOn && on -> Icons.Filled.LocationOn
+                                locationOn -> Icons.Outlined.LocationOn
+                                on -> Icons.Filled.Home
+                                else -> Icons.Outlined.Home
+                            },
+                            contentDescription = null,
+                        )
+                    },
+                    label = { label(if (locationOn) "Map" else "Family", current == Tab.Map) },
+                    alwaysShowLabel = true,
+                    colors = colors,
                 )
                 NavigationBarItem(
                     selected = current == Tab.Chat,
                     onClick = { if (current != Tab.Chat) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); onTab(Tab.Chat) },
-                    icon = { Icon(Icons.Filled.Email, contentDescription = null) },
-                    label = { Text("Chat") },
+                    icon = { Icon(if (current == Tab.Chat) Icons.Filled.Email else Icons.Outlined.Email, contentDescription = null) },
+                    label = { label("Chat", current == Tab.Chat) },
+                    alwaysShowLabel = true,
+                    colors = colors,
                 )
             }
         },

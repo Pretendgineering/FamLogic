@@ -220,6 +220,11 @@ class Prefs(context: Context) {
         get() = sp.getStringSet("server_features", null) ?: emptySet()
         set(v) = sp.edit { putStringSet("server_features", v) }
 
+    /** Muted chats: conversation id → muted until (unix ms; Long.MAX_VALUE = until unmuted). This phone only. */
+    fun chatMutedUntil(conv: String): Long = sp.getLong("chat_muted_$conv", 0)
+    fun muteChat(conv: String, until: Long) = sp.edit { if (until <= 0) remove("chat_muted_$conv") else putLong("chat_muted_$conv", until) }
+    fun chatMuted(conv: String) = chatMutedUntil(conv) > System.currentTimeMillis()
+
     /** The watch's look: "system" (follow the phone's dark mode), "light" or "dark". */
     var pebbleTheme: String
         get() = sp.getString("pebble_theme", "system") ?: "system"

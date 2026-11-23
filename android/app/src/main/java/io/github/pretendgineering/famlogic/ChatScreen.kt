@@ -32,6 +32,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -202,7 +210,7 @@ private fun ConversationRow(c: ChatConversation, people: List<Member>, me: Strin
             val last = c.last
             val who = if (last != null && c.kind != "direct") (if (last.sender == me) "You" else people.find { it.id == last.sender }?.name ?: "") + ": " else ""
             Text(
-                if (last == null) "No messages yet" else who + last.text.ifEmpty { "📷 Photo" },
+                if (last == null) "No messages yet" else who + last.text.ifEmpty { "Photo" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -253,7 +261,7 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
     val scope = rememberCoroutineScope()
     val messages = remember(convId) { mutableStateListOf<ChatMessage>() }
     var thread by remember(convId) { mutableStateOf<ChatThread?>(null) }
-    var text by remember(convId) { mutableStateOf("") }
+    var text by androidx.compose.runtime.saveable.rememberSaveable(convId) { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -286,8 +294,7 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
             delay(3_000)
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    fun sendPhoto(uri: Uri) {
         scope.launch {
             sending = true
             try {
@@ -303,6 +310,26 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
             }
         }
     }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+        if (uri != null) sendPhoto(uri)
+    }
+    // A new photo: the camera app saves it into our private cache, then it's sent like a picked one.
+    var cameraFile by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val f = java.io.File(cameraFile)
+        if (ok && f.exists()) sendPhoto(Uri.fromFile(f))
+    }
+    fun startCamera() {
+        val dir = java.io.File(context.cacheDir, "camera").apply { mkdirs() }
+        dir.listFiles()?.forEach { if (System.currentTimeMillis() - it.lastModified() > 86_400_000) it.delete() }
+        val f = java.io.File(dir, "photo-${System.currentTimeMillis()}.jpg")
+        cameraFile = f.path
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", f)
+        runCatching { takePhoto.launch(uri) }.onFailure { error = "No camera app found" }
+    }
+    var photoMenu by remember { mutableStateOf(false) }
+    var muting by remember { mutableStateOf(false) }
+    var mutedUntil by remember(convId) { mutableStateOf(prefs.chatMutedUntil(convId)) }
     fun send() {
         val t = text.trim()
         if (t.isEmpty() || sending) return
@@ -341,11 +368,21 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
                     }
                 },
                 actions = {
-                    if (conv?.kind == "group" && canPost) {
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Group options") }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Rename group") }, onClick = { menu = false; renaming = true })
-                            DropdownMenuItem(text = { Text("Leave group") }, onClick = {
+                    if (mutedUntil > System.currentTimeMillis()) Icon(Icons.Filled.NotificationsOff, contentDescription = "Muted", modifier = Modifier.padding(end = 4.dp))
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Chat options") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (mutedUntil > System.currentTimeMillis()) {
+                            DropdownMenuItem(text = { Text("Unmute") }, leadingIcon = { Icon(Icons.Filled.Notifications, null) }, onClick = {
+                                menu = false
+                                prefs.muteChat(convId, 0)
+                                mutedUntil = 0
+                            })
+                        } else {
+                            DropdownMenuItem(text = { Text("Mute notifications…") }, leadingIcon = { Icon(Icons.Filled.NotificationsOff, null) }, onClick = { menu = false; muting = true })
+                        }
+                        if (conv?.kind == "group" && canPost) {
+                            DropdownMenuItem(text = { Text("Rename group") }, leadingIcon = { Icon(Icons.Filled.Edit, null) }, onClick = { menu = false; renaming = true })
+                            DropdownMenuItem(text = { Text("Leave group") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) }, onClick = {
                                 menu = false
                                 scope.launch { runCatching { api.chatLeave(convId, prefs.memberId) }; onBack() }
                             })
@@ -367,17 +404,36 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
                 items(reversed.size, key = { reversed[it].id }) { i ->
                     val m = reversed[i]
                     val older = reversed.getOrNull(i + 1)
+                    val newer = reversed.getOrNull(i - 1)
                     Bubble(
                         prefs, m, people, mine = m.sender == prefs.memberId, showName = conv?.kind != "direct" || conv.oversight,
                         seenBy = if (m.id == myLast?.id) seenBy else emptyList(),
+                        showAvatar = newer == null || newer.sender != m.sender || !sameDay(newer.time, m.time),
                     )
                     if (older == null || !sameDay(older.time, m.time)) DayHeader(m.time)
                 }
             }
             if (canPost) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !sending) {
-                        Text("📷", style = MaterialTheme.typography.titleLarge)
+                    Box {
+                        IconButton(onClick = { photoMenu = true }, enabled = !sending) {
+                            Icon(Icons.Filled.PhotoCamera, contentDescription = "Send a photo")
+                        }
+                        DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Take a photo") },
+                                leadingIcon = { Icon(Icons.Filled.CameraAlt, null) },
+                                onClick = { photoMenu = false; startCamera() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Choose from gallery") },
+                                leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) },
+                                onClick = {
+                                    photoMenu = false
+                                    pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                            )
+                        }
                     }
                     OutlinedTextField(
                         value = text,
@@ -401,6 +457,32 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
             }
         }
     }
+    if (muting) {
+        val now = System.currentTimeMillis()
+        val tomorrow = java.util.Calendar.getInstance().apply {
+            add(java.util.Calendar.DAY_OF_YEAR, 1); set(java.util.Calendar.HOUR_OF_DAY, 7); set(java.util.Calendar.MINUTE, 0)
+        }.timeInMillis
+        val choices = listOf("For 1 hour" to now + 3_600_000L, "For 8 hours" to now + 8 * 3_600_000L,
+            "Until 7:00 tomorrow" to tomorrow, "Until I turn it back on" to Long.MAX_VALUE)
+        AlertDialog(
+            onDismissRequest = { muting = false },
+            title = { Text("Mute this chat") },
+            text = {
+                Column {
+                    Text("No notifications from this chat. Messages still arrive, and you'll see them when you open it.", style = MaterialTheme.typography.bodyMedium)
+                    choices.forEach { (label, until) ->
+                        TextButton(onClick = {
+                            prefs.muteChat(convId, until)
+                            mutedUntil = until
+                            muting = false
+                        }) { Text(label) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { muting = false }) { Text("Cancel") } },
+        )
+    }
     if (renaming) {
         var name by remember { mutableStateOf(conv?.title.orEmpty()) }
         AlertDialog(
@@ -419,9 +501,16 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
 }
 
 @Composable
-private fun Bubble(prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boolean, showName: Boolean, seenBy: List<String>) {
+private fun Bubble(prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boolean, showName: Boolean, seenBy: List<String>, showAvatar: Boolean = true) {
     val sender = people.find { it.id == m.sender }
-    Column(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+    if (!mine) {
+        // Their picture (emoji or initial, in their colour) so you can tell who wrote it without reading.
+        Box(Modifier.padding(end = 8.dp, bottom = 18.dp).size(36.dp)) {
+            if (showAvatar) Avatar(sender?.name ?: "?", sender?.emoji.orEmpty(), sender?.color ?: "#888888", 36)
+        }
+    }
+    Column(Modifier.weight(1f).padding(vertical = 3.dp), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
         if (!mine && showName) {
             Text(sender?.name ?: "Someone", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 10.dp))
         }
@@ -442,6 +531,7 @@ private fun Bubble(prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boo
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 1.dp),
         )
+    }
     }
 }
 
@@ -483,7 +573,7 @@ private fun ChatPhoto(prefs: Prefs, name: String) {
     val b = bitmap
     if (b == null) {
         Box(Modifier.size(220.dp, 160.dp).background(Color.Black.copy(alpha = 0.08f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-            Text("📷", style = MaterialTheme.typography.headlineSmall)
+            Icon(Icons.Filled.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
         Image(

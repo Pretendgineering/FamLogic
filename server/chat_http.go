@@ -240,7 +240,7 @@ func (s *Server) handleChatPost(w http.ResponseWriter, r *http.Request, me *Memb
 func (s *Server) announce(conv *Conversation, from *Member, msg *Message, people map[string]Member) {
 	preview := msg.Text
 	if msg.Photo != "" && preview == "" {
-		preview = "📷 Photo"
+		preview = "Photo"
 	}
 	if r := []rune(preview); len(r) > 140 {
 		preview = string(r[:140]) + "…"

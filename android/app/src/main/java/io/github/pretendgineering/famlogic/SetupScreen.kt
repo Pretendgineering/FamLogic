@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -69,13 +70,13 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
             },
         )
     }
-    var server by remember(initialServer) { mutableStateOf(initialServer) }
-    var code by remember(initialCode) { mutableStateOf(initialCode) }
+    var server by rememberSaveable(initialServer) { mutableStateOf(initialServer) }
+    var code by rememberSaveable(initialCode) { mutableStateOf(initialCode) }
     var invite by remember { mutableStateOf<InviteInfo?>(null) } // set once the code is checked
-    var name by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf(prefs.username) }
-    var password by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf(prefs.username) }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirm by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()

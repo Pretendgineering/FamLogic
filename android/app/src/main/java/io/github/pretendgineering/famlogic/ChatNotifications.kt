@@ -44,7 +44,7 @@ object ChatNotify {
 
     @Synchronized
     fun show(context: Context, e: AppEvent) {
-        if (e.conv.isEmpty() || ChatState.openConversation == e.conv) return
+        if (e.conv.isEmpty() || ChatState.openConversation == e.conv || Prefs(context).chatMuted(e.conv)) return
         val sender = Person.Builder().setName(e.name).setKey(e.memberId).build()
         val list = history.getOrPut(e.conv) { mutableListOf() }
         list += NotificationCompat.MessagingStyle.Message(e.note, if (e.time > 0) e.time else System.currentTimeMillis(), sender)
