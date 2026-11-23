@@ -141,13 +141,14 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
         if (initialCode.isNotBlank() && url.isNotEmpty()) checkCode()
     }
 
-    val passwordProblem = when {
-        password.isEmpty() -> null
-        password.length < MIN_PASSWORD_LENGTH -> "At least $MIN_PASSWORD_LENGTH characters (${password.length} so far)"
-        confirm.isNotEmpty() && confirm != password -> "The passwords don't match"
-        else -> null
+    // "Don't match" only shows after tapping Join/Save, not while you're still typing.
+    var mismatch by remember { mutableStateOf(false) }
+    val passwordProblem = if (mismatch) "The passwords don't match" else null
+    val newPasswordReady = password.length >= MIN_PASSWORD_LENGTH && confirm.isNotEmpty()
+    /** Runs [action] if the two passwords match; otherwise points out the typo. */
+    fun ifPasswordsMatch(action: () -> Unit) {
+        if (confirm != password) mismatch = true else action()
     }
-    val newPasswordReady = password.length >= MIN_PASSWORD_LENGTH && confirm == password
 
     Surface(Modifier.fillMaxSize()) {
         Column(
@@ -286,10 +287,10 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
                     } else {
                         UsernameField(username, { username = it; error = null }, ContentType.NewUsername)
                     }
-                    NewPasswordFields(password, { password = it; error = null }, confirm, { confirm = it; error = null }, passwordProblem)
+                    NewPasswordFields(password, { password = it; error = null; mismatch = false }, confirm, { confirm = it; error = null; mismatch = false }, passwordProblem)
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     BusyButton("Save password and sign in", busy, enabled = newPasswordReady && (inv.username.isNotEmpty() || username.isNotBlank())) {
-                        run { signedIn(Api(url).join(code.trim(), "", username.trim(), password)) }
+                        ifPasswordsMatch { run { signedIn(Api(url).join(code.trim(), "", username.trim(), password)) } }
                     }
                     TextButton(onClick = { invite = null; error = null }) { Text("Use a different code") }
                 }
@@ -312,7 +313,7 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
                         modifier = Modifier.fillMaxWidth(),
                     )
                     UsernameField(username, { username = it; error = null }, ContentType.NewUsername)
-                    NewPasswordFields(password, { password = it; error = null }, confirm, { confirm = it; error = null }, passwordProblem)
+                    NewPasswordFields(password, { password = it; error = null; mismatch = false }, confirm, { confirm = it; error = null; mismatch = false }, passwordProblem)
                     Text(
                         "You'll use your username and password to sign back in on a new phone. A password manager is the easiest way to keep them.",
                         style = MaterialTheme.typography.bodySmall,
@@ -320,7 +321,7 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
                     )
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     BusyButton("Join", busy, enabled = newPasswordReady && username.isNotBlank() && name.isNotBlank()) {
-                        run { signedIn(Api(url).join(code.trim(), name.trim(), username.trim(), password)) }
+                        ifPasswordsMatch { run { signedIn(Api(url).join(code.trim(), name.trim(), username.trim(), password)) } }
                     }
                     TextButton(onClick = { invite = null; error = null }) { Text("Use a different code") }
                 }
@@ -386,9 +387,11 @@ fun NewPasswordFields(
     problem: String?,
     label: String = "Password",
 ) {
+    // The length rule is a neutral hint while typing, never an error.
     PasswordField(
         password, onPassword, label, ContentType.NewPassword,
-        supportingText = "At least $MIN_PASSWORD_LENGTH characters. A few random words work well.",
+        supportingText = if (password.isNotEmpty() && password.length < MIN_PASSWORD_LENGTH) "At least $MIN_PASSWORD_LENGTH characters (${password.length} so far)"
+        else "At least $MIN_PASSWORD_LENGTH characters. A few random words work well.",
     )
     PasswordField(
         confirm, onConfirm, "Confirm password", ContentType.NewPassword, ImeAction.Done,

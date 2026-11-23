@@ -989,19 +989,20 @@ private fun AccountSection(prefs: Prefs, username: String, hasPassword: Boolean?
     } else {
         PasswordField(current, { current = it; error = null }, "Current password", ContentType.Password)
     }
-    val problem = when {
-        password.isEmpty() -> null
-        password.length < MIN_PASSWORD_LENGTH -> "At least $MIN_PASSWORD_LENGTH characters (${password.length} so far)"
-        confirm.isNotEmpty() && confirm != password -> "The passwords don't match"
-        else -> null
-    }
-    NewPasswordFields(password, { password = it; error = null }, confirm, { confirm = it; error = null }, problem, label = "New password")
+    // "Don't match" only after tapping Save, not while typing.
+    var mismatch by remember { mutableStateOf(false) }
+    val problem = if (mismatch) "The passwords don't match" else null
+    NewPasswordFields(password, { password = it; error = null; mismatch = false }, confirm, { confirm = it; error = null; mismatch = false }, problem, label = "New password")
     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
-            enabled = !busy && password.length >= MIN_PASSWORD_LENGTH && confirm == password &&
+            enabled = !busy && password.length >= MIN_PASSWORD_LENGTH && confirm.isNotEmpty() &&
                 (hasPassword && current.isNotEmpty() || !hasPassword && newUsername.length >= 3),
             onClick = {
+                if (confirm != password) {
+                    mismatch = true
+                    return@Button
+                }
                 busy = true
                 error = null
                 scope.launch {
