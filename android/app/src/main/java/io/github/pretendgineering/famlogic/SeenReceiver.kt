@@ -16,6 +16,19 @@ class SeenReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val memberId = intent.getStringExtra(EXTRA_MEMBER) ?: return
         val prefs = Prefs(context)
+        if (intent.action == ACTION_NUDGE) {
+            NotificationManagerCompat.from(context).cancel(intent.getIntExtra(EXTRA_ID, 0))
+            val kind = intent.getStringExtra(EXTRA_KIND) ?: return
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    runCatching { Api(prefs.serverUrl, prefs.token).request(memberId, kind, null) }
+                } finally {
+                    pending.finish()
+                }
+            }
+            return
+        }
         if (intent.action == ACTION_HERE) {
             NotificationManagerCompat.from(context).cancel(intent.getIntExtra(EXTRA_ID, 0))
             val pending = goAsync()
@@ -44,5 +57,7 @@ class SeenReceiver : BroadcastReceiver() {
         const val EXTRA_MEMBER = "member"
         const val EXTRA_ID = "id"
         const val ACTION_HERE = "io.github.pretendgineering.famlogic.HERE"
+        const val ACTION_NUDGE = "io.github.pretendgineering.famlogic.NUDGE"
+        const val EXTRA_KIND = "kind"
     }
 }

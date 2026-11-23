@@ -1,5 +1,13 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalConfiguration
@@ -143,16 +151,12 @@ fun ChatScreen(prefs: Prefs, openRequest: String?, onOpenHandled: () -> Unit) {
     val sideBySide = tablet && config.screenWidthDp > config.screenHeightDp
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     if (conv != null) BackHandler { if (fullscreen) fullscreen = false else open = null }
+    val portrait = config.screenHeightDp >= config.screenWidthDp
     when {
-        // Phones: the list, and a chat takes the whole screen.
-        !tablet -> if (conv == null) {
-            ConversationList(prefs, people, onOpen = { open = it })
-        } else {
-            ConversationView(prefs, conv, people, onBack = { open = null })
-        }
-        // Full screen on a tablet, by choice.
-        conv != null && fullscreen -> ConversationView(
-            prefs, conv, people, onBack = { fullscreen = false }, fullscreen = true, onToggleFullscreen = { fullscreen = false },
+        // Full screen, by choice (or a phone on its side).
+        conv != null && (fullscreen || (!tablet && !portrait)) -> ConversationView(
+            prefs, conv, people, onBack = { if (fullscreen) fullscreen = false else open = null },
+            fullscreen = true, onToggleFullscreen = if (fullscreen) ({ fullscreen = false }) else null,
         )
         // Landscape tablets: the list beside the open chat.
         sideBySide -> Row(Modifier.fillMaxSize()) {
@@ -163,7 +167,8 @@ fun ChatScreen(prefs: Prefs, openRequest: String?, onOpenHandled: () -> Unit) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 if (conv == null) {
                     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.Email, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (Access.pictures) Pictures.Talk(72.dp)
+                        else Icon(Icons.Filled.Email, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Pick a chat", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp))
                     }
                 } else {
@@ -171,44 +176,28 @@ fun ChatScreen(prefs: Prefs, openRequest: String?, onOpenHandled: () -> Unit) {
                 }
             }
         }
-        // Portrait tablets: the chat pulls down like a shade over the list, which
-        // stays in view below it; tap another chat to switch, or go full screen.
-        else -> Box(Modifier.fillMaxSize()) {
-            ConversationList(prefs, people, selected = conv, onOpen = { open = if (open == it) null else it })
-            AnimatedVisibility(
-                visible = conv != null,
-                enter = slideInVertically { -it } + fadeIn(),
-                exit = slideOutVertically { -it } + fadeOut(),
-            ) {
-                var shown by remember { mutableStateOf(conv) }
-                if (conv != null) shown = conv
-                Surface(
-                    shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-                    shadowElevation = 12.dp,
-                    tonalElevation = 2.dp,
-                    modifier = Modifier.fillMaxWidth().fillMaxHeight(0.72f),
-                ) {
-                    Column {
-                        Box(Modifier.weight(1f)) {
-                            shown?.let { ConversationView(prefs, it, people, onBack = { open = null }, embedded = true, onToggleFullscreen = { fullscreen = true }) }
-                        }
-                        // The shade's handle: tap to fold it away.
-                        Box(
-                            Modifier.fillMaxWidth().clickable(onClickLabel = "Close the chat") { open = null }.padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(Modifier.size(width = 56.dp, height = 6.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.outline))
-                        }
-                    }
-                }
-            }
-        }
+        // Portrait: the list splits open at the chat you tap, the rows above slide up and
+        // the rows below are pushed down, and the chat opens in the gap, like pulling
+        // apart a stack of cards. Tap the chat's row again (or ✕) to close it up.
+        else -> ConversationList(
+            prefs, people, selected = conv, onOpen = { open = if (open == it) null else it },
+            expanded = conv,
+            panel = { id ->
+                ConversationView(prefs, id, people, onBack = { open = null }, embedded = true, onToggleFullscreen = { fullscreen = true })
+            },
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConversationList(prefs: Prefs, people: List<Member>, selected: String? = null, onOpen: (String) -> Unit) {
+private fun ConversationList(
+    prefs: Prefs, people: List<Member>, selected: String? = null, onOpen: (String) -> Unit,
+    /** Portrait: the open chat, shown in a gap that opens below its row. */
+    expanded: String? = null,
+    panel: (@Composable (String) -> Unit)? = null,
+) {
+    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var convs by remember { mutableStateOf<List<ChatConversation>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -232,7 +221,25 @@ private fun ConversationList(prefs: Prefs, people: List<Member>, selected: Strin
             }
         },
     ) { padding ->
-        LazyColumn(Modifier.padding(padding).fillMaxSize()) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
+        val viewport = maxHeight
+        // The gap's height grows from nothing (the slice) to almost the whole screen.
+        var shownPanel by remember { mutableStateOf<String?>(null) }
+        val gap = remember { Animatable(0f) }
+        LaunchedEffect(expanded) {
+            if (expanded != null) {
+                if (shownPanel != null && shownPanel != expanded) gap.animateTo(0f, tween(180))
+                shownPanel = expanded
+                val index = convs?.indexOfFirst { it.id == expanded } ?: -1
+                // The rows above slide up: the opened chat's row moves to the top.
+                launch { if (index >= 0) listState.animateScrollToItem(index + if (prefs.role == "child") 1 else 0) }
+                gap.animateTo(1f, spring(dampingRatio = 0.82f, stiffness = 320f))
+            } else if (shownPanel != null) {
+                gap.animateTo(0f, tween(220))
+                shownPanel = null
+            }
+        }
+        LazyColumn(Modifier.fillMaxSize(), state = listState) {
             if (prefs.role == "child") {
                 item {
                     Text(
@@ -248,9 +255,28 @@ private fun ConversationList(prefs: Prefs, people: List<Member>, selected: Strin
             if (list == null) {
                 item { Text("Loading…", modifier = Modifier.padding(16.dp)) }
             } else {
-                items(list, key = { it.id }) { c -> ConversationRow(c, people, prefs.memberId, selected = c.id == selected) { onOpen(c.id) } }
+                list.forEach { c ->
+                    item(key = c.id) { ConversationRow(c, people, prefs.memberId, selected = c.id == selected) { onOpen(c.id) } }
+                    if (panel != null && c.id == shownPanel) {
+                        item(key = "panel") {
+                            // The opened gap: the chat sits in it like a card pulled out of the stack.
+                            val h = (viewport - (if (Access.big) 96.dp else 72.dp) - 56.dp).coerceAtLeast(240.dp)
+                            Box(Modifier.fillMaxWidth().height(h * gap.value).clipToBounds()) {
+                                Surface(
+                                    shape = RoundedCornerShape(22.dp),
+                                    shadowElevation = 10.dp,
+                                    tonalElevation = 3.dp,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier.requiredHeight(h).fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)
+                                        .graphicsLayer { scaleX = 0.96f + 0.04f * gap.value; alpha = 0.6f + 0.4f * gap.value },
+                                ) { panel(c.id) }
+                            }
+                        }
+                    }
+                }
             }
             item { Spacer(Modifier.heightIn(min = 96.dp)) }
+        }
         }
     }
     if (newChat) {
@@ -419,6 +445,8 @@ private fun ConversationView(
             delay(3_000)
         }
     }
+    // A picked or taken photo waits here, with an ✕ to remove it, until Send.
+    var staged by androidx.compose.runtime.saveable.rememberSaveable(convId) { mutableStateOf("") }
     fun sendPhoto(uri: Uri) {
         scope.launch {
             sending = true
@@ -426,6 +454,7 @@ private fun ConversationView(
                 val jpeg = withContext(Dispatchers.IO) { shrinkPhoto(context, uri) } ?: throw IOException("Couldn't read that photo")
                 val m = api.chatSendPhoto(convId, jpeg, text.trim())
                 text = ""
+                staged = ""
                 if (messages.none { it.id == m.id }) messages += m
                 listState.animateScrollToItem(0)
             } catch (e: IOException) {
@@ -436,13 +465,13 @@ private fun ConversationView(
         }
     }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
-        if (uri != null) sendPhoto(uri)
+        if (uri != null) staged = uri.toString()
     }
     // A new photo: the camera app saves it into our private cache, then it's sent like a picked one.
     var cameraFile by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val f = java.io.File(cameraFile)
-        if (ok && f.exists()) sendPhoto(Uri.fromFile(f))
+        if (ok && f.exists()) staged = Uri.fromFile(f).toString()
     }
     fun startCamera() {
         val dir = java.io.File(context.cacheDir, "camera").apply { mkdirs() }
@@ -457,6 +486,10 @@ private fun ConversationView(
     var mutedUntil by remember(convId) { mutableStateOf(prefs.chatMutedUntil(convId)) }
     fun send() {
         val t = text.trim()
+        if (staged.isNotEmpty() && !sending) {
+            sendPhoto(Uri.parse(staged))
+            return
+        }
         if (t.isEmpty() || sending) return
         scope.launch {
             sending = true
@@ -591,11 +624,24 @@ private fun ConversationView(
                     if (older == null || !sameDay(older.time, m.time)) DayHeader(m.time)
                 }
             }
+            if (canPost && staged.isNotEmpty()) {
+                // The photo about to be sent: check it, take it away with ✕, or send it.
+                Box(Modifier.padding(start = 12.dp, top = 8.dp)) {
+                    StagedPhoto(staged, if (big) 160 else 120)
+                    Box(
+                        Modifier.align(Alignment.TopEnd).padding(4.dp).size(if (big) 44.dp else 36.dp).clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.inverseSurface)
+                            .clickable(onClickLabel = "Don't send this photo") { staged = "" },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Close, contentDescription = "Remove the photo", tint = MaterialTheme.colorScheme.inverseOnSurface) }
+                }
+            }
             if (canPost) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (Access.can("chat_photos")) Box {
                         IconButton(onClick = { photoMenu = true }, enabled = !sending, modifier = if (big) Modifier.size(64.dp) else Modifier) {
-                            Icon(Icons.Filled.PhotoCamera, contentDescription = "Send a photo", modifier = if (big) Modifier.size(36.dp) else Modifier)
+                            if (Access.pictures) Pictures.Camera(if (big) 44.dp else 32.dp)
+                            else Icon(Icons.Filled.PhotoCamera, contentDescription = "Send a photo", modifier = if (big) Modifier.size(36.dp) else Modifier)
                         }
                         DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
                             DropdownMenuItem(
@@ -621,7 +667,7 @@ private fun ConversationView(
                         maxLines = 5,
                         shape = RoundedCornerShape(24.dp),
                     )
-                    FilledIconButton(onClick = { send() }, enabled = text.isNotBlank() && !sending, modifier = Modifier.padding(start = 6.dp).then(if (big) Modifier.size(64.dp) else Modifier)) {
+                    FilledIconButton(onClick = { send() }, enabled = (text.isNotBlank() || staged.isNotEmpty()) && !sending, modifier = Modifier.padding(start = 6.dp).then(if (big) Modifier.size(64.dp) else Modifier)) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", modifier = if (big) Modifier.size(32.dp) else Modifier)
                     }
                 }
@@ -830,4 +876,33 @@ private fun shrinkPhoto(context: android.content.Context, uri: Uri): ByteArray? 
     bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
     bmp.recycle()
     return out.toByteArray()
+}
+
+/** A small preview of a photo that's about to be sent. */
+@Composable
+private fun StagedPhoto(uri: String, sizeDp: Int) {
+    val context = LocalContext.current
+    var bmp by remember(uri) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(uri) {
+        bmp = withContext(Dispatchers.IO) {
+            runCatching {
+                val jpeg = shrinkPhoto(context, Uri.parse(uri)) ?: return@runCatching null
+                android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+            }.getOrNull()
+        }
+    }
+    Box(
+        Modifier.size(sizeDp.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        val b = bmp
+        if (b != null) {
+            androidx.compose.foundation.Image(
+                b.asImageBitmap(), contentDescription = "The photo you're about to send",
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            CircularProgressIndicator(Modifier.size(28.dp))
+        }
+    }
 }

@@ -76,7 +76,8 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
     )
     val big = Access.big
-    // Tablets: the sections stay visible down the side (a rail), always on screen.
+    // Tablets: the sections stay visible down the right-hand side (a rail), where most
+    // people's thumb or pointing hand already is.
     if (LocalConfiguration.current.screenWidthDp >= 600) {
         val railColors = NavigationRailItemDefaults.colors(
             selectedIconColor = MaterialTheme.colorScheme.onPrimary,
@@ -86,15 +87,16 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
         )
         Row(Modifier.fillMaxSize()) {
-            NavigationRail(Modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical))) {
+            Box(Modifier.weight(1f).fillMaxHeight()) { content(current) }
+            NavigationRail(Modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Vertical))) {
                 Spacer(Modifier.weight(1f))
                 tabs.forEach { t ->
                     val on = current == t
-                    val (filled, outlined, label) = tabLook(t)
+                    val label = tabLook(t).third
                     NavigationRailItem(
                         selected = on,
                         onClick = { if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); onTab(t) },
-                        icon = { Icon(if (on) filled else outlined, contentDescription = null, modifier = Modifier.size(if (big) 36.dp else 24.dp)) },
+                        icon = { TabIcon(t, on, if (big) 36.dp else 24.dp) },
                         label = {
                             Text(
                                 label,
@@ -110,7 +112,6 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
                 }
                 Spacer(Modifier.weight(1f))
             }
-            Box(Modifier.weight(1f).fillMaxHeight()) { content(current) }
         }
         return
     }
@@ -119,11 +120,11 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
             NavigationBar {
                 tabs.forEach { t ->
                     val on = current == t
-                    val (filled, outlined, label) = tabLook(t)
+                    val label = tabLook(t).third
                     NavigationBarItem(
                         selected = on,
                         onClick = { if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); onTab(t) },
-                        icon = { Icon(if (on) filled else outlined, contentDescription = null, modifier = if (big) Modifier.padding(2.dp) else Modifier) },
+                        icon = { TabIcon(t, on, if (big) 32.dp else 24.dp) },
                         label = {
                             Text(
                                 label,
@@ -148,4 +149,20 @@ fun tabLook(t: Tab): Triple<ImageVector, ImageVector, String> = when (t) {
     Tab.Home -> Triple(Icons.Filled.Home, Icons.Outlined.Home, "Home")
     Tab.Map -> Triple(Icons.Filled.LocationOn, Icons.Outlined.LocationOn, Access.name("map"))
     Tab.Chat -> Triple(Icons.Filled.Email, Icons.Outlined.Email, Access.name("chat"))
+}
+
+/** A tab's icon: the usual symbol (filled when selected), or a picture for people who use picture icons. */
+@Composable
+fun TabIcon(t: Tab, on: Boolean, size: androidx.compose.ui.unit.Dp) {
+    if (Access.pictures) {
+        val s = size + 8.dp
+        when (t) {
+            Tab.Home -> Pictures.Home(s)
+            Tab.Map -> Pictures.Map(s)
+            Tab.Chat -> Pictures.Talk(s)
+        }
+        return
+    }
+    val (filled, outlined) = tabLook(t)
+    Icon(if (on) filled else outlined, contentDescription = null, modifier = Modifier.size(size))
 }

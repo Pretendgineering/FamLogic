@@ -118,7 +118,8 @@ object Alerts {
             "checkin" -> {
                 if (!prefs.notifyCheckIn || e.memberId in prefs.mutedPeople) return
                 val text = e.note.ifBlank { "Tap to see where." }
-                notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} checked in", text, e.memberId)
+                // 👍 and ❤️ buttons reply to the check-in with a nudge.
+                notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} checked in", text, e.memberId, nudgeFor = if (e.memberId != prefs.memberId) e.memberId else "")
             }
             "arrived", "left" -> {
                 val arriving = e.type == "arrived"
@@ -171,8 +172,8 @@ object Alerts {
     fun requestText(e: AppEvent): Pair<String, String> = when (e.kind) {
         "call" -> "${e.name} asks you to call them" to "Tap to see where they are."
         "where" -> "${e.name} asks where you are" to "Tap \"Send where I am\" to tell just them."
-        "heart" -> "${e.name} sent you ❤️" to "Just a nudge."
-        "thumbs" -> "${e.name} sent you 👍" to "Just a nudge."
+        "comehome" -> "${e.name}: come home 🏠" to "Tap to see where they are."
+        in Nudges.all.map { it.kind } -> "${e.name} sent you ${Nudges.byKind(e.kind)!!.emoji}" to "Just a nudge."
         "here" -> "${e.name}: here I am" to (if (e.place.isNotEmpty()) "At ${e.place}. " else "") + "Tap to see them on the map."
         else -> "${e.name} asks you to pick them up" to "Tap to see where they are."
     }
@@ -232,6 +233,8 @@ object Alerts {
         seenFor: String = "",
         /** Adds a "Send where I am" button that answers this person's "where are you?". */
         hereFor: String = "",
+        /** Adds 👍 and ❤️ buttons that send this person a nudge. */
+        nudgeFor: String = "",
     ) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -259,6 +262,17 @@ object Alerts {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             b.addAction(0, "I've seen it", seen)
+        }
+        if (nudgeFor.isNotEmpty() && Access.can("nudges")) {
+            listOf("thumbs", "heart").forEachIndexed { i, kind ->
+                val reply = PendingIntent.getBroadcast(
+                    context, id * 4 + i + 1,
+                    Intent(context, SeenReceiver::class.java).setAction(SeenReceiver.ACTION_NUDGE)
+                        .putExtra(SeenReceiver.EXTRA_MEMBER, nudgeFor).putExtra(SeenReceiver.EXTRA_ID, id).putExtra(SeenReceiver.EXTRA_KIND, kind),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                b.addAction(0, Nudges.byKind(kind)!!.emoji, reply)
+            }
         }
         if (hereFor.isNotEmpty()) {
             val here = PendingIntent.getBroadcast(

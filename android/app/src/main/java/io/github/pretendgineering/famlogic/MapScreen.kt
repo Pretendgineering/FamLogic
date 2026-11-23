@@ -1,5 +1,6 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -836,9 +837,10 @@ fun MapScreen(
             }
             }
             if (wide) {
+                // The people on the left, the map on the right.
                 Row(Modifier.weight(1f).fillMaxWidth()) {
-                    mapCard(Modifier.weight(1f).fillMaxHeight().padding(start = 12.dp, top = 4.dp, bottom = 12.dp))
                     Column(Modifier.width(400.dp).fillMaxHeight().padding(top = 4.dp)) { sidePanel() }
+                    mapCard(Modifier.weight(1f).fillMaxHeight().padding(end = 12.dp, top = 4.dp, bottom = 12.dp))
                 }
             } else {
                 mapCard(Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp))
@@ -1002,16 +1004,16 @@ private fun SosBanner(text: String, action: String?, secondAction: String? = nul
  * across), so it can't go off by accident in a pocket. Letting go early cancels.
  */
 @Composable
-internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier) {
+internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier, tall: Boolean = false) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val progress = remember { Animatable(0f) }
     var holding by remember { mutableStateOf(false) }
     val red = SOS_RED
-    val label = if (holding) "Keep holding…" else "Hold for SOS"
+    val label = if (holding) "Keep holding…" else if (Access.pictures) "Hold for help" else "Hold for SOS"
     Box(
         modifier
-            .height(52.dp)
+            .height(if (tall) 84.dp else 60.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(red.copy(alpha = 0.14f))
             .drawBehind { drawRect(red, size = size.copy(width = size.width * progress.value)) }
@@ -1050,10 +1052,16 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
             },
         contentAlignment = Alignment.Center,
     ) {
+        // A picture of an alarm (or the warning sign), so it reads without words.
+        Box(Modifier.fillMaxSize().padding(start = 14.dp), contentAlignment = Alignment.CenterStart) {
+            if (Access.pictures) Pictures.Sos(if (tall) 52.dp else 38.dp)
+            else Icon(Icons.Filled.Warning, contentDescription = null, tint = if (progress.value > .12f) Color.White else red, modifier = Modifier.size(if (tall) 36.dp else 28.dp))
+        }
         // The label is red on the pale bar and white where the fill has reached.
-        Text(label, color = red, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text(label, style = if (tall) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium, color = red, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Text(
             label,
+            style = if (tall) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
             color = Color.White,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,

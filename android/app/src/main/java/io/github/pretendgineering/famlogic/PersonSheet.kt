@@ -1,5 +1,6 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.unit.sp
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -95,8 +96,8 @@ fun PersonSheet(
                             when (kind) {
                                 "call" -> "Asked ${m.name} to call you"
                                 "where" -> "Asked ${m.name} where they are"
-                                "heart", "thumbs" -> "Sent"
-                                else -> "Asked ${m.name} to pick you up"
+                                "pickup" -> "Asked ${m.name} to pick you up"
+                                else -> "Sent"
                             }
                         } catch (e: IOException) {
                             e.message ?: "Couldn't send"
@@ -108,11 +109,17 @@ fun PersonSheet(
                     androidx.compose.material3.OutlinedButton(onClick = { ask("pickup") }, modifier = Modifier.weight(1f)) { Text("Pick me up") }
                     androidx.compose.material3.OutlinedButton(onClick = { ask("call") }, modifier = Modifier.weight(1f)) { Text("Call me") }
                 }
-                if (canNudges) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.material3.OutlinedButton(onClick = { ask("where") }, modifier = Modifier.weight(1f)) { Text("Where are you?") }
-                        androidx.compose.material3.OutlinedButton(onClick = { ask("heart") }) { Text("❤️") }
-                        androidx.compose.material3.OutlinedButton(onClick = { ask("thumbs") }) { Text("👍") }
+                if (canNudges && Access.can("nudges")) {
+                    androidx.compose.material3.OutlinedButton(onClick = { ask("where") }, modifier = Modifier.fillMaxWidth()) { Text("Where are you?") }
+                    // Nudges: one tap sends ${m.name} a little picture.
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Nudges.available(prefs.role, m.role).forEach { n ->
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = { ask(n.kind) },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                            ) { Text(n.emoji, fontSize = if (Access.big) 26.sp else 20.sp) }
+                        }
                     }
                 }
             }
