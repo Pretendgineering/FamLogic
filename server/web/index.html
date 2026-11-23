@@ -35,6 +35,7 @@
       <a href="#/meals" data-view="meals" data-module="meals"><span class="ri" data-icon="meal"></span><span>Meals</span></a>
       <span class="rail-sep"></span>
       <a href="#/family" data-view="family"><span class="ri" data-icon="people"></span><span>Family</span></a>
+      <a href="#/access" data-view="access"><span class="ri" data-icon="key"></span><span>Access</span></a>
       <a href="#/devices" data-view="devices" class="admin-only"><span class="ri" data-icon="device"></span><span>Devices</span></a>
       <a href="#/settings" data-view="settings" class="admin-only"><span class="ri" data-icon="gear"></span><span>Settings</span></a>
     </nav>
@@ -45,6 +46,7 @@
         <div class="appearance muted small">Look:
           <select id="theme-select" aria-label="Colours"></select>
           <select id="mode-select" aria-label="Light or dark"><option value="system">Same as this device</option><option value="light">Light</option><option value="dark">Dark</option></select>
+          <label class="plain-toggle"><input type="checkbox" id="plain-names"> Plain names (Map, Chat…)</label>
         </div></header>
       <div class="cards" id="home-cards"></div>
     </main>
@@ -58,11 +60,21 @@
         <div class="panel-actions admin-only"><button id="family-invite" class="tonal">+ Invite someone</button><button id="family-dependent" class="secondary">+ Someone who doesn't use the app</button></div>
         <p class="muted small admin-only">Roles: <strong>Admin</strong> (a parent who can use these admin pages; only the main admin can make admins), <strong>Parent</strong>, <strong>Older child</strong> (may use a password), <strong>Younger child</strong> (joins with a code from you, no password), and family members who <strong>don't use the app</strong> (such as a baby), so events and reminders can include them.</p>
         <ul class="list" id="family-list"></ul>
+      </div>
+    </main>
+
+    <main class="page" data-page="access" hidden>
+      <header class="page-head">
+        <h1>Access &amp; Control</h1>
+        <p class="muted">What each person can use, see and do. Open someone to set it up; changes save straight away and reach their device within a minute. Parents can use everything; children start from a preset you can change bit by bit.</p>
+      </header>
+      <div class="panel wide-panel">
         <div class="pin-row admin-only" id="pin-row">
           <div class="grow"><div class="title">Parent PIN</div><div class="sub" id="pin-status">Unlocks settings on children's devices and family displays.</div></div>
           <button type="button" class="secondary" id="pin-set">Set PIN…</button>
           <button type="button" class="link" id="pin-clear" hidden>Remove</button>
         </div>
+        <ul class="acc-list" id="access-list"></ul>
       </div>
     </main>
 
@@ -206,25 +218,6 @@
     </form>
   </dialog>
 
-  <dialog id="kid-dialog">
-    <form method="dialog" id="kid-form">
-      <h2 id="kid-title">What they can use</h2>
-      <p class="muted small">Start from a preset, then switch single things on or off. Family settings are never available to children; their device's settings open with the parent PIN.</p>
-      <div class="preset-row" id="kid-preset">
-        <label><input type="radio" name="kid-preset" value="younger"> <strong>Younger child</strong><span class="sub">Can't read yet: home, chat with big pictures, SOS</span></label>
-        <label><input type="radio" name="kid-preset" value="older"> <strong>Older child</strong><span class="sub">Everything except family settings</span></label>
-      </div>
-      <h3>Sections</h3>
-      <ul class="list modules compact" id="kid-sections"></ul>
-      <h3>Features</h3>
-      <ul class="list modules compact" id="kid-features"></ul>
-      <h3>Home screen</h3>
-      <p class="muted small">Tick the tiles to show and use the arrows to order them. Nothing ticked: the app's default.</p>
-      <ul class="list modules compact" id="kid-home"></ul>
-      <div class="row"><button type="submit">Save</button><button type="button" class="secondary" data-close>Cancel</button></div>
-    </form>
-  </dialog>
-
   <dialog id="setup-dialog">
     <form method="dialog" id="setup-form">
       <h2>Welcome to FamLogic</h2>
@@ -242,6 +235,7 @@
         <option value="parent">Parent</option>
         <option value="older_child">Older child (may use a password)</option>
         <option value="younger_child">Younger child (no password: a join code)</option>
+        <option value="grandparent">Grandparent (the app, without parents' controls)</option>
       </select></label>
       <label id="invite-circle-label">Group <select id="invite-circle"></select></label>
       <div class="row"><button type="submit">Create invite</button><button type="button" class="secondary" data-close>Cancel</button></div>
