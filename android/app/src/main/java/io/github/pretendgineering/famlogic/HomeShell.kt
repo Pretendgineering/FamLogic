@@ -1,6 +1,17 @@
 package io.github.pretendgineering.famlogic
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -76,6 +87,11 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
     )
     val big = Access.big
+    // On Home the tiles already lead everywhere, so the tab bar slides away (it comes
+    // back in every other section). If a section has no tile on Home, the bar stays.
+    val homeTiles = parseTiles(Access.home.ifEmpty { Access.defaultHome() }).map { it.id }
+    val homeCovers = tabs.all { t -> t == Tab.Home || tileFor(t) in homeTiles }
+    val showNav = current != Tab.Home || !homeCovers
     // Tablets: the sections stay visible down the right-hand side (a rail), where most
     // people's thumb or pointing hand already is.
     if (LocalConfiguration.current.screenWidthDp >= 600) {
@@ -88,6 +104,11 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
         )
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxHeight()) { content(current) }
+            AnimatedVisibility(
+                showNav,
+                enter = slideInHorizontally(tween(260)) { it } + expandHorizontally(tween(260), expandFrom = Alignment.Start),
+                exit = slideOutHorizontally(tween(220)) { it } + shrinkHorizontally(tween(220), shrinkTowards = Alignment.Start),
+            ) {
             NavigationRail(Modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Vertical))) {
                 Spacer(Modifier.weight(1f))
                 tabs.forEach { t ->
@@ -112,11 +133,17 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
                 }
                 Spacer(Modifier.weight(1f))
             }
+            }
         }
         return
     }
     Scaffold(
         bottomBar = {
+            AnimatedVisibility(
+                showNav,
+                enter = slideInVertically(tween(260)) { it } + expandVertically(tween(260), expandFrom = Alignment.Top),
+                exit = slideOutVertically(tween(220)) { it } + shrinkVertically(tween(220), shrinkTowards = Alignment.Top),
+            ) {
             NavigationBar {
                 tabs.forEach { t ->
                     val on = current == t
@@ -138,11 +165,19 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
                     )
                 }
             }
+            }
         },
     ) { padding ->
         // The screens have their own top bars; this just keeps them above the tab bar.
         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { content(current) }
     }
+}
+
+/** The home tile that opens a section. */
+private fun tileFor(t: Tab) = when (t) {
+    Tab.Home -> "home"
+    Tab.Map -> "map"
+    Tab.Chat -> "chat"
 }
 
 fun tabLook(t: Tab): Triple<ImageVector, ImageVector, String> = when (t) {

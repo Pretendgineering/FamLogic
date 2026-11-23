@@ -1005,7 +1005,7 @@ private fun SosBanner(text: String, action: String?, secondAction: String? = nul
  * across), so it can't go off by accident in a pocket. Letting go early cancels.
  */
 @Composable
-internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier, tall: Boolean = false) {
+internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier, tall: Boolean = false, tile: Boolean = false) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val progress = remember { Animatable(0f) }
@@ -1014,9 +1014,9 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
     val label = if (holding) "Keep holding…" else if (Access.pictures) "Hold for help" else "Hold for SOS"
     Box(
         modifier
-            .height(if (tall) 84.dp else 60.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(red.copy(alpha = 0.14f))
+            .then(if (tile) Modifier else Modifier.height(if (tall) 84.dp else 60.dp))
+            .clip(RoundedCornerShape(if (tile) 24.dp else 16.dp))
+            .background(red.copy(alpha = if (tile) 0.2f else 0.14f))
             .drawBehind { drawRect(red, size = size.copy(width = size.width * progress.value)) }
             .semantics { contentDescription = "SOS. Press and hold for 3 seconds to alert everyone." }
             .pointerInput(Unit) {
@@ -1053,23 +1053,33 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
             },
         contentAlignment = Alignment.Center,
     ) {
+        val style = if (tall || tile) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+        // The label is red on the pale bar and white where the fill has reached.
+        @Composable fun Label() {
+            Text(label, style = style, color = red, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Text(
+                label, style = style, color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().drawWithContent {
+                    clipRect(right = size.width * progress.value) { this@drawWithContent.drawContent() }
+                },
+            )
+        }
+        if (tile) {
+            // A home screen tile: the whole tile is the button, with the picture in the middle.
+            Column(Modifier.fillMaxSize().padding(vertical = 10.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                val s = if (tall) 64.dp else 48.dp
+                if (Access.pictures) Pictures.Sos(s + 12.dp)
+                else Icon(Icons.Filled.Warning, contentDescription = null, tint = if (progress.value > .5f) Color.White else red, modifier = Modifier.size(s))
+                Box(Modifier.fillMaxWidth().padding(top = 6.dp)) { Label() }
+            }
+            return@Box
+        }
         // A picture of an alarm (or the warning sign), so it reads without words.
         Box(Modifier.fillMaxSize().padding(start = 14.dp), contentAlignment = Alignment.CenterStart) {
             if (Access.pictures) Pictures.Sos(if (tall) 52.dp else 38.dp)
             else Icon(Icons.Filled.Warning, contentDescription = null, tint = if (progress.value > .12f) Color.White else red, modifier = Modifier.size(if (tall) 36.dp else 28.dp))
         }
-        // The label is red on the pale bar and white where the fill has reached.
-        Text(label, style = if (tall) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium, color = red, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        Text(
-            label,
-            style = if (tall) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().drawWithContent {
-                clipRect(right = size.width * progress.value) { this@drawWithContent.drawContent() }
-            },
-        )
+        Label()
     }
 }
 

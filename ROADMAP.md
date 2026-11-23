@@ -47,7 +47,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Children's settings:** none for younger children, only Customize/Account/About for older ones; the secret way in is holding the family name for 5 seconds, then the parent PIN.
 - **Home screen:** tiles in half, full-width and big sizes, dragged by a handle and resized with a corner grip; half tiles pair up or fill the row; in landscape the map sits on the right beside the tiles.
 - **Picture icons** (a tiny map, a talking face, an alarm, a house, a waving hand, a camera): the default for younger children. A bigger SOS button with an icon.
-- **Layouts:** map and navigation rail on the right; chats split the list open in portrait; photos wait with an ✕ until Send; children can't delete messages or mute chats unless a parent allows it; family chat and group icons.
+- **Layouts:** map and navigation rail on the right; chats split the list open in portrait (younger children; everyone else gets the chat full screen, since 0.22.0); photos wait with an ✕ until Send; children can't delete messages or mute chats unless a parent allows it; family chat and group icons.
 - **Settings:** Title Case, Customize (your icon, colours, names, map) third, Account second, **Control Deck** as a single switch; the app no longer draws under the status bar.
 - **Nudges:** 👍 ❤️ 👋 😊 🏠 🤠 👽 👹 (and 🍆 🍑 between grown-ups), from the app, from 👍/❤️ buttons on check-in notifications, and from the watch, which also offers them as a reply to a check-in. **FamLogic Face** watchface: serif type and the app's colour themes.
 
@@ -55,6 +55,11 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Built into the server image: Whisper (speech to text) and Piper (reading aloud), private and the same everywhere; the phone's own speech where it works better (Automatic: the Google edition uses it when present).
 - Younger children: a big push-to-talk smiley that pops and glows while held, sends what they said and reads it back; new messages read aloud; "Oops, try again!" when nothing was understood. Everyone else: a small talk button that types into the message box. A per-child switch in Access & Control.
 - Next for voice: the Pebble (hold to talk on watches with a microphone), the TV and Control Deck, and talking to your own agent (Phase 5).
+
+### ✅ Home and chat polish (0.22.0)
+- Arranging Home: tiles follow your finger and the others make room as you drag; the corner grip stretches an outline that snaps to half width, full width or big.
+- One-button tiles (SOS, Check in) are the button, edge to edge. On Home the tab bar slides away (the tiles lead everywhere); it slides back in the other sections.
+- Chats open full screen in portrait; younger children keep the split-open list, now pinned while a chat is open and edge to edge.
 
 ### ⏳ Android widgets
 - **Map snapshot** of who's where; **check in** in one tap; **SOS** (hold); **one person's card** (where, battery, last seen); **latest chat message** with Reply; **talk to Mom** (a face that opens a direct chat or push-to-talk, for kids); **quick nudges** (send ❤️ to someone); **where's my ride?** (whoever is driving to you, and how far away).

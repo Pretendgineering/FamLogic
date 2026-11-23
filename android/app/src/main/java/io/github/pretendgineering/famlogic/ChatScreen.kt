@@ -1,5 +1,8 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clipToBounds
@@ -154,8 +157,9 @@ fun ChatScreen(prefs: Prefs, openRequest: String?, onOpenHandled: () -> Unit) {
     if (conv != null) BackHandler { if (fullscreen) fullscreen = false else open = null }
     val portrait = config.screenHeightDp >= config.screenWidthDp
     when {
-        // Full screen, by choice (or a phone on its side).
-        conv != null && (fullscreen || (!tablet && !portrait)) -> ConversationView(
+        // Full screen: by choice, a phone on its side, or (except for younger children,
+        // who get the split-open list below) any open chat in portrait.
+        conv != null && (fullscreen || (!tablet && !portrait) || (!sideBySide && !Access.younger)) -> ConversationView(
             prefs, conv, people, onBack = { if (fullscreen) fullscreen = false else open = null },
             fullscreen = true, onToggleFullscreen = if (fullscreen) ({ fullscreen = false }) else null,
         )
@@ -177,15 +181,13 @@ fun ChatScreen(prefs: Prefs, openRequest: String?, onOpenHandled: () -> Unit) {
                 }
             }
         }
-        // Portrait: the list splits open at the chat you tap, the rows above slide up and
+        // Younger children, portrait: the list splits open at the chat you tap, the rows above slide up and
         // the rows below are pushed down, and the chat opens in the gap, like pulling
         // apart a stack of cards. Tap the chat's row again (or ✕) to close it up.
         else -> ConversationList(
             prefs, people, selected = conv, onOpen = { open = if (open == it) null else it },
             expanded = conv,
-            panel = { id ->
-                ConversationView(prefs, id, people, onBack = { open = null }, embedded = true, onToggleFullscreen = { fullscreen = true })
-            },
+            panel = { id -> ConversationView(prefs, id, people, onBack = { open = null }, embedded = true, slice = true) },
         )
     }
 }
@@ -217,7 +219,7 @@ private fun ConversationList(
     Scaffold(
         topBar = { TopAppBar(title = { Text(Access.name("chat")) }) },
         floatingActionButton = {
-            if (Access.can("chat_start")) {
+            if (Access.can("chat_start") && expanded == null) {
                 LargeFloatingActionButton(onClick = { newChat = true }) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
             }
         },
@@ -226,6 +228,16 @@ private fun ConversationList(
         val viewport = maxHeight
         // The gap's height grows from nothing (the slice) to almost the whole screen.
         var shownPanel by remember { mutableStateOf<String?>(null) }
+        var rowHeight by remember { mutableStateOf(if (Access.big) 96.dp else 64.dp) }
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        // Scrolling inside the open chat stays inside it: reaching the oldest or newest
+        // message never drags the list (or the chat's name) along with it.
+        val keepScroll = remember {
+            object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+                override fun onPostScroll(consumed: Offset, available: Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource) = available
+                override suspend fun onPostFling(consumed: androidx.compose.ui.unit.Velocity, available: androidx.compose.ui.unit.Velocity) = available
+            }
+        }
         val gap = remember { Animatable(0f) }
         LaunchedEffect(expanded) {
             if (expanded != null) {
@@ -240,7 +252,8 @@ private fun ConversationList(
                 shownPanel = null
             }
         }
-        LazyColumn(Modifier.fillMaxSize(), state = listState) {
+        // While a chat is open the list holds still, its name pinned at the top.
+        LazyColumn(Modifier.fillMaxSize(), state = listState, userScrollEnabled = expanded == null && shownPanel == null) {
             if (prefs.role == "child") {
                 item {
                     Text(
@@ -257,20 +270,24 @@ private fun ConversationList(
                 item { Text("Loading…", modifier = Modifier.padding(16.dp)) }
             } else {
                 list.forEach { c ->
-                    item(key = c.id) { ConversationRow(c, people, prefs.memberId, selected = c.id == selected) { onOpen(c.id) } }
+                    item(key = c.id) {
+                        val open = panel != null && c.id == shownPanel
+                        Box(if (open) Modifier.onSizeChanged { rowHeight = with(density) { it.height.toDp() } } else Modifier) {
+                            ConversationRow(c, people, prefs.memberId, selected = c.id == selected, closable = open) { onOpen(c.id) }
+                        }
+                    }
                     if (panel != null && c.id == shownPanel) {
                         item(key = "panel") {
                             // The opened gap: the chat sits in it like a card pulled out of the stack.
-                            val h = (viewport - (if (Access.big) 96.dp else 72.dp) - 56.dp).coerceAtLeast(240.dp)
-                            Box(Modifier.fillMaxWidth().height(h * gap.value).clipToBounds()) {
-                                Surface(
-                                    shape = RoundedCornerShape(22.dp),
-                                    shadowElevation = 10.dp,
-                                    tonalElevation = 3.dp,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    modifier = Modifier.requiredHeight(h).fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)
-                                        .graphicsLayer { scaleX = 0.96f + 0.04f * gap.value; alpha = 0.6f + 0.4f * gap.value },
-                                ) { panel(c.id) }
+                            // It fills everything under the chat's name, edge to edge: the list
+                            // opening up to show the chat, not a card on top of it.
+                            val h = (viewport - rowHeight).coerceAtLeast(240.dp)
+                            Box(Modifier.fillMaxWidth().height(h * gap.value).clipToBounds().nestedScroll(keepScroll)) {
+                                Column(Modifier.requiredHeight(h).fillMaxWidth().graphicsLayer { alpha = 0.4f + 0.6f * gap.value }) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                    Box(Modifier.weight(1f)) { panel(c.id) }
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                }
                             }
                         }
                     }
@@ -301,7 +318,7 @@ private fun ConversationList(
 }
 
 @Composable
-private fun ConversationRow(c: ChatConversation, people: List<Member>, me: String, selected: Boolean = false, onClick: () -> Unit) {
+private fun ConversationRow(c: ChatConversation, people: List<Member>, me: String, selected: Boolean = false, closable: Boolean = false, onClick: () -> Unit) {
     val other = if (c.kind == "direct") people.find { it.id in c.members && it.id != me } else null
     // Children who can't read yet find chats by faces: bigger pictures, and a group shows who's in it.
     val big = Access.big
@@ -359,7 +376,8 @@ private fun ConversationRow(c: ChatConversation, people: List<Member>, me: Strin
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (c.unread > 0) Badge(Modifier.padding(start = 8.dp)) { Text(c.unread.toString(), fontSize = if (big) 16.sp else 11.sp) }
+        if (closable) Icon(Icons.Filled.Close, contentDescription = "Close the chat", modifier = Modifier.padding(start = 8.dp).size(if (big) 36.dp else 26.dp))
+        else if (c.unread > 0) Badge(Modifier.padding(start = 8.dp)) { Text(c.unread.toString(), fontSize = if (big) 16.sp else 11.sp) }
     }
 }
 
@@ -404,6 +422,8 @@ private fun ConversationView(
     embedded: Boolean = false,
     fullscreen: Boolean = false,
     onToggleFullscreen: (() -> Unit)? = null,
+    /** Inside the split-open list: the chat's row above is its title, so no bar of its own. */
+    slice: Boolean = false,
 ) {
     val big = Access.big
     val context = LocalContext.current
@@ -554,8 +574,9 @@ private fun ConversationView(
         }
     }
     Scaffold(
+        contentWindowInsets = if (slice) androidx.compose.foundation.layout.WindowInsets(0) else androidx.compose.material3.ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            TopAppBar(
+            if (!slice) TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         if (embedded) Icon(Icons.Filled.Close, contentDescription = "Close the chat")

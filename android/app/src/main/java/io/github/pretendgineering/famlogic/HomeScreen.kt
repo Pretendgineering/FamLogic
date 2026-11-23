@@ -1,5 +1,15 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.key
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
@@ -215,13 +225,12 @@ fun HomeScreen(
                 when (t.id) {
                     "map" -> MapTile(prefs, members, tileUrl, tileUrlDark, attribution, cameraSeq, big, h) { onOpen(Tab.Map) }
                     "chat" -> ChatTile(chats, members, big, h) { onOpen(Tab.Chat) }
-                    "sos" -> ElevatedCard(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().height(h)) {
-                        Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.Center) {
-                            if (big) Text("Hold the red button if you need help", Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.titleMedium)
-                            HoldForSosBar(onTriggered = { Sos.send(context, scope, end = false); sosActive = true }, modifier = Modifier.fillMaxWidth(), tall = big)
-                        }
-                    }
-                    "checkin" -> SimpleTile(if (Access.pictures) "I'm here!" else "Check in", "Let everyone know you're OK", h, big,
+                    // One-button tiles: the tile is the button.
+                    "sos" -> HoldForSosBar(
+                        onTriggered = { Sos.send(context, scope, end = false); sosActive = true },
+                        modifier = Modifier.fillMaxWidth().height(h), tall = big, tile = true,
+                    )
+                    "checkin" -> ButtonTile(if (Access.pictures) "I'm here!" else "Check in", h, big,
                         picture = { Pictures.HereIAm(it) }, icon = Icons.Filled.CheckCircle) { confirmCheckIn = true }
                     "calendar" -> SimpleTile(Access.name("calendar"), "Coming soon", h, big, icon = Icons.Filled.DateRange) {}
                     "todos" -> SimpleTile(Access.name("todos"), "Coming soon", h, big, icon = Icons.AutoMirrored.Filled.List) {}
@@ -310,146 +319,263 @@ private fun rowsOf(tiles: List<HomeTile>): List<List<HomeTile>> {
 class TileEdit(val onChange: (List<HomeTile>) -> Unit, val hidden: List<String>)
 
 /**
- * The tiles, in rows. While arranging: press and hold a tile's handle (☰) and drag
- * it to a new place; drag the corner grip sideways for half or full width, and down
- * or up for big or normal height; ✕ takes a tile off, and the + chips add one back.
+ * The tiles, in rows. While arranging, the tiles follow your finger: press and hold
+ * a tile (or grab its ☰ handle straight away) and drag it, and the others make room
+ * as you go. Drag the corner grip and an outline stretches with your finger, the
+ * tile snapping to half width, full width or big as you pass each size (a tap on
+ * the grip steps through them). ✕ takes a tile off; the + chips add one back.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier: Modifier, tile: @Composable (HomeTile, Dp) -> Unit) {
     val gap = 12.dp
-    val bounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    val pad = 12.dp
+    // Where everything is on screen (root coordinates), for the gestures.
+    val bounds = remember { mutableStateMapOf<String, Rect>() }
+    val handles = remember { mutableStateMapOf<String, Rect>() }
+    val grips = remember { mutableStateMapOf<String, Rect>() }
+    val closes = remember { mutableStateMapOf<String, Rect>() }
+    var boardAt by remember { mutableStateOf(Offset.Zero) }
+    var boardSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     var dragging by remember { mutableStateOf<String?>(null) }
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var resizing by remember { mutableStateOf<String?>(null) }
+    var finger by remember { mutableStateOf(Offset.Zero) } // root coordinates
+    var grab by remember { mutableStateOf(Offset.Zero) }   // where in the tile it was picked up
+    var edge by remember { mutableStateOf(0f) }            // auto-scroll speed near the top or bottom
+    val scroll = rememberScrollState()
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val step = with(density) { 56.dp.toPx() }
+    val current by rememberUpdatedState(tiles)
+    val editing by rememberUpdatedState(edit)
+    var skip by remember { mutableStateOf<String?>(null) }
+    // A tile on the right-hand side stretches leftwards (from its right edge), others rightwards.
+    var anchorRight by remember { mutableStateOf(false) }
+    fun span(r: Rect): Pair<Float, Float> {
+        val a = if (anchorRight) r.right else r.left
+        return minOf(a, finger.x) to maxOf(a, finger.x)
+    }
+
     fun move(id: String, to: String) {
-        val list = tiles.toMutableList()
+        val list = current.toMutableList()
         val from = list.indexOfFirst { it.id == id }
         val target = list.indexOfFirst { it.id == to }
         if (from < 0 || target < 0 || from == target) return
         list.add(target, list.removeAt(from))
-        edit?.onChange?.invoke(list)
+        editing?.onChange?.invoke(list)
     }
     fun resize(id: String, size: String) {
         if (id == "map" && size == "half") return
-        edit?.onChange?.invoke(tiles.map { if (it.id == id) it.copy(size = size) else it })
+        if (current.firstOrNull { it.id == id }?.size == size) return
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        editing?.onChange?.invoke(current.map { if (it.id == id) it.copy(size = size) else it })
     }
-    Column(
-        modifier.verticalScroll(rememberScrollState()).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(gap),
+    // Dragging: whichever tile is under the finger trades places with the one being moved.
+    fun follow() {
+        val id = dragging ?: return
+        skip?.let { s -> if (bounds[s]?.contains(finger) != true) skip = null }
+        if (bounds[id]?.contains(finger) == true) return
+        val over = bounds.entries.firstOrNull { (k, r) -> k != id && k != skip && r.contains(finger) }?.key ?: return
+        skip = over
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        move(id, over)
+    }
+    // Resizing: the outline from the tile's corner to the finger picks the size.
+    fun stretch() {
+        val id = resizing ?: return
+        val r = bounds[id] ?: return
+        val unitPx = with(density) { unit.toPx() }
+        val full = boardSize.width - with(density) { (pad * 2).toPx() }
+        val (l, rr) = span(r)
+        val w = rr - l
+        val h = finger.y - r.top
+        resize(id, when {
+            h > unitPx * 1.5f -> "big"
+            w < full * 0.7f && id != "map" -> "half"
+            else -> "wide"
+        })
+    }
+    // Near the top or bottom while dragging, the board scrolls by itself.
+    LaunchedEffect(dragging) {
+        if (dragging == null) return@LaunchedEffect
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { }
+            if (edge != 0f) { scroll.scrollBy(edge); follow() }
+        }
+    }
+
+    val gestures = if (edit == null) Modifier else Modifier.pointerInput(Unit) {
+        val slop = viewConfiguration.touchSlop
+        val hold = viewConfiguration.longPressTimeoutMillis
+        val zone = 72.dp.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val at = boardAt + down.position
+            if (closes.values.any { it.contains(at) }) return@awaitEachGesture // ✕ handles itself
+            val grip = grips.entries.firstOrNull { it.value.contains(at) }?.key
+            if (grip != null) {
+                // Resize: on the first movement the outline appears and follows the finger.
+                var moved = false
+                while (true) {
+                    val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                    if (!c.pressed) { c.consume(); break }
+                    if (!moved && (c.position - down.position).getDistance() > slop) {
+                        moved = true
+                        anchorRight = (bounds[grip]?.center?.x ?: 0f) > boardAt.x + boardSize.width / 2f + 8f
+                        resizing = grip
+                    }
+                    if (moved) { c.consume(); finger = boardAt + c.position; stretch() }
+                }
+                if (!moved) {
+                    // A tap: half → full width → big → half.
+                    val t = current.firstOrNull { it.id == grip }
+                    if (t != null) resize(grip, when (t.size) { "half" -> "wide"; "wide" -> "big"; else -> if (grip == "map") "wide" else "half" })
+                }
+                resizing = null
+                return@awaitEachGesture
+            }
+            val handle = handles.entries.firstOrNull { it.value.contains(at) }?.key
+            val id = handle ?: bounds.entries.firstOrNull { it.value.contains(at) }?.key ?: return@awaitEachGesture
+            if (handle == null) {
+                // Anywhere else on a tile: press and hold (moving first is a scroll).
+                var held = true
+                val result = withTimeoutOrNull(hold) {
+                    while (true) {
+                        val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+                        if (c == null || !c.pressed || (c.position - down.position).getDistance() > slop) { held = false; break }
+                    }
+                }
+                if (result != null || !held) return@awaitEachGesture
+            }
+            dragging = id
+            finger = at
+            grab = at - (bounds[id]?.topLeft ?: at)
+            skip = null
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            while (true) {
+                val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                c.consume()
+                if (!c.pressed) break
+                finger = boardAt + c.position
+                edge = when {
+                    c.position.y < zone -> -(zone - c.position.y) / 4f
+                    c.position.y > size.height - zone -> (c.position.y - (size.height - zone)) / 4f
+                    else -> 0f
+                }
+                follow()
+            }
+            edge = 0f
+            dragging = null
+        }
+    }
+
+    Box(
+        modifier
+            .onGloballyPositioned { boardAt = it.positionInRoot(); boardSize = it.size }
+            .then(gestures),
     ) {
-        rowsOf(tiles).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                row.forEach { t ->
-                    val h = if (t.size == "big") unit * 2 + gap else unit
-                    val isDragged = dragging == t.id
-                    Box(
-                        Modifier.weight(1f)
-                            .onGloballyPositioned { bounds[t.id] = it.boundsInRoot() }
-                            .zIndex(if (isDragged) 1f else 0f)
-                            .graphicsLayer {
-                                if (isDragged) {
-                                    translationX = dragOffset.x; translationY = dragOffset.y
-                                    scaleX = 1.04f; scaleY = 1.04f; shadowElevation = 24f
-                                }
-                            },
-                    ) {
-                        tile(t, h)
-                        if (edit != null) {
-                            // Covers the tile so a tap doesn't open it while arranging.
+        Column(
+            Modifier.fillMaxSize().verticalScroll(scroll).padding(pad),
+            verticalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            rowsOf(tiles).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    row.forEach { t ->
+                        key(t.id) {
+                            val h = if (t.size == "big") unit * 2 + gap else unit
+                            val isDragged = dragging == t.id
+                            DisposableEffect(t.id) { onDispose { bounds.remove(t.id); handles.remove(t.id); grips.remove(t.id); closes.remove(t.id) } }
                             Box(
-                                Modifier.matchParentSize().clip(RoundedCornerShape(24.dp))
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = if (isDragged) .18f else .08f))
-                                    .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp))
-                                    .clickable(enabled = false) {},
-                            )
-                            // The handle: press, hold and drag.
-                            Box(
-                                Modifier.align(Alignment.TopStart).padding(6.dp).size(44.dp).clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                                    .pointerInput(t.id) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = { dragging = t.id; dragOffset = Offset.Zero; haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
-                                            onDrag = { change, amount -> change.consume(); dragOffset += amount },
-                                            onDragEnd = {
-                                                val start = bounds[t.id]
-                                                if (start != null) {
-                                                    val point = start.center + dragOffset
-                                                    bounds.entries.firstOrNull { (id, r) -> id != t.id && r.contains(point) }?.let { move(t.id, it.key) }
-                                                }
-                                                dragging = null
-                                                dragOffset = Offset.Zero
-                                            },
-                                            onDragCancel = { dragging = null; dragOffset = Offset.Zero },
-                                        )
+                                Modifier.weight(1f)
+                                    .onGloballyPositioned { bounds[t.id] = it.boundsInRoot() }
+                                    .zIndex(if (isDragged) 1f else 0f)
+                                    .graphicsLayer {
+                                        if (isDragged) {
+                                            // Glued to the finger, wherever the tile's slot is now.
+                                            val b = bounds[t.id]
+                                            if (b != null) { translationX = finger.x - grab.x - b.left; translationY = finger.y - grab.y - b.top }
+                                            scaleX = 1.05f; scaleY = 1.05f; shadowElevation = 28f
+                                        }
                                     },
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.DragHandle, contentDescription = "Hold and drag to move", tint = MaterialTheme.colorScheme.onPrimary) }
-                            // Take it off the home screen.
-                            Box(
-                                Modifier.align(Alignment.TopEnd).padding(6.dp).size(40.dp).clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .clickable(onClickLabel = "Remove") { edit.onChange(tiles.filter { it.id != t.id }) },
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.Close, contentDescription = "Remove from home") }
-                            // The size grip: drag sideways for half/full width, down/up for big/normal.
-                            var resizeDrag by remember { mutableStateOf(Offset.Zero) }
-                            Box(
-                                Modifier.align(Alignment.BottomEnd).padding(6.dp).size(44.dp).clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                                    .pointerInput(t.id, t.size) {
-                                        detectDragGestures(
-                                            onDragStart = { resizeDrag = Offset.Zero },
-                                            onDrag = { change, amount -> change.consume(); resizeDrag += amount },
-                                            onDragEnd = {
-                                                val d = resizeDrag
-                                                val size = when {
-                                                    d.y > step -> "big"
-                                                    d.y < -step && t.size == "big" -> "wide"
-                                                    d.x > step && t.size == "half" -> "wide"
-                                                    d.x < -step && t.size != "half" -> "half"
-                                                    else -> null
-                                                }
-                                                if (size != null && size != t.size) {
-                                                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                                    resize(t.id, size)
-                                                }
-                                            },
-                                        )
-                                    }
-                                    // A tap also works: half → full width → big → half.
-                                    .clickable(onClickLabel = "Change size") {
-                                        val next = when (t.size) { "half" -> "wide"; "wide" -> "big"; else -> if (t.id == "map") "wide" else "half" }
-                                        resize(t.id, next)
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.OpenInFull, contentDescription = "Drag or tap to resize", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp)) }
+                            ) {
+                                tile(t, h)
+                                if (edit != null) EditChrome(t.id, isDragged || resizing == t.id, edit, tiles, handles, grips, closes)
+                            }
                         }
                     }
                 }
             }
-        }
-        if (edit != null) {
-            if (edit.hidden.isNotEmpty()) Text("Add to home", style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                edit.hidden.forEach { id ->
-                    androidx.compose.material3.AssistChip(
-                        onClick = { edit.onChange(tiles + parseTiles(listOf(id))) },
-                        label = { Text(Access.name(id)) },
-                        leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    )
+            if (edit != null) {
+                if (edit.hidden.isNotEmpty()) Text("Add to home", style = MaterialTheme.typography.titleMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    edit.hidden.forEach { id ->
+                        androidx.compose.material3.AssistChip(
+                            onClick = { edit.onChange(tiles + parseTiles(listOf(id))) },
+                            label = { Text(Access.name(id)) },
+                            leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                        )
+                    }
                 }
+                Text(
+                    "Press and hold a tile, then drag it where you want it. Drag the corner grip to stretch a tile: " +
+                        "narrow for half width, wide for the full width, or down for a big tile. Two half-width tiles sit side by side.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Text(
-                "Hold ☰ and drag to move a tile. Drag the corner grip sideways for half or full width, or down for a big tile (or tap it). " +
-                    "Two half-width tiles sit side by side; one on its own fills the row.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        }
+        // The stretch outline, from the tile's top-left corner to the finger.
+        val r = resizing?.let { bounds[it] }
+        if (r != null) {
+            val min = with(density) { 56.dp.toPx() }
+            val (l, rr) = span(r)
+            val w = (rr - l).coerceAtLeast(min)
+            val hh = (finger.y - r.top).coerceAtLeast(min)
+            val left = if (anchorRight) rr - w else l
+            val color = MaterialTheme.colorScheme.primary
+            Canvas(Modifier.fillMaxSize()) {
+                val o = Offset(left, r.top) - boardAt
+                drawRoundRect(color.copy(alpha = .12f), o, androidx.compose.ui.geometry.Size(w, hh), androidx.compose.ui.geometry.CornerRadius(24.dp.toPx()))
+                drawRoundRect(
+                    color, o, androidx.compose.ui.geometry.Size(w, hh), androidx.compose.ui.geometry.CornerRadius(24.dp.toPx()),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(18f, 12f))),
+                )
+            }
         }
     }
+}
+
+/** While arranging: a tint over the tile (so it doesn't open), the ☰ handle, ✕ and the size grip. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.EditChrome(
+    id: String, active: Boolean, edit: TileEdit, tiles: List<HomeTile>,
+    handles: MutableMap<String, Rect>, grips: MutableMap<String, Rect>, closes: MutableMap<String, Rect>,
+) {
+    Box(
+        Modifier.matchParentSize().clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = if (active) .18f else .08f))
+            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp))
+            // Takes the touches so the tile underneath (an SOS button, say) never fires.
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
+    )
+    Box(
+        Modifier.align(Alignment.TopStart).padding(6.dp).size(44.dp).clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .onGloballyPositioned { handles[id] = it.boundsInRoot() },
+        contentAlignment = Alignment.Center,
+    ) { Icon(Icons.Filled.DragHandle, contentDescription = "Hold and drag to move", tint = MaterialTheme.colorScheme.onPrimary) }
+    Box(
+        Modifier.align(Alignment.TopEnd).padding(6.dp).size(40.dp).clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .onGloballyPositioned { closes[id] = it.boundsInRoot() }
+            .clickable(onClickLabel = "Remove") { edit.onChange(tiles.filter { it.id != id }) },
+        contentAlignment = Alignment.Center,
+    ) { Icon(Icons.Filled.Close, contentDescription = "Remove from home") }
+    Box(
+        Modifier.align(Alignment.BottomEnd).padding(6.dp).size(48.dp).clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .onGloballyPositioned { grips[id] = it.boundsInRoot() },
+        contentAlignment = Alignment.Center,
+    ) { Icon(Icons.Filled.OpenInFull, contentDescription = "Drag to stretch, or tap to change size", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(22.dp)) }
 }
 
 @Composable
@@ -535,6 +661,29 @@ private fun ChatTile(chats: List<ChatConversation>, members: List<Member>, big: 
                     }
                 }
             }
+        }
+    }
+}
+
+/** A tile that does one thing: the whole tile is the button, in the theme's colour. */
+@Composable
+private fun ButtonTile(
+    title: String, height: Dp, big: Boolean,
+    picture: (@Composable (Dp) -> Unit)? = null, icon: ImageVector, onClick: () -> Unit,
+) {
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shadowElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth().height(height),
+    ) {
+        Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            val s = if (big) 64.dp else 48.dp
+            if (Access.pictures && picture != null) picture(s + 12.dp)
+            else Icon(icon, contentDescription = null, modifier = Modifier.size(s))
+            Text(title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
