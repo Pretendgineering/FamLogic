@@ -629,6 +629,11 @@ class Api(private val baseUrl: String, private val token: String = "") {
         request("POST", "/api/chat/${enc(conv)}/update", JSONObject().put("name", name))
     }
 
+    /** Sets the family chat's (parents) or a group's icon. */
+    suspend fun chatSetIcon(conv: String, emoji: String, color: String) {
+        request("POST", "/api/chat/${enc(conv)}/update", JSONObject().put("emoji", emoji).put("color", color))
+    }
+
     suspend fun chatLeave(conv: String, me: String) {
         request("POST", "/api/chat/${enc(conv)}/update", JSONObject().put("remove", org.json.JSONArray(listOf(me))))
     }
@@ -654,6 +659,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
             unread = o.optInt("unread", 0), oversight = o.optBoolean("oversight", false),
             createdBy = o.optString("createdBy"),
             status = o.optString("status"),
+            emoji = o.optString("emoji"),
+            color = o.optString("color"),
         )
     }
 
@@ -826,6 +833,9 @@ data class ChatConversation(
     val createdBy: String = "",
     /** "" (open), "pending" (waiting for a parent's OK), "paused" or "blocked". */
     val status: String = "",
+    /** The family chat's or a group's icon ("" = the default). */
+    val emoji: String = "",
+    val color: String = "",
 )
 
 data class ChatThread(

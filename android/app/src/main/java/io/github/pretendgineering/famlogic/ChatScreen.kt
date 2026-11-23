@@ -1,5 +1,6 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.requiredHeight
@@ -313,6 +314,9 @@ private fun ConversationRow(c: ChatConversation, people: List<Member>, me: Strin
         verticalAlignment = Alignment.CenterVertically,
     ) {
         when {
+            // A chosen icon (the family chat's, or a group's).
+            c.kind != "direct" && (c.emoji.isNotEmpty() || c.color.isNotEmpty()) ->
+                Avatar(c.title, c.emoji, c.color.ifEmpty { "#6F5AA8" }, size)
             c.kind == "family" -> Box(
                 Modifier.size(size.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center,
@@ -412,6 +416,7 @@ private fun ConversationView(
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var iconPicking by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<ChatMessage?>(null) }
     val listState = rememberLazyListState()
     val api = remember { Api(prefs.serverUrl, prefs.token) }
@@ -551,7 +556,8 @@ private fun ConversationView(
                         }
                     }
                     val canMute = Access.can("chat_mute")
-                    if (canMute || moderator || (conv?.kind == "group" && canPost)) {
+                    val canIcon = (conv?.kind == "family" && prefs.role == "parent") || (conv?.kind == "group" && canPost)
+                    if (canMute || moderator || canIcon || (conv?.kind == "group" && canPost)) {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Chat options") }
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -565,6 +571,9 @@ private fun ConversationView(
                             })
                         } else {
                             DropdownMenuItem(text = { Text("Mute notifications…") }, leadingIcon = { Icon(Icons.Filled.NotificationsOff, null) }, onClick = { menu = false; muting = true })
+                        }
+                        if (canIcon) {
+                            DropdownMenuItem(text = { Text("Change icon…") }, leadingIcon = { Icon(Icons.Filled.Face, null) }, onClick = { menu = false; iconPicking = true })
                         }
                         if (moderator && conv != null) {
                             HorizontalDivider()
@@ -681,6 +690,23 @@ private fun ConversationView(
                 )
             }
         }
+    }
+    if (iconPicking && conv != null) {
+        IconPickerDialog(
+            conv.title, conv.emoji, conv.color.ifEmpty { "#6F5AA8" },
+            onSave = { e, c ->
+                iconPicking = false
+                scope.launch {
+                    try {
+                        api.chatSetIcon(convId, e, c)
+                        thread = api.chatThread(convId, after = messages.lastOrNull()?.id ?: 0)
+                    } catch (ex: Exception) {
+                        error = ex.message
+                    }
+                }
+            },
+            onDismiss = { iconPicking = false },
+        )
     }
     if (confirmDelete) {
         AlertDialog(

@@ -60,6 +60,9 @@ type Conversation struct {
 	// "pending" (a child's new group, waiting for a parent's OK), "paused" (read
 	// only) or "blocked" (hidden from the children in it).
 	Status string `json:"status,omitempty"`
+	// The chat's icon (family chat and groups): an emoji and a colour; "" = the default.
+	Emoji string `json:"emoji,omitempty"`
+	Color string `json:"color,omitempty"`
 }
 
 const (
@@ -122,6 +125,13 @@ INSERT OR IGNORE INTO conversations (id, kind, name, created_at) VALUES ('family
 		db.Close()
 		return nil, err
 	}
+	// Added in 0.20: an icon (emoji and colour) for the family chat and groups.
+	for _, col := range []string{"emoji", "color"} {
+		if _, err := db.Exec(`ALTER TABLE conversations ADD COLUMN ` + col + ` TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			db.Close()
+			return nil, err
+		}
+	}
 	// Added in 0.19: parents' approval and moderation.
 	if _, err := db.Exec(`ALTER TABLE conversations ADD COLUMN status TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		db.Close()
@@ -143,8 +153,8 @@ func (c *ChatStore) Backup(path string) error {
 
 func (c *ChatStore) conversation(id string, users []string) (*Conversation, error) {
 	var conv Conversation
-	err := c.db.QueryRow(`SELECT id, kind, name, created_by, created_at, status FROM conversations WHERE id = ?`, id).
-		Scan(&conv.ID, &conv.Kind, &conv.Name, &conv.CreatedBy, &conv.CreatedAt, &conv.Status)
+	err := c.db.QueryRow(`SELECT id, kind, name, created_by, created_at, status, emoji, color FROM conversations WHERE id = ?`, id).
+		Scan(&conv.ID, &conv.Kind, &conv.Name, &conv.CreatedBy, &conv.CreatedAt, &conv.Status, &conv.Emoji, &conv.Color)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -286,6 +296,12 @@ func (c *ChatStore) RemoveFromGroup(id, member string) error {
 // ForgetMember removes someone who left the family from every group and direct chat.
 func (c *ChatStore) ForgetMember(member string) error {
 	_, err := c.db.Exec(`DELETE FROM conversation_members WHERE member_id = ?`, member)
+	return err
+}
+
+// SetIcon sets a family or group chat's emoji and colour.
+func (c *ChatStore) SetIcon(id, emoji, color string) error {
+	_, err := c.db.Exec(`UPDATE conversations SET emoji = ?, color = ? WHERE id = ? AND kind != 'direct'`, emoji, color, id)
 	return err
 }
 

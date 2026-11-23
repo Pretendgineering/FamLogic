@@ -1,4 +1,4 @@
-// FamLogic Family watchface: the time, and a grid of up to 8 people below it.
+// FamLogic Face, the watchface: the time, and a grid of up to 8 people below it.
 // Each person is their initial in their colour, ringed by what they're doing
 // (amber driving, green moving, purple still, grey not heard from lately), next to
 // one word for where they are ("Home", "Driving", "Out", "3h"). Long fence names
@@ -6,14 +6,15 @@
 // someone's SOS the whole face turns red with their name and last known place.
 //
 // The phone app sends: K_TEXT "S,ff8800,t,Home;M,3355ff,d,Driving;" (initial,
-// colour, state, label), K_FLAGS (16 = light theme), and for an SOS K_NAME and
+// colour, state, label), K_FLAGS (16 = light theme), K_NUM (the colour theme, as in
+// the app: 0 Default, 1 Warm paper, 2 Forest, 3 Ocean, 4 High contrast), and for an SOS K_NAME and
 // K_STATUS. Keep in step with pebble/PebbleBridge.kt.
 #include <pebble.h>
 
 enum { K_CMD = 0, K_NAME = 4, K_STATUS = 5, K_FLAGS = 7, K_TEXT = 8, K_KIND = 9, K_NUM = 10 };
 enum { C_FACE = 5, C_HELLO = 20 };
 enum { M_LIGHT = 16 };
-enum { P_LINE = 1, P_FLAGS = 2, P_SOS_NAME = 3, P_SOS_WHERE = 4 };
+enum { P_LINE = 1, P_FLAGS = 2, P_SOS_NAME = 3, P_SOS_WHERE = 4, P_THEME = 5 };
 
 #define MAX_PEOPLE 8
 #define MARQUEE_FRAMES 150 // ~10 s at 15 fps
@@ -32,6 +33,7 @@ static Layer *s_clock, *s_grid, *s_labels[MAX_PEOPLE], *s_sos;
 static Person s_people[MAX_PEOPLE];
 static int s_count;
 static bool s_light;
+static int s_theme; // the app's colour theme
 static char s_time_buf[8], s_date_buf[24];
 static char s_sos_name[25], s_sos_where[64];
 static AppTimer *s_marquee;
@@ -39,9 +41,28 @@ static int s_frame = -1; // -1 = not scrolling
 
 // ---------------------------------------------------------------- look
 
+// The app's themes, in the watch's colours: background, text and accent, dark then light.
+// Default is a muted Dracula (deep navy and lavender), like the app and the console.
+#if defined(PBL_COLOR)
+static const uint8_t THEMES[5][2][3] = {
+  {{GColorOxfordBlueARGB8, GColorWhiteARGB8, GColorLavenderIndigoARGB8}, {GColorWhiteARGB8, GColorOxfordBlueARGB8, GColorIndigoARGB8}},
+  {{GColorBlackARGB8, GColorPastelYellowARGB8, GColorMelonARGB8}, {GColorPastelYellowARGB8, GColorBlackARGB8, GColorDarkCandyAppleRedARGB8}},
+  {{GColorDarkGreenARGB8, GColorWhiteARGB8, GColorMintGreenARGB8}, {GColorWhiteARGB8, GColorDarkGreenARGB8, GColorIslamicGreenARGB8}},
+  {{GColorOxfordBlueARGB8, GColorWhiteARGB8, GColorPictonBlueARGB8}, {GColorCelesteARGB8, GColorOxfordBlueARGB8, GColorCobaltBlueARGB8}},
+  {{GColorBlackARGB8, GColorWhiteARGB8, GColorYellowARGB8}, {GColorWhiteARGB8, GColorBlackARGB8, GColorBlueARGB8}},
+};
+static GColor theme_color(int i) {
+  int t = (s_theme >= 0 && s_theme < 5) ? s_theme : 0;
+  return (GColor){.argb = THEMES[t][s_light ? 1 : 0][i]};
+}
+static GColor bg(void) { return theme_color(0); }
+static GColor fg(void) { return theme_color(1); }
+static GColor accent(void) { return theme_color(2); }
+#else
 static GColor bg(void) { return s_light ? GColorWhite : GColorBlack; }
 static GColor fg(void) { return s_light ? GColorBlack : GColorWhite; }
-static GColor accent(void) { return PBL_IF_COLOR_ELSE(s_light ? GColorIndigo : GColorLavenderIndigo, fg()); }
+static GColor accent(void) { return fg(); }
+#endif
 
 #if defined(PBL_COLOR)
 static GColor state_color(char state) {
@@ -50,7 +71,7 @@ static GColor state_color(char state) {
     case 'd': return GColorChromeYellow;
     case 'm': return s_light ? GColorIslamicGreen : GColorGreen;
     case 'a': return s_light ? GColorLightGray : GColorDarkGray;
-    default: return s_light ? GColorIndigo : GColorLavenderIndigo;
+    default: return accent();
   }
 }
 #endif
@@ -59,20 +80,30 @@ static GColor state_color(char state) {
 static int s_rows_max, s_row_h, s_dot_r, s_grid_top;
 static GFont s_time_font, s_date_font, s_label_font;
 
+// Serif type, like the app's headings (Liberation Serif, OFL; see resources/fonts).
+static bool s_fonts_loaded;
+static void load_fonts(bool big_time, bool big_text) {
+  if (s_fonts_loaded) {
+    fonts_unload_custom_font(s_time_font);
+    fonts_unload_custom_font(s_date_font);
+    fonts_unload_custom_font(s_label_font);
+  }
+  s_time_font = fonts_load_custom_font(resource_get_handle(big_time ? RESOURCE_ID_FONT_SERIF_TIME_48 : RESOURCE_ID_FONT_SERIF_TIME_38));
+  s_date_font = fonts_load_custom_font(resource_get_handle(big_text ? RESOURCE_ID_FONT_SERIF_DATE_22 : RESOURCE_ID_FONT_SERIF_DATE_17));
+  s_label_font = fonts_load_custom_font(resource_get_handle(big_text ? RESOURCE_ID_FONT_SERIF_LABEL_20 : RESOURCE_ID_FONT_SERIF_LABEL_15));
+  s_fonts_loaded = true;
+}
+
 static void layout(GRect b) {
 #if defined(PBL_ROUND)
   bool big = b.size.w >= 240;
-  s_time_font = fonts_get_system_font(big ? FONT_KEY_LECO_42_NUMBERS : FONT_KEY_LECO_36_BOLD_NUMBERS);
-  s_date_font = fonts_get_system_font(big ? FONT_KEY_GOTHIC_24 : FONT_KEY_GOTHIC_18);
-  s_label_font = fonts_get_system_font(big ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD);
+  load_fonts(big, big);
   s_grid_top = big ? 106 : 76;
   s_row_h = big ? 30 : 24;
   s_rows_max = big ? 4 : 3;
 #else
   bool big = b.size.w >= 200;
-  s_time_font = fonts_get_system_font(big ? FONT_KEY_LECO_42_NUMBERS : FONT_KEY_LECO_36_BOLD_NUMBERS);
-  s_date_font = fonts_get_system_font(big ? FONT_KEY_GOTHIC_24 : FONT_KEY_GOTHIC_18);
-  s_label_font = fonts_get_system_font(big ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_14_BOLD);
+  load_fonts(big, big);
   s_grid_top = big ? 82 : 60;
   s_row_h = (b.size.h - s_grid_top - 2) / 4;
   s_rows_max = 4;
@@ -292,6 +323,11 @@ static void inbox(DictionaryIterator *it, void *ctx) {
     s_light = (flags->value->int32 & M_LIGHT) != 0;
     persist_write_int(P_FLAGS, flags->value->int32);
   }
+  Tuple *theme = dict_find(it, K_NUM);
+  if (theme) {
+    s_theme = theme->value->int32;
+    persist_write_int(P_THEME, s_theme);
+  }
   bool was_sos = s_sos_name[0] != 0;
   s_sos_name[0] = s_sos_where[0] = 0;
   copy_str(s_sos_name, sizeof(s_sos_name), it, K_NAME);
@@ -353,6 +389,7 @@ static void load(Window *w) {
   char saved[300];
   if (persist_exists(P_LINE)) { persist_read_string(P_LINE, saved, sizeof(saved)); parse(saved); }
   if (persist_exists(P_FLAGS)) s_light = (persist_read_int(P_FLAGS) & M_LIGHT) != 0;
+  if (persist_exists(P_THEME)) s_theme = persist_read_int(P_THEME);
   if (persist_exists(P_SOS_NAME)) persist_read_string(P_SOS_NAME, s_sos_name, sizeof(s_sos_name));
   if (persist_exists(P_SOS_WHERE)) persist_read_string(P_SOS_WHERE, s_sos_where, sizeof(s_sos_where));
   update_time();
@@ -365,6 +402,12 @@ static void unload(Window *w) {
   layer_destroy(s_sos);
   for (int i = 0; i < MAX_PEOPLE; i++) layer_destroy(s_labels[i]);
   layer_destroy(s_grid);
+  if (s_fonts_loaded) {
+    fonts_unload_custom_font(s_time_font);
+    fonts_unload_custom_font(s_date_font);
+    fonts_unload_custom_font(s_label_font);
+    s_fonts_loaded = false;
+  }
 }
 
 int main(void) {

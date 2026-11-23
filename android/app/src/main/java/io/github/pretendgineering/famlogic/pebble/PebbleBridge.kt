@@ -88,6 +88,7 @@ object PebbleBridge {
     const val F_DRIVING = 4
     const val F_AWAY = 8 // paused or not heard from lately
     const val F_PLACE = 16 // at a fence
+    const val F_ADULT = 32 // you and they are both grown-ups (the grown-up nudges are on offer)
 
     // "Me" flags
     const val M_SHARING = 1
@@ -99,7 +100,21 @@ object PebbleBridge {
     const val M_MILES = 64 // show distances in miles
 
     /** Nudges and requests the watch may send. */
-    private val REQUEST_KINDS = setOf("pickup", "call", "where", "heart", "thumbs", "here")
+    private val REQUEST_KINDS = setOf("pickup", "call", "where", "here") + io.github.pretendgineering.famlogic.Nudges.all.map { it.kind }
+
+    /** Everyone, as last sent to the watch (for check-in replies). */
+    @Volatile private var lastMembers: List<Member> = emptyList()
+
+    private fun adult(role: String?) = role == "parent" || role == "grandparent"
+
+    /** The app's colour theme, as the watchface's number for it. */
+    private fun themeNumber(prefs: Prefs) = when (prefs.appTheme) {
+        "paper" -> 1
+        "forest" -> 2
+        "ocean" -> 3
+        "contrast" -> 4
+        else -> 0
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val sendLock = Mutex()
@@ -155,8 +170,8 @@ object PebbleBridge {
                             "call" -> "Asked them to call"
                             "where" -> "Asked where they are"
                             "here" -> "Sent where you are"
-                            "heart", "thumbs" -> "Sent"
-                            else -> "Asked for a pick-up"
+                            "pickup" -> "Asked for a pick-up"
+                            else -> "Sent"
                         })
                     }
                     C_MAP_REQ -> sendMap(context, prefs, api, id, d)
@@ -224,6 +239,7 @@ object PebbleBridge {
                 Log.i(TAG, "No data for the watch: ${e.message}")
                 return@launch
             }
+            lastMembers = res.members
             val me = res.members.find { it.id == prefs.memberId }
             val others = res.members.filter { it.id != prefs.memberId }
                 .sortedWith(compareByDescending<Member> { it.sosSince > 0 }.thenBy { it.name.lowercase() })
@@ -232,7 +248,7 @@ object PebbleBridge {
             if (app == FACE_UUID) {
                 val sos = others.firstOrNull { it.sosSince > 0 }
                 send(context, FACE_UUID, mapOf(
-                    K_CMD to C_FACE, K_FLAGS to lightFlag, K_TEXT to faceLine(list),
+                    K_CMD to C_FACE, K_FLAGS to lightFlag, K_NUM to themeNumber(prefs), K_TEXT to faceLine(list),
                     K_NAME to (sos?.name?.take(24) ?: ""), K_STATUS to (sos?.let { sosWhere(it, me) } ?: ""),
                 ))
                 return@launch
@@ -281,6 +297,7 @@ object PebbleBridge {
         if (isDriving(m)) flags = flags or F_DRIVING
         if (stale(m)) flags = flags or F_AWAY
         if (m.place.isNotEmpty()) flags = flags or F_PLACE
+        if (!isMe && adult(me?.role) && adult(m.role)) flags = flags or F_ADULT
         var bearing = 0
         var dist = -1
         val loc = m.loc
@@ -444,6 +461,14 @@ object PebbleBridge {
                     send(context, APP_UUID, mapOf(K_CMD to C_ALERT, K_KIND to "sos", K_ID to e.memberId, K_NAME to e.name.take(24),
                         K_TEXT to (if (e.note.isNotEmpty()) "says “${e.note.take(56)}”" else "needs help")))
                 }
+                // A check-in: the watch offers a nudge back (👍 ❤️ 👋 😊).
+                "checkin" -> if (appOpen && e.memberId != prefs.memberId && e.memberId !in prefs.mutedPeople) {
+                    val them = lastMembers.find { it.id == e.memberId }
+                    val bothAdults = adult(prefs.role) && adult(them?.role)
+                    send(context, APP_UUID, mapOf(K_CMD to C_ALERT, K_KIND to if (bothAdults) "checkin_a" else "checkin",
+                        K_ID to e.memberId, K_NAME to e.name.take(24),
+                        K_TEXT to (if (e.note.isNotEmpty()) "checked in: ${e.note.take(50)}" else "checked in")))
+                }
                 "sos_end", "sos_seen", "request" -> if (appOpen) {
                     val text = when (e.type) {
                         "sos_end" -> "is OK"
@@ -451,8 +476,8 @@ object PebbleBridge {
                         else -> when (e.kind) {
                             "call" -> "asks you to call"
                             "where" -> "asks where you are"
-                            "heart" -> "sent you a heart"
-                            "thumbs" -> "sent you a thumbs up"
+                            in io.github.pretendgineering.famlogic.Nudges.all.map { it.kind } ->
+                                "sent you " + io.github.pretendgineering.famlogic.Nudges.byKind(e.kind)!!.words
                             "here" -> if (e.place.isNotEmpty()) "is at ${e.place}" else "shared where they are"
                             else -> "asks for a pick-up"
                         }

@@ -419,16 +419,53 @@ func (s *Server) handleChatUpdateGroup(w http.ResponseWriter, r *http.Request, m
 	if !ok {
 		return
 	}
-	if !slices.Contains(conv.Members, me.ID) || conv.Kind != ConvGroup {
-		writeError(w, http.StatusForbidden, "only people in a group chat can change it")
-		return
-	}
 	var body struct {
+		Emoji  *string  `json:"emoji"`
+		Color  *string  `json:"color"`
 		Name   *string  `json:"name"`
 		Add    []string `json:"add"`
 		Remove []string `json:"remove"`
 	}
 	if !readJSON(w, r, &body) {
+		return
+	}
+	// The icon: the family chat's is the parents' to choose; a group's, anyone in it.
+	if body.Emoji != nil || body.Color != nil {
+		switch {
+		case conv.Kind == ConvFamily && me.role() != RoleParent:
+			writeError(w, http.StatusForbidden, "parents choose the family chat's icon")
+			return
+		case conv.Kind == ConvGroup && (!post || !slices.Contains(conv.Members, me.ID)):
+			writeError(w, http.StatusForbidden, "only people in a group can change its icon")
+			return
+		case conv.Kind == ConvDirect:
+			writeError(w, http.StatusBadRequest, "one-to-one chats show the other person's icon")
+			return
+		}
+		emoji, color := conv.Emoji, conv.Color
+		if body.Emoji != nil {
+			e, ok := cleanEmoji(*body.Emoji)
+			if !ok {
+				writeError(w, http.StatusBadRequest, "pick a single emoji (or none)")
+				return
+			}
+			emoji = e
+		}
+		if body.Color != nil {
+			if *body.Color != "" && !colorRe.MatchString(*body.Color) {
+				writeError(w, http.StatusBadRequest, "colour must look like #6f5aa8")
+				return
+			}
+			color = *body.Color
+		}
+		s.chat.SetIcon(conv.ID, emoji, color)
+		if body.Name == nil && len(body.Add) == 0 && len(body.Remove) == 0 {
+			s.writeConv(w, conv.ID, me, people)
+			return
+		}
+	}
+	if !slices.Contains(conv.Members, me.ID) || conv.Kind != ConvGroup {
+		writeError(w, http.StatusForbidden, "only people in a group chat can change it")
 		return
 	}
 	// While a group waits for a parent, or a parent has paused it, people can only leave.

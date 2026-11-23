@@ -8,7 +8,7 @@
   "private": true,
   "dependencies": {},
   "pebble": {
-    "displayName": "FamLogic Family",
+    "displayName": "FamLogic Face",
     "uuid": "a1f5e2c7-3d94-4b6e-8f02-5c9e7d1a3b64",
     "sdkVersion": "3",
     "enableMultiJS": false,
@@ -49,7 +49,44 @@
       "RADIUS": 21
     },
     "resources": {
-      "media": []
+      "media": [
+        {
+          "type": "font",
+          "name": "FONT_SERIF_TIME_38",
+          "file": "fonts/LiberationSerif-Bold.ttf",
+          "characterRegex": "[0-9: ]"
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_TIME_48",
+          "file": "fonts/LiberationSerif-Bold.ttf",
+          "characterRegex": "[0-9: ]"
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_DATE_17",
+          "file": "fonts/LiberationSerif-Regular.ttf",
+          "characterRegex": "[ -~]"
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_DATE_22",
+          "file": "fonts/LiberationSerif-Regular.ttf",
+          "characterRegex": "[ -~]"
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_LABEL_15",
+          "file": "fonts/LiberationSerif-Bold.ttf",
+          "characterRegex": "[ -~]"
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_LABEL_20",
+          "file": "fonts/LiberationSerif-Bold.ttf",
+          "characterRegex": "[ -~]"
+        }
+      ]
     },
     "companionApp": {
       "android": {

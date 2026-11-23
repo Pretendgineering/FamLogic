@@ -12,7 +12,7 @@ enum {
 };
 enum { C_PERSON = 1, C_ME, C_ALERT, C_RESULT, C_FACE, C_FENCE, C_MAP, C_MAP_FAIL };
 enum { C_HELLO = 20, C_CHECKIN, C_SOS, C_SOS_END, C_REQUEST, C_SEEN, C_SHARING, C_BATTERY, C_MAP_REQ };
-enum { F_ME = 1, F_SOS = 2, F_DRIVING = 4, F_AWAY = 8, F_PLACE = 16 };
+enum { F_ME = 1, F_SOS = 2, F_DRIVING = 4, F_AWAY = 8, F_PLACE = 16, F_ADULT = 32 }; // F_ADULT: you and they are both grown-ups
 enum { M_SHARING = 1, M_SOS = 2, M_HEART_RATE = 4, M_FALLS = 8, M_LIGHT = 16, M_QUICK_SOS = 32, M_MILES = 64 };
 
 // Persistent storage keys (1 and 2 are shared with the fall-detection worker).
@@ -555,7 +555,8 @@ static void open_me_menu(void) {
   action_menu_open(&cfg);
 }
 
-// Requests and nudges to one person: kind is sent as is ("pickup", "call", "where", "heart", "thumbs", "here").
+// Requests and nudges to one person: kind is sent as is ("pickup", "call", "where", "here",
+// and the nudges below). Keep in step with Nudges.kt in the app.
 static char s_target_id[16];
 
 static void request_action(ActionMenu *menu, const ActionMenuItem *item, void *ctx) {
@@ -565,17 +566,38 @@ static void request_action(ActionMenu *menu, const ActionMenuItem *item, void *c
   else send_cmd(C_REQUEST, s_target_id, kind, NULL, 0);
 }
 
+// The nudges, as words (the watch's fonts don't have every emoji). The last two are for grown-ups only.
+static const char *NUDGE_KINDS[] = {"thumbs", "heart", "wave", "smile", "comehome", "cowboy", "alien", "ogre", "eggplant", "peach"};
+static const char *NUDGE_WORDS[] = {"Thumbs up", "Heart", "Wave", "Smile", "Come home", "Cowboy", "Alien", "Demon mask", "Eggplant", "Peach"};
+#define NUDGES_FOR_ALL 8
+#define NUDGES_ALL 10
+
+static void add_nudges(ActionMenuLevel *level, bool adults, int max) {
+  int n = adults ? NUDGES_ALL : NUDGES_FOR_ALL;
+  if (max < n) n = max;
+  for (int i = 0; i < n; i++) action_menu_level_add_action(level, NUDGE_WORDS[i], request_action, (void *)NUDGE_KINDS[i]);
+}
+
 static void open_person_menu(Person *p) {
   strncpy(s_target_id, p->id, sizeof(s_target_id) - 1);
   ActionMenuLevel *root = action_menu_level_create(4);
-  ActionMenuLevel *nudge = action_menu_level_create(3);
+  ActionMenuLevel *nudge = action_menu_level_create(NUDGES_ALL + 1);
   if (p->flags & F_SOS) action_menu_level_add_action(root, "I've seen your SOS", request_action, "seen");
   action_menu_level_add_action(root, "Pick me up", request_action, "pickup");
   action_menu_level_add_action(root, "Call me", request_action, "call");
   action_menu_level_add_child(root, nudge, "Nudge");
   action_menu_level_add_action(nudge, "Where are you?", request_action, "where");
-  action_menu_level_add_action(nudge, "Send a heart", request_action, "heart");
-  action_menu_level_add_action(nudge, "Thumbs up", request_action, "thumbs");
+  add_nudges(nudge, (p->flags & F_ADULT) != 0, NUDGES_ALL);
+  ActionMenuConfig cfg = menu_config(root);
+  action_menu_open(&cfg);
+}
+
+// Someone checked in: reply with a nudge (or not).
+static void open_checkin_reply(const char *id, bool adults) {
+  strncpy(s_target_id, id, sizeof(s_target_id) - 1);
+  ActionMenuLevel *root = action_menu_level_create(6);
+  add_nudges(root, adults, 4); // thumbs up, heart, wave, smile
+  action_menu_level_add_action(root, "Not now", request_action, "none");
   ActionMenuConfig cfg = menu_config(root);
   action_menu_open(&cfg);
 }
@@ -1174,6 +1196,14 @@ static void inbox(DictionaryIterator *it, void *ctx) {
       vibes_double_pulse();
       light_enable_interaction();
       open_where_reply(id, name);
+    } else if (strcmp(kind, "checkin") == 0 || strcmp(kind, "checkin_a") == 0) {
+      // "checkin_a": they're a grown-up too, so all the nudges are on offer.
+      char buf[sizeof(name) + sizeof(text) + 2];
+      snprintf(buf, sizeof(buf), "%s %s", name, text);
+      vibes_short_pulse();
+      light_enable_interaction();
+      toast(buf);
+      open_checkin_reply(id, strcmp(kind, "checkin_a") == 0);
     } else {
       if (strcmp(kind, "sos_end") == 0 && s_alarm && window_stack_contains_window(s_alarm) && strcmp(id, s_alarm_id) == 0) {
         window_stack_remove(s_alarm, true);

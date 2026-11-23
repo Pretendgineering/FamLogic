@@ -553,8 +553,9 @@ fun MapScreen(
 
     val me = members.find { it.id == prefs.memberId }
     // The circle picker narrows the map and list to one circle (you always stay in view).
-    val shown = if (circleFilter.isEmpty()) members
-    else members.filter { it.id == prefs.memberId || circleFilter in it.circles }
+    // Everyone else alphabetically, then you at the bottom.
+    val shown = (if (circleFilter.isEmpty()) members else members.filter { it.id == prefs.memberId || circleFilter in it.circles })
+        .sortedBy { it.id == prefs.memberId }
     val statusOf: (Member) -> String = { m -> statusLine(m, me, tick) }
 
     members.find { it.id == sheetFor }?.let { m ->

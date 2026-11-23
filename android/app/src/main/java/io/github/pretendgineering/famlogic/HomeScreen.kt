@@ -128,7 +128,7 @@ fun HomeScreen(
                 val res = api.members(since = prefs.eventCursor)
                 Alerts.handle(context, res.events)
                 Access.update(context, res)
-                members = res.members
+                members = res.members.sortedBy { it.id == prefs.memberId } // you last
                 familyName = res.server.name
                 tileUrl = res.server.tileUrl
                 tileUrlDark = res.server.tileUrlDark

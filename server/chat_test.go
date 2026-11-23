@@ -149,6 +149,16 @@ func TestChat(t *testing.T) {
 	}
 	// A child adding people sends it back to the parents; Mom says yes.
 	e.do("POST", "/api/chat/"+gID+"/moderate", f.mom, map[string]string{"action": "approve"})
+	// Icons: parents choose the family chat's; people in a group choose its.
+	if st, _ := e.status("PATCH", "/api/chat/family", f.teen, map[string]string{"emoji": "🏡"}); st != 403 {
+		t.Fatalf("a child set the family icon: %d", st)
+	}
+	if st, fam := e.status("PATCH", "/api/chat/family", f.mom, map[string]string{"emoji": "🏡", "color": "#3cb44b"}); st != 200 || fam["emoji"] != "🏡" || fam["color"] != "#3cb44b" {
+		t.Fatalf("family icon: %d %v", st, fam)
+	}
+	if st, gi := e.status("PATCH", "/api/chat/"+gID, f.teen, map[string]string{"emoji": "🎬"}); st != 200 || gi["emoji"] != "🎬" {
+		t.Fatalf("group icon: %d %v", st, gi)
+	}
 	// A parents-only group starts right away.
 	if _, pg := e.do("POST", "/api/chat/groups", f.mom, map[string]any{"name": "Gifts", "members": []string{f.dadID}}); pg["status"] != nil {
 		t.Fatalf("parents' group pending: %v", pg)
