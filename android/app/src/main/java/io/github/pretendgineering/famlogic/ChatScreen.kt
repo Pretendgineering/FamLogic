@@ -3,8 +3,8 @@ package io.github.pretendgineering.famlogic
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.CloseFullscreen
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Surface
@@ -156,7 +156,7 @@ fun ChatScreen(prefs: Prefs, openRequest: String?, onOpenHandled: () -> Unit) {
         )
         // Landscape tablets: the list beside the open chat.
         sideBySide -> Row(Modifier.fillMaxSize()) {
-            Box(Modifier.width(if (Access.younger) 400.dp else 360.dp).fillMaxHeight()) {
+            Box(Modifier.width(if (Access.big) 400.dp else 360.dp).fillMaxHeight()) {
                 ConversationList(prefs, people, selected = conv, onOpen = { open = if (open == it) null else it })
             }
             VerticalDivider()
@@ -225,7 +225,7 @@ private fun ConversationList(prefs: Prefs, people: List<Member>, selected: Strin
         }
     }
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Chat") }) },
+        topBar = { TopAppBar(title = { Text(Access.name("chat")) }) },
         floatingActionButton = {
             if (Access.can("chat_start")) {
                 LargeFloatingActionButton(onClick = { newChat = true }) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
@@ -277,7 +277,7 @@ private fun ConversationList(prefs: Prefs, people: List<Member>, selected: Strin
 private fun ConversationRow(c: ChatConversation, people: List<Member>, me: String, selected: Boolean = false, onClick: () -> Unit) {
     val other = if (c.kind == "direct") people.find { it.id in c.members && it.id != me } else null
     // Children who can't read yet find chats by faces: bigger pictures, and a group shows who's in it.
-    val big = Access.younger
+    val big = Access.big
     val size = if (big) 68 else 44
     Row(
         Modifier.fillMaxWidth()
@@ -375,7 +375,7 @@ private fun ConversationView(
     fullscreen: Boolean = false,
     onToggleFullscreen: (() -> Unit)? = null,
 ) {
-    val big = Access.younger
+    val big = Access.big
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val messages = remember(convId) { mutableStateListOf<ChatMessage>() }
@@ -514,12 +514,17 @@ private fun ConversationView(
                     if (mutedUntil > System.currentTimeMillis()) Icon(Icons.Filled.NotificationsOff, contentDescription = "Muted", modifier = Modifier.padding(end = 4.dp))
                     onToggleFullscreen?.let {
                         IconButton(onClick = it) {
-                            Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, contentDescription = if (fullscreen) "Smaller" else "Full screen")
+                            Icon(if (fullscreen) Icons.Filled.CloseFullscreen else Icons.Filled.OpenInFull, contentDescription = if (fullscreen) "Smaller" else "Full screen")
                         }
                     }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Chat options") }
+                    val canMute = Access.can("chat_mute")
+                    if (canMute || moderator || (conv?.kind == "group" && canPost)) {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Chat options") }
+                    }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        if (mutedUntil > System.currentTimeMillis()) {
+                        if (!canMute) {
+                            // Children only mute chats when a parent allows it.
+                        } else if (mutedUntil > System.currentTimeMillis()) {
                             DropdownMenuItem(text = { Text("Unmute") }, leadingIcon = { Icon(Icons.Filled.Notifications, null) }, onClick = {
                                 menu = false
                                 prefs.muteChat(convId, 0)
@@ -581,7 +586,7 @@ private fun ConversationView(
                         prefs, m, people, mine = m.sender == prefs.memberId, showName = conv?.kind != "direct" || conv.oversight,
                         seenBy = if (m.id == myLast?.id) seenBy else emptyList(),
                         showAvatar = newer == null || newer.sender != m.sender || !sameDay(newer.time, m.time),
-                        onLongPress = if (m.sender == prefs.memberId || moderator) ({ deleting = m }) else null,
+                        onLongPress = if ((m.sender == prefs.memberId && Access.can("chat_delete")) || moderator) ({ deleting = m }) else null,
                     )
                     if (older == null || !sameDay(older.time, m.time)) DayHeader(m.time)
                 }
@@ -716,7 +721,7 @@ private fun Bubble(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
     if (!mine) {
         // Their picture (emoji or initial, in their colour) so you can tell who wrote it without reading.
-        val face = if (Access.younger) 52 else 36
+        val face = if (Access.big) 52 else 36
         Box(Modifier.padding(end = 8.dp, bottom = 18.dp).size(face.dp)) {
             if (showAvatar) Avatar(sender?.name ?: "?", sender?.emoji.orEmpty(), sender?.color ?: "#888888", face)
         }

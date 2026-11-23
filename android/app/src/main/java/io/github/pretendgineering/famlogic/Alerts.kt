@@ -48,7 +48,7 @@ object Alerts {
         fresh.forEach {
             show(context, prefs, it)
             // The watch: SOS alarm screen, timeline pins (mutes apply, except to SOS).
-            if (it.type != "chat" && (it.type == "sos" || it.memberId !in prefs.mutedPeople)) PebbleBridge.onAlert(context, it)
+            if (it.type != "chat" && it.type != "unlock" && (it.type == "sos" || it.memberId !in prefs.mutedPeople)) PebbleBridge.onAlert(context, it)
         }
         // Only ever move forward: replies from the service and the map can arrive out of order.
         if (batch.cursor > seen) prefs.eventCursor = batch.cursor
@@ -57,6 +57,12 @@ object Alerts {
 
     private fun show(context: Context, prefs: Prefs, e: AppEvent) {
         when (e.type) {
+            "unlock" -> {
+                // A parent opened settings on this device for a while (from their phone or the console).
+                val until = System.currentTimeMillis() + e.duration
+                android.os.Handler(android.os.Looper.getMainLooper()).post { Access.unlockedUntil = until }
+                notify(context, CHANNEL_ALERTS, eventId(e), "Settings are open", "${e.name} opened settings on this device for ${e.duration / 60_000} minutes.", "")
+            }
             "battery_low" -> {
                 // The server raises one alert at 15% and one at 10%; show the one this phone asked for.
                 if (!prefs.notifyLowBattery || e.level != prefs.lowBatteryThreshold || e.memberId in prefs.mutedPeople) return

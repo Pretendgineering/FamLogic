@@ -75,7 +75,7 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
     )
-    val big = Access.younger
+    val big = Access.big
     // Tablets: the sections stay visible down the side (a rail), always on screen.
     if (LocalConfiguration.current.screenWidthDp >= 600) {
         val railColors = NavigationRailItemDefaults.colors(
@@ -146,6 +146,6 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
 
 fun tabLook(t: Tab): Triple<ImageVector, ImageVector, String> = when (t) {
     Tab.Home -> Triple(Icons.Filled.Home, Icons.Outlined.Home, "Home")
-    Tab.Map -> Triple(Icons.Filled.LocationOn, Icons.Outlined.LocationOn, "Map")
-    Tab.Chat -> Triple(Icons.Filled.Email, Icons.Outlined.Email, "Chat")
+    Tab.Map -> Triple(Icons.Filled.LocationOn, Icons.Outlined.LocationOn, Access.name("map"))
+    Tab.Chat -> Triple(Icons.Filled.Email, Icons.Outlined.Email, Access.name("chat"))
 }

@@ -7,6 +7,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,7 +32,7 @@ class MainActivity : ComponentActivity() {
     private var joinCircleCode by mutableStateOf<String?>(null) // an invite link opened while signed in
     private var features by mutableStateOf<Set<String>>(emptySet()) // what the server does, and which modules are on
     private var tab by mutableStateOf(Tab.Home)
-    private var settingsRequest by mutableStateOf(false) // the home screen asked for settings
+    private var settingsRequest by mutableStateOf<String?>(null) // the home screen asked for settings: "full" or "limited"
     private var openChat by mutableStateOf<String?>(null) // from tapping a chat notification
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,14 +47,20 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             FamLogicTheme {
-                // Status and navigation bar icons follow the app's light/dark choice, not just the system's.
+                // The system bars follow the app's light/dark choice, not the phone's, so a light app on
+                // a dark phone doesn't get dark blocks (or the wrong clock colour) at the top.
                 val dark = LocalDarkTheme.current
-                androidx.compose.runtime.SideEffect {
-                    androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
-                        isAppearanceLightStatusBars = !dark
-                        isAppearanceLightNavigationBars = !dark
-                    }
+                androidx.compose.runtime.LaunchedEffect(dark) {
+                    val clear = android.graphics.Color.TRANSPARENT
+                    val style = if (dark) androidx.activity.SystemBarStyle.dark(clear) else androidx.activity.SystemBarStyle.light(clear, clear)
+                    enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
                 }
+                // The app starts below the status bar (and any camera cutout): nothing is drawn under the clock.
+                androidx.compose.foundation.layout.Box(
+                    androidx.compose.ui.Modifier.fillMaxSize()
+                        .background(androidx.compose.material3.MaterialTheme.colorScheme.surface)
+                        .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout.only(WindowInsetsSides.Top))),
+                ) {
                 if (joined) {
                     DisplayModeEffects(window)
                     HomeShell(
@@ -59,7 +74,7 @@ class MainActivity : ComponentActivity() {
                                 prefs = prefs,
                                 features = features,
                                 onOpen = { tab = it },
-                                onOpenSettings = { settingsRequest = true; tab = Tab.Map },
+                                onOpenSettings = { full -> settingsRequest = if (full) "full" else "limited"; tab = Tab.Map },
                             )
                             Tab.Chat -> ChatScreen(prefs, openRequest = openChat, onOpenHandled = { openChat = null })
                             Tab.Map -> MapScreen(
@@ -71,7 +86,7 @@ class MainActivity : ComponentActivity() {
                                 onJoinCircleHandled = { joinCircleCode = null },
                                 onFeatures = { features = it },
                                 openSettings = settingsRequest,
-                                onSettingsHandled = { settingsRequest = false },
+                                onSettingsHandled = { settingsRequest = null },
                                 // Someone without the map came here only for settings: back home after.
                                 onSettingsClosed = { if (Tab.Map !in visibleTabs(features, prefs)) tab = Tab.Home },
                             )
@@ -87,6 +102,7 @@ class MainActivity : ComponentActivity() {
                             joined = true
                         },
                     )
+                }
                 }
             }
         }

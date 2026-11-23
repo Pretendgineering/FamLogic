@@ -4,6 +4,8 @@ import android.content.Context
 import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,7 +81,7 @@ fun HomeScreen(
     prefs: Prefs,
     features: Set<String>,
     onOpen: (Tab) -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenSettings: (full: Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -127,19 +129,19 @@ fun HomeScreen(
     }
     val tiles = Access.home.ifEmpty { Access.defaultHome() }.filter { usable(it) }
     val wide = LocalConfiguration.current.screenWidthDp >= 600
-    val big = Access.younger || Access.isDisplay
+    val big = Access.big || Access.isDisplay
 
-    val askSettings = rememberSettingsGate(prefs, onOpenSettings)
+    val gate = rememberSettingsGate(prefs, onOpenSettings)
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(familyName.ifEmpty { "FamLogic" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { SecretTitle(familyName.ifEmpty { "FamLogic" }, gate) },
                 actions = {
                     if (!Access.isChild && !Access.isDisplay) {
                         IconButton(onClick = { editing = true }) { Icon(Icons.Filled.Edit, contentDescription = "Arrange home screen") }
                     }
-                    IconButton(onClick = askSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                    if (!Access.hideSettings) IconButton(onClick = gate.cog) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
                 },
             )
         },
@@ -179,10 +181,10 @@ fun HomeScreen(
                             }
                         }
                         "checkin" -> SimpleTile("I'm here", "Let everyone know you're OK", Icons.Filled.CheckCircle, big) { confirmCheckIn = true }
-                        "calendar" -> SimpleTile("Calendar", "Coming soon", Icons.Filled.DateRange, big) {}
-                        "todos" -> SimpleTile("To-dos", "Coming soon", Icons.AutoMirrored.Filled.List, big) {}
-                        "chores" -> SimpleTile("Chores", "Coming soon", Icons.Filled.Star, big) {}
-                        "meals" -> SimpleTile("Meals", "Coming soon", Icons.Filled.ShoppingCart, big) {}
+                        "calendar" -> SimpleTile(Access.name("calendar"), "Coming soon", Icons.Filled.DateRange, big) {}
+                        "todos" -> SimpleTile(Access.name("todos"), "Coming soon", Icons.AutoMirrored.Filled.List, big) {}
+                        "chores" -> SimpleTile(Access.name("chores"), "Coming soon", Icons.Filled.Star, big) {}
+                        "meals" -> SimpleTile(Access.name("meals"), "Coming soon", Icons.Filled.ShoppingCart, big) {}
                     }
                 }
             }
@@ -235,7 +237,7 @@ private fun MapTile(
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Where everyone is", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.titleMedium)
+                Text(Access.name("map"), Modifier.padding(start = 6.dp), style = MaterialTheme.typography.titleMedium)
             }
             members.take(if (big) 6 else 4).forEach { m ->
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -270,7 +272,7 @@ private fun ChatTile(prefs: Prefs, chats: List<ChatConversation>, members: List<
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(if (big) 40.dp else 28.dp))
-                Text("Chat", Modifier.padding(start = 8.dp).weight(1f), style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge)
+                Text(Access.name("chat"), Modifier.padding(start = 8.dp).weight(1f), style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge)
                 if (unread > 0) {
                     Box(
                         Modifier.size(if (big) 36.dp else 28.dp).then(Modifier),
@@ -370,14 +372,56 @@ private fun HomeEditor(prefs: Prefs, features: Set<String>, onDone: () -> Unit) 
 }
 
 /**
- * Opening settings: on a child's device or a family display, a parent types the
- * family's parent PIN first. Returns the function to call.
+ * Opening settings. Parents: straight in. Older children: their own small
+ * Settings (Customize, Account, About). Younger children have no settings button
+ * at all. A Control Deck asks for the parent PIN. Either way, a parent can get to
+ * everything by holding the family name at the top for 5 seconds and typing the
+ * parent PIN, or by opening settings on the device from afar (their phone or the
+ * console), which skips the PIN for a while.
  */
+class SettingsGate(val cog: () -> Unit, val secret: () -> Unit)
+
 @Composable
-fun rememberSettingsGate(prefs: Prefs, onOpen: () -> Unit): () -> Unit {
+fun rememberSettingsGate(prefs: Prefs, onOpen: (full: Boolean) -> Unit): SettingsGate {
     var asking by remember { mutableStateOf(false) }
-    if (asking) PinDialog(prefs, onDismiss = { asking = false }, onOk = { asking = false; onOpen() })
-    return { if (Access.settingsLocked && Access.pinSet) asking = true else onOpen() }
+    if (asking) PinDialog(prefs, onDismiss = { asking = false }, onOk = { asking = false; onOpen(true) })
+    val full = { if (Access.pinSet && !Access.unlocked) asking = true else onOpen(true) }
+    return remember {
+        SettingsGate(
+            cog = {
+                when {
+                    Access.unlocked -> onOpen(true)
+                    Access.isChild -> onOpen(false)
+                    Access.isDisplay -> full()
+                    else -> onOpen(true)
+                }
+            },
+            secret = full,
+        )
+    }
+}
+
+/** The title bar's family name: holding it for 5 seconds is the parents' secret way into settings. */
+@Composable
+fun SecretTitle(text: String, gate: SettingsGate) {
+    val scope = rememberCoroutineScope()
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    Text(
+        text,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.pointerInput(Unit) {
+            detectTapGestures(onPress = {
+                val job = scope.launch {
+                    delay(5_000)
+                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    gate.secret()
+                }
+                tryAwaitRelease()
+                job.cancel()
+            })
+        },
+    )
 }
 
 @Composable

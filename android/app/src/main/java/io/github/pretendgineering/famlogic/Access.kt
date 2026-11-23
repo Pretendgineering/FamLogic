@@ -7,7 +7,7 @@ import androidx.compose.runtime.setValue
 
 /**
  * What this person may use, and how this device is used. Parents choose per child
- * (web console → Family → What they can use), starting from the "younger" or
+ * (web console → Access & Control), starting from the "younger" or
  * "older" preset; adults can use everything. Kept as Compose state so the whole
  * app follows changes at once, and in Prefs so it holds offline.
  */
@@ -21,18 +21,50 @@ object Access {
     var isChild by mutableStateOf(false)
     /** "phone", "interactive" (a tablet people use) or "display" (a family dashboard on the wall). */
     var deviceMode by mutableStateOf("phone")
+    /** parent, child, grandparent or dependent. */
+    var role by mutableStateOf("parent")
+    /** Bigger buttons and text; picture icons (a tiny map, a talking face). */
+    var big by mutableStateOf(false)
+    var pictures by mutableStateOf(false)
+    /** "Map, Chat" instead of "Thereabouts, Chitchat" (this device). */
+    var plainNames by mutableStateOf(false)
+    /** A parent opened settings on this device from afar, until then (ms). */
+    var unlockedUntil by mutableStateOf(0L)
+    var canSignIn by mutableStateOf(true)
 
     fun can(id: String): Boolean = allowed?.contains(id) ?: true
 
+    /** A module's level for a child: off, view, add or full ("full" for everyone else). */
+    fun level(module: String): String {
+        val a = allowed ?: return "full"
+        return a.firstOrNull { it.startsWith("level:$module:") }?.substringAfterLast(':') ?: if (module in a) "full" else "full"
+    }
+
+    val unlocked get() = unlockedUntil > System.currentTimeMillis()
+    /** Younger children have no settings button (a parent opens them: hold the family name, or from afar). */
+    val hideSettings get() = isChild && preset == "younger" && !unlocked
+    /** Older children get their own small Settings (Customize, Account, About). */
+    val limitedSettings get() = isChild && !unlocked
+
+    fun setPlainNames(context: Context, on: Boolean) {
+        Prefs(context).plainNames = on
+        plainNames = on
+    }
+
     val isDisplay get() = deviceMode == "display"
     /** Settings open with the parent PIN on children's devices and family displays. */
-    val settingsLocked get() = isChild || isDisplay
+    val settingsLocked get() = (isChild || isDisplay) && !unlocked
     /** A child who can't read yet: bigger pictures, fewer words. */
     val younger get() = isChild && preset == "younger"
 
     fun load(context: Context) {
         val p = Prefs(context)
         isChild = p.role == "child"
+        role = p.role
+        big = p.bigUi
+        pictures = p.pictureIcons
+        plainNames = p.plainNames
+        canSignIn = p.canUsePassword
         allowed = if (isChild) p.kidAllowed else null
         preset = p.kidPreset
         home = p.homeTiles
@@ -47,6 +79,8 @@ object Access {
         p.kidPreset = res.kidPreset
         p.homeTiles = res.home
         p.pinSet = res.pinSet
+        p.bigUi = res.big
+        p.pictureIcons = res.pictures
         load(context)
     }
 
@@ -57,8 +91,22 @@ object Access {
 
     /** The default home screen for this person. */
     fun defaultHome(): List<String> = when {
-        isDisplay -> listOf("map", "chat", "calendar", "todos", "chores", "meals")
-        younger -> listOf("chat", "sos", "map", "checkin")
-        else -> listOf("map", "chat", "checkin", "sos", "calendar", "todos", "chores", "meals")
+        isDisplay -> listOf("map:big", "chat:half", "calendar:half", "todos:half", "chores:half", "meals:half")
+        younger -> listOf("map:wide", "chat:wide", "sos:wide")
+        else -> listOf("map:wide", "chat:wide", "checkin:half", "sos:half", "calendar:half", "todos:half", "chores:half", "meals:half")
     }
+
+    /** A module's name: its own (Thereabouts, Chitchat…) or the plain one (Map, Chat…). */
+    fun name(id: String): String {
+        val (own, plain) = NAMES[id] ?: return id
+        return if (plainNames) plain else own
+    }
+
+    private val NAMES = mapOf(
+        "map" to ("Thereabouts" to "Map"), "thereabouts" to ("Thereabouts" to "Map"),
+        "chat" to ("Chitchat" to "Chat"), "calendar" to ("Datebook" to "Calendar"),
+        "todos" to ("Odds & Ends" to "Lists"), "chores" to ("Fair Share" to "Chores"),
+        "meals" to ("Pantry" to "Meals"), "display" to ("Corkboard" to "Family display"),
+        "agents" to ("Steward" to "AI"), "sos" to ("SOS" to "SOS"), "checkin" to ("Check in" to "Check in"),
+    )
 }

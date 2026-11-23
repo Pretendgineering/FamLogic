@@ -83,17 +83,20 @@ import java.io.IOException
 
 /** The pages of Settings. */
 private enum class SettingsPage(val title: String, val icon: ImageVector) {
+    Sharing("Sharing", Icons.Filled.Share),
+    Account("Account", Icons.Filled.AccountCircle),
+    Customize("Customize", Icons.Filled.Edit),
+    Alerts("Alerts", Icons.Filled.Notifications),
     Groups("Groups", Icons.Filled.Face),
     Fences("Fences", Icons.Filled.Place),
-    Alerts("Alerts", Icons.Filled.Notifications),
-    Trail("Trail & trips", Icons.Filled.DateRange),
-    Sharing("Sharing", Icons.Filled.Share),
-    Map("Look & map", Icons.Filled.Edit),
-    Device("This device", Icons.Filled.Phone),
-    Account("Account", Icons.Filled.AccountCircle),
+    Trail("Trail & Trips", Icons.Filled.DateRange),
+    Device("Device Mode", Icons.Filled.Phone),
     Pebble("Pebble & Index", Icons.Filled.Star),
     About("About", Icons.Filled.Info),
 }
+
+/** What children see in Settings: making the app their own, and their sign-in. */
+private val CHILD_PAGES = setOf(SettingsPage.Account, SettingsPage.Customize, SettingsPage.About)
 
 /**
  * Settings: a short menu of pages (Sharing, Groups, Fences, Alerts, Trail,
@@ -131,6 +134,8 @@ fun SettingsScreen(
     onDimMapChange: (Boolean) -> Unit = {},
     tripDays: Int? = null,
     onTripDaysChange: (Int) -> Unit = {},
+    /** A child's own settings: only Customize, Account and About. */
+    limited: Boolean = false,
 ) {
     var pageName by rememberSaveable { mutableStateOf<String?>(null) }
     val page = pageName?.let { SettingsPage.valueOf(it) }
@@ -162,7 +167,7 @@ fun SettingsScreen(
                             SettingsPage.Fences -> supports("places")
                             SettingsPage.Trail -> supports("trails")
                             else -> true
-                        }
+                        } && (!limited || it in CHILD_PAGES)
                     }
                     SettingsCard {
                         pages.forEachIndexed { i, p ->
@@ -181,11 +186,13 @@ fun SettingsScreen(
                 }
                 SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
                 SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange, tripDays, onTripDaysChange, supports("trips"))
-                SettingsPage.Map -> MapPage(prefs, onMapStyleChange, onDimMapChange)
+                SettingsPage.Customize -> {
+                    IconCard(prefs, members.find { it.id == myId }, supports("emoji"), onProfileChanged)
+                    MapPage(prefs, onMapStyleChange, onDimMapChange)
+                }
                 SettingsPage.Device -> DevicePage()
                 SettingsPage.Pebble -> PebblePage(prefs, supports("index01"))
-                SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved, members.find { it.id == myId },
-                    supports("emoji"), onProfileChanged)
+                SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved)
                 SettingsPage.About -> AboutPage(prefs, perms, serverVersion, onLeave)
             }
             Spacer(Modifier.height(16.dp))
@@ -209,9 +216,9 @@ private fun menuSummary(
     SettingsPage.Groups -> circles.joinToString(", ") { it.name }.ifEmpty { "Who sees whom" }
     SettingsPage.Fences -> if (places.isEmpty()) "Alerts when people arrive or leave" else places.joinToString(", ") { it.name }
     SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, low battery, who you hear about" else "$it ${if (it == 1) "person" else "people"} muted" }
-    SettingsPage.Map -> "${Palette.byId(prefs.appTheme).title} · ${MapStyles.byId(prefs.mapStyle).title}"
+    SettingsPage.Customize -> "Your icon, colours, names, map style"
     SettingsPage.Pebble -> "Watch app, timeline, Index 01 ring"
-    SettingsPage.Device -> DEVICE_MODES.first { it.first == Access.deviceMode }.second
+    SettingsPage.Device -> if (Access.isDisplay) "Control Deck: a family screen on the wall or counter" else "Someone's own phone or tablet"
     SettingsPage.Trail -> listOfNotNull(
         trailHours?.takeIf { it > 0 }?.let { "Trail $it h" },
         tripDays?.takeIf { it > 0 }?.let { "trips ${if (it == 1) "1 day" else "$it days"}" },
@@ -227,36 +234,24 @@ private fun menuSummary(
     }
 }
 
-private val DEVICE_MODES = listOf(
-    Triple("phone", "Phone", "Someone's own phone: shares their location, alerts, everything they use."),
-    Triple("interactive", "Interactive tablet", "A tablet someone uses: the same as a phone, laid out for the bigger screen."),
-    Triple("display", "Display tablet", "A family dashboard on the wall or the fridge: full-screen home tiles, the screen stays on while charging, it doesn't share its own location, and settings open with the parent PIN."),
-)
-
 @Composable
 private fun DevicePage() {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    SettingsCard("How this device is used") {
-        Hint("Only changes this device.")
-        DEVICE_MODES.forEach { (id, title, text) ->
-            Row(
-                Modifier.fillMaxWidth().selectable(selected = Access.deviceMode == id) {
-                    if (Access.deviceMode != id) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    Access.setDeviceMode(context, id)
-                    LocationService.start(context) // a display stops sharing its location
-                }.padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = Access.deviceMode == id, onClick = null)
-                Column(Modifier.padding(start = 12.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium)
-                    Hint(text)
-                }
-            }
-        }
+    SettingsCard("Control Deck") {
+        SwitchRow(
+            title = "Use as a Control Deck",
+            detail = "A family screen for the wall or the kitchen counter: full-screen home tiles, the screen stays on while charging, " +
+                "it doesn't share its own location, and settings open with the parent PIN. Tablets get the bigger layout either way.",
+            checked = Access.isDisplay,
+            onChange = { on ->
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                Access.setDeviceMode(context, if (on) "display" else "phone")
+                LocationService.start(context) // a Control Deck stops sharing its location
+            },
+        )
         if (Access.isDisplay && !Access.pinSet) {
-            Hint("No parent PIN is set yet, so anyone can open settings here. An admin sets one in the web console (Family → Parent PIN).")
+            Hint("No parent PIN is set yet, so anyone can open settings here. An admin sets one in the web console (Access & Control → Parent PIN).")
         }
     }
 }
@@ -284,7 +279,7 @@ private fun SharingPage(prefs: Prefs, sharing: Boolean, onSharingChange: (Boolea
             onChange = onSharingChange,
         )
     }
-    SettingsCard("Update every") {
+    SettingsCard("Update Every") {
         Hint("More often is more up to date but uses more battery.")
         Prefs.INTERVAL_CHOICES.forEach { minutes ->
             Row(
@@ -315,7 +310,7 @@ private fun SharingPage(prefs: Prefs, sharing: Boolean, onSharingChange: (Boolea
         )
     }
     if (Flavor.GOOGLE) GoogleCard(prefs)
-    SettingsCard("Wi-Fi positioning") {
+    SettingsCard("Wi-Fi Positioning") {
         SwitchRow(
             title = "Find my location from Wi-Fi",
             detail = "For tablets and phones without GPS or a SIM. When the phone can't find its own location, " +
@@ -363,7 +358,7 @@ private fun GroupsPage(
     onCirclesChanged: () -> Unit,
 ) {
     var joining by remember { mutableStateOf(false) }
-    SettingsCard("Your groups") {
+    SettingsCard("Your Groups") {
         Hint(
             if (circles.size > 1) {
                 "You see people who share a group with you. Choose which groups see where you are."
@@ -405,7 +400,7 @@ private fun FencesPage(
     var mutedPlaces by remember { mutableStateOf(prefs.mutedPlaces) }
     val groupName = circles.associate { it.id to it.name }
 
-    SettingsCard("Your fences") {
+    SettingsCard("Your Fences") {
         Hint("A fence is an area like Home or School. Everyone in its group is told when someone arrives or leaves. Tap one to change it; switch one off to stop its alerts on this phone.")
         if (places.isEmpty()) {
             Text("No fences yet.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp))
@@ -440,7 +435,7 @@ private fun FencesPage(
     }
     if (circles.size > 1) {
         var mutedGroups by remember { mutableStateOf(prefs.mutedGroups) }
-        SettingsCard("Fence alerts by group") {
+        SettingsCard("Fence Alerts by Group") {
             Hint("Switch a group off to stop alerts about all of its fences on this phone.")
             circles.forEach { c ->
                 SwitchRow(
@@ -455,7 +450,7 @@ private fun FencesPage(
             }
         }
     }
-    SettingsCard("Fence alerts") {
+    SettingsCard("Fence Alerts") {
         SwitchRow(
             title = "Tell others when I arrive or leave",
             detail = "Only for fences in groups you share your location with.",
@@ -500,7 +495,7 @@ private fun AlertsPage(
     var notifySilent by remember { mutableStateOf(prefs.notifySilent) }
 
     if (others.isNotEmpty()) {
-        SettingsCard("Who you get alerts about") {
+        SettingsCard("Who You Get Alerts About") {
             Hint("Switch someone off to stop their arrivals, departures, check-ins and battery alerts on this phone. Their SOS always gets through.")
             others.forEach { m ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -532,7 +527,7 @@ private fun AlertsPage(
         }
     }
     if (supports("silence")) {
-        SettingsCard("Quiet phones") {
+        SettingsCard("Quiet Phones") {
             SwitchRow(
                 title = "Tell me when someone's phone goes quiet",
                 detail = "If a phone that shares its location hasn't been in touch for several hours (switched off, flat battery, or the app was stopped).",
@@ -570,7 +565,7 @@ private fun AlertsPage(
         }
     }
     if (supports("checkin")) {
-        SettingsCard("Check-ins") {
+        SettingsCard("Check-Ins") {
             SwitchRow(
                 title = "Show the Check in button",
                 detail = "Send \"I'm here\" with your location and an optional note.",
@@ -585,7 +580,7 @@ private fun AlertsPage(
             )
         }
     }
-    SettingsCard("Low battery") {
+    SettingsCard("Low Battery") {
         SwitchRow(
             title = "Tell others when my battery is low",
             detail = "They get a notification when your battery drops to 15% or 10%, unless you're charging.",
@@ -657,7 +652,7 @@ private fun TrailPage(
 ) {
     val haptics = LocalHapticFeedback.current
     var showTrails by remember { mutableStateOf(prefs.showTrails) }
-    SettingsCard("Keep my trail") {
+    SettingsCard("Keep My Trail") {
         Hint(
             "Where you've been recently, drawn as a line when someone taps you. Only people who can see your " +
                 "location see it. Turning it off deletes it.",
@@ -686,7 +681,7 @@ private fun TrailPage(
     }
     if (canTrips) {
         var notifyTrips by remember { mutableStateOf(prefs.notifyTrips) }
-        SettingsCard("Keep my trips") {
+        SettingsCard("Keep My Trips") {
             Hint(
                 "Your journeys between stops, like \"Home → School, 12 min, 4.2 km\", each with its route. " +
                     "The same people who can see your location can look through them. Turning it off deletes them.",
@@ -721,6 +716,33 @@ private fun MapPage(prefs: Prefs, onChange: (String) -> Unit, onDimChange: (Bool
     var dim by remember { mutableStateOf(prefs.dimMap) }
     val haptics = LocalHapticFeedback.current
     var style by remember { mutableStateOf(prefs.mapStyle) }
+    val namesContext = LocalContext.current
+    SettingsCard("Names") {
+        SwitchRow(
+            title = "Plain names",
+            detail = "Call things Map, Chat, Calendar and Lists instead of Thereabouts, Chitchat, Datebook and Odds & Ends. Only changes this device.",
+            checked = Access.plainNames,
+            onChange = { Access.setPlainNames(namesContext, it) },
+        )
+    }
+    if (Access.role == "grandparent") {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        SettingsCard("Easier to Use") {
+            SwitchRow(
+                title = "Bigger buttons and text",
+                detail = "Larger targets and words across the app.",
+                checked = Access.big,
+                onChange = { on -> Access.big = on; scope.launch { runCatching { Api(prefs.serverUrl, prefs.token).setAssist(big = on) } } },
+            )
+            SwitchRow(
+                title = "Picture icons",
+                detail = "A tiny map, a talking face and other pictures instead of the usual symbols.",
+                checked = Access.pictures,
+                onChange = { on -> Access.pictures = on; scope.launch { runCatching { Api(prefs.serverUrl, prefs.token).setAssist(pictures = on) } } },
+            )
+        }
+    }
     SettingsCard("Colours") {
         Hint("Only changes this device.")
         Palette.entries.forEach { p ->
@@ -740,7 +762,7 @@ private fun MapPage(prefs: Prefs, onChange: (String) -> Unit, onDimChange: (Bool
             }
         }
     }
-    SettingsCard("Light or dark") {
+    SettingsCard("Light or Dark") {
         listOf("system" to "Same as this phone", "light" to "Light", "dark" to "Dark").forEach { (id, label) ->
             Row(
                 Modifier.fillMaxWidth().selectable(selected = ThemeState.mode == id) {
@@ -755,7 +777,7 @@ private fun MapPage(prefs: Prefs, onChange: (String) -> Unit, onDimChange: (Bool
             }
         }
     }
-    SettingsCard("Map style") {
+    SettingsCard("Map Style") {
         Hint("Only changes this phone. All are free maps from OpenStreetMap data.")
         MapStyles.all.forEach { s ->
             Row(
@@ -791,31 +813,13 @@ private fun AccountPage(
     username: String,
     hasPassword: Boolean?,
     onPasswordSaved: (String) -> Unit,
-    me: Member?,
-    canEmoji: Boolean,
-    onProfileChanged: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var nameMsg by remember { mutableStateOf<String?>(null) }
-    var emojiMsg by remember { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
-    var picking by remember { mutableStateOf(false) }
-    fun saveIcon(emoji: String, color: String) {
-        scope.launch {
-            emojiMsg = try {
-                Api(prefs.serverUrl, prefs.token).setIcon(emoji, color)
-                haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                onProfileChanged()
-                "Saved"
-            } catch (e: IOException) {
-                e.message ?: "Couldn't save"
-            }
-        }
-    }
-
-    SettingsCard("Sign-in") { AccountSection(prefs, username, hasPassword, onPasswordSaved) }
-    SettingsCard("Your name") {
+    if (Access.canSignIn) SettingsCard("Sign-In") { AccountSection(prefs, username, hasPassword, onPasswordSaved) }
+    SettingsCard("Your Name") {
         Hint("What others see on the map.")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
@@ -840,8 +844,30 @@ private fun AccountPage(
         }
         nameMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
+}
+
+/** Your icon (an emoji and a colour), at the top of Customize. */
+@Composable
+private fun IconCard(prefs: Prefs, me: Member?, canEmoji: Boolean, onProfileChanged: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var emojiMsg by remember { mutableStateOf<String?>(null) }
+    val haptics = LocalHapticFeedback.current
+    var picking by remember { mutableStateOf(false) }
+    fun saveIcon(emoji: String, color: String) {
+        scope.launch {
+            emojiMsg = try {
+                Api(prefs.serverUrl, prefs.token).setIcon(emoji, color)
+                haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                onProfileChanged()
+                "Saved"
+            } catch (e: IOException) {
+                e.message ?: "Couldn't save"
+            }
+        }
+    }
+
     if (canEmoji && me != null) {
-        SettingsCard("Your icon") {
+        SettingsCard("Your Icon") {
             Row(
                 Modifier.fillMaxWidth().clickable { picking = true }.padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -901,7 +927,7 @@ private fun PhoneChecks(perms: PermissionState) {
 @Composable
 private fun AboutPage(prefs: Prefs, perms: PermissionState, serverVersion: String, onLeave: () -> Unit) {
     var confirmLeave by remember { mutableStateOf(false) }
-    SettingsCard("Phone setup") { PhoneChecks(perms) }
+    SettingsCard("Phone Setup") { PhoneChecks(perms) }
     SettingsCard("Server") {
         Text(prefs.serverUrl, style = MaterialTheme.typography.bodyMedium)
         if (serverVersion.isNotEmpty()) Hint("Server version $serverVersion")

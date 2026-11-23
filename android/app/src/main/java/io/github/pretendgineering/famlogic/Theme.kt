@@ -34,8 +34,7 @@ private data class Tokens(
 )
 
 enum class Palette(val id: String, val title: String, val description: String) {
-    Dracula("dracula", "Muted Dracula", "Soft dusky purples with gentle pink, cyan and green."),
-    Purple("purple", "Purple", "The original bright Material purple."),
+    Dracula("dracula", "Default", "Soft dusky purples with gentle pink, cyan and green."),
     Paper("paper", "Warm paper", "Cream and ink with a deep red: easy on the eyes."),
     Forest("forest", "Forest", "Calm greens."),
     Ocean("ocean", "Ocean", "Cool blues."),
@@ -52,10 +51,6 @@ private fun tokens(p: Palette, dark: Boolean): Tokens = when (p) {
         0xFFB8A3E3, 0xFF231B3A, 0xFF46405E, 0xFFE6DCFF, 0xFFE3A3C8, 0xFFE57A8E, 0xFFE0607A)
     else Tokens(0xFFF6F4F8, 0xFFFFFFFF, 0xFFECE9F2, 0xFF282A36, 0xFF615E77, 0xFFDCD8E6,
         0xFF6F5AA8, 0xFFFFFFFF, 0xFFE4DCF5, 0xFF372A66, 0xFFA34F82, 0xFFB53A55, 0xFFC0394F)
-    Palette.Purple -> if (dark) Tokens(0xFF1D1E28, 0xFF262735, 0xFF31324A, 0xFFF2F0FA, 0xFFA4A2BF, 0xFF3A3B52,
-        0xFFBD93F9, 0xFF2B1958, 0xFF433A64, 0xFFE4D6FF, 0xFFFF92DF, 0xFFFF6E7F, 0xFFE25569)
-    else Tokens(0xFFF4F1FB, 0xFFFFFFFF, 0xFFE7E0F3, 0xFF231F33, 0xFF5B5570, 0xFFDDD6EE,
-        0xFF6E48D6, 0xFFFFFFFF, 0xFFE3D9FB, 0xFF2A1462, 0xFF7D5260, 0xFFC7354B, 0xFFC7354B)
     Palette.Paper -> if (dark) Tokens(0xFF1F1B16, 0xFF2A251F, 0xFF352E26, 0xFFEFE6D6, 0xFFB3A690, 0xFF463D31,
         0xFFD98C7A, 0xFF3A1610, 0xFF4D3128, 0xFFF6D6CC, 0xFFC9B27C, 0xFFE57A6E, 0xFFE0604F)
     else Tokens(0xFFF6F0E4, 0xFFFFFAF0, 0xFFEFE6D4, 0xFF2E2418, 0xFF6E6050, 0xFFDDD0B8,

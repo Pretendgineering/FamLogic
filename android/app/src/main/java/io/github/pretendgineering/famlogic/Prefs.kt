@@ -235,7 +235,18 @@ class Prefs(context: Context) {
     var pinSet: Boolean
         get() = sp.getBoolean("pin_set", false)
         set(v) = sp.edit { putBoolean("pin_set", v) }
-    /** How this device is used: "phone", "interactive" or "display". This device only. */
+    var bigUi: Boolean
+        get() = sp.getBoolean("big_ui", false)
+        set(v) = sp.edit { putBoolean("big_ui", v) }
+    var pictureIcons: Boolean
+        get() = sp.getBoolean("picture_icons", false)
+        set(v) = sp.edit { putBoolean("picture_icons", v) }
+    /** Plain names (Map, Chat…) instead of the modules' own (Thereabouts, Chitchat…). This device only. */
+    var plainNames: Boolean
+        get() = sp.getBoolean("plain_names", false)
+        set(v) = sp.edit { putBoolean("plain_names", v) }
+
+    /** How this device is used: "phone" or "display" (a Control Deck). This device only. */
     var deviceMode: String
         get() = sp.getString("device_mode", "phone") ?: "phone"
         set(v) = sp.edit { putString("device_mode", v) }

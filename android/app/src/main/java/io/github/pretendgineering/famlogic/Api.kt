@@ -190,6 +190,9 @@ data class MembersResponse(
     val kidPreset: String = "",
     val home: List<String> = emptyList(),
     val pinSet: Boolean = false,
+    /** Bigger buttons and text, and picture icons (on by default for younger children). */
+    val big: Boolean = false,
+    val pictures: Boolean = false,
 )
 
 /** What join, sign-in and password resets return: this phone is now signed in as [member]. */
@@ -308,17 +311,32 @@ class Api(private val baseUrl: String, private val token: String = "") {
                 listOf("sections", "features").forEach { key ->
                     k.optJSONObject(key)?.let { m -> m.keys().forEach { if (m.optBoolean(it)) on += it } }
                 }
+                // Module levels: "thereabouts:view" and so on; a module that isn't off is usable.
+                k.optJSONObject("modules")?.let { m ->
+                    m.keys().forEach { id ->
+                        val lvl = m.optString(id)
+                        on += "level:$id:$lvl"
+                        if (lvl != "off") on += id
+                    }
+                }
                 on
             },
             kidPreset = settings?.optJSONObject("kid")?.optString("preset").orEmpty(),
             home = settings?.optJSONArray("home")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
             pinSet = settings?.optBoolean("pinSet", false) ?: false,
+            big = settings?.optBoolean("big", false) ?: false,
+            pictures = settings?.optBoolean("pictures", false) ?: false,
         )
     }
 
     /** Checks the family's parent PIN (wrong guesses lock it for a while). */
     suspend fun checkPin(pin: String) {
         request("POST", "/api/pin/check", JSONObject().put("pin", pin))
+    }
+
+    /** Your own bigger buttons and picture icons (grandparents and grown-ups). */
+    suspend fun setAssist(big: Boolean? = null, pictures: Boolean? = null) {
+        request("POST", "/api/me", JSONObject().apply { big?.let { put("big", it) }; pictures?.let { put("pictures", it) } })
     }
 
     /** Arranges your own home screen (adults). */

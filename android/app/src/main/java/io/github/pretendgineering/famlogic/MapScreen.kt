@@ -130,7 +130,8 @@ fun MapScreen(
     joinCircleCode: String? = null,
     onJoinCircleHandled: () -> Unit = {},
     onFeatures: (Set<String>) -> Unit = {},
-    openSettings: Boolean = false,
+    /** The home screen asked for settings: "full" or "limited" (a child's own). */
+    openSettings: String? = null,
     onSettingsHandled: () -> Unit = {},
     onSettingsClosed: () -> Unit = {},
 ) {
@@ -150,14 +151,16 @@ fun MapScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var sharing by remember { mutableStateOf(prefs.sharing) }
     var showSettings by remember { mutableStateOf(false) }
+    var settingsFull by remember { mutableStateOf(true) }
     // The home screen asked for settings (it already checked the parent PIN).
     LaunchedEffect(openSettings) {
-        if (openSettings) {
+        if (openSettings != null) {
+            settingsFull = openSettings == "full"
             showSettings = true
             onSettingsHandled()
         }
     }
-    val askSettings = rememberSettingsGate(prefs) { showSettings = true }
+    val gate = rememberSettingsGate(prefs) { full -> settingsFull = full; showSettings = true }
     var camera by remember { mutableStateOf<CameraCommand?>(null) }
     var cameraSeq by remember { mutableIntStateOf(0) }
     var fittedOnce by remember { mutableStateOf(false) }
@@ -531,6 +534,7 @@ fun MapScreen(
                 }
             },
             onBack = { showSettings = false; onSettingsClosed(); scope.launch { refresh() } },
+            limited = !settingsFull,
             onMapStyleChange = { mapStyle = it },
             onDimMapChange = { dimMap = it },
             members = members,
@@ -575,9 +579,9 @@ fun MapScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(familyName.ifEmpty { "FamLogic" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { SecretTitle(familyName.ifEmpty { "FamLogic" }, gate) },
                 actions = {
-                    IconButton(onClick = askSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                    if (!Access.hideSettings) IconButton(onClick = gate.cog) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
                 },
             )
         },
@@ -637,7 +641,7 @@ fun MapScreen(
                 hasPassword == false && prefs.canUsePassword -> Banner(
                     "Set a password so you can sign back in on a new phone.",
                     "Set up",
-                ) { askSettings() }
+                ) { gate.cog() }
                 !perms.background -> Banner(
                     "Choose \"Allow all the time\" so sharing keeps working after a restart.",
                     "Fix",
