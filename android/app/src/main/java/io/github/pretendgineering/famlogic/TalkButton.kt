@@ -12,6 +12,21 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -30,7 +45,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -45,12 +59,15 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 
 /**
- * Push to talk: a smiley with an open mouth and sound waves. Press and hold to
- * speak: it pops out and glows while it listens, so it's obvious it's being held;
- * let go and the words come back as text ([onText], "" if nothing was understood).
+ * Push to talk: a happy, open-mouthed smiley. Press and hold to speak: it pops
+ * out and glows while it listens, so it's obvious it's being held; let go and the
+ * words come back as text ([onText], "" if nothing was understood).
+ *
+ * [bar]: a wide bar (the smiley and "Hold to talk"), for children and tablets,
+ * above the message box. Otherwise a round button beside it.
  */
 @Composable
-fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modifier = Modifier) {
+fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modifier = Modifier, bar: Boolean = false, label: String = "Hold to talk") {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -59,47 +76,73 @@ fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modif
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val accent = MaterialTheme.colorScheme.primary
 
-    val pop by animateFloatAsState(if (listening) 1.18f else 1f, spring(dampingRatio = 0.45f, stiffness = 500f), label = "pop")
+    val pop by animateFloatAsState(if (listening) (if (bar) 1.04f else 1.18f) else 1f, spring(dampingRatio = 0.45f, stiffness = 500f), label = "pop")
     val glow by animateFloatAsState(if (listening) 1f else 0f, tween(180), label = "glow")
     val pulse = rememberInfiniteTransition(label = "pulse")
-    val beat by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "beat")
+    val beat by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(450), RepeatMode.Reverse), label = "beat")
+    val mouth = if (listening) 0.65f + 0.35f * beat else 0.8f
 
-    Box(
-        modifier.size(size)
-            .semantics { contentDescription = "Hold to talk, let go to send" }
-            .pointerInput(Unit) {
-                detectTapGestures(onPress = {
-                    if (thinking) return@detectTapGestures
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                        askMic.launch(Manifest.permission.RECORD_AUDIO)
-                        return@detectTapGestures
-                    }
-                    Voice.stop() // don't record the phone reading something aloud
-                    val take = Voice.start(context, prefs)
-                    if (take == null) {
-                        Voice.oops(context)
-                        return@detectTapGestures
-                    }
-                    listening = true
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    val released = tryAwaitRelease()
-                    listening = false
-                    if (!released) {
-                        take.cancel()
-                        return@detectTapGestures
-                    }
-                    thinking = true
-                    scope.launch {
-                        val text = runCatching { take.finish() }.getOrDefault("")
-                        thinking = false
-                        onText(text.trim())
-                    }
-                })
-            },
-        contentAlignment = Alignment.Center,
-    ) {
+    val press = Modifier
+        .semantics { contentDescription = "Hold to talk, let go to send" }
+        .pointerInput(Unit) {
+            detectTapGestures(onPress = {
+                if (thinking) return@detectTapGestures
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    askMic.launch(Manifest.permission.RECORD_AUDIO)
+                    return@detectTapGestures
+                }
+                Voice.stop() // don't record the phone reading something aloud
+                val take = Voice.start(context, prefs)
+                if (take == null) {
+                    Voice.oops(context)
+                    return@detectTapGestures
+                }
+                listening = true
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                val released = tryAwaitRelease()
+                listening = false
+                if (!released) {
+                    take.cancel()
+                    return@detectTapGestures
+                }
+                thinking = true
+                scope.launch {
+                    val text = runCatching { take.finish() }.getOrDefault("")
+                    thinking = false
+                    onText(text.trim())
+                }
+            })
+        }
+
+    if (bar) {
+        val shape = RoundedCornerShape(size / 2)
+        Box(
+            modifier.fillMaxWidth().height(size).scale(pop)
+                .clip(shape)
+                .background(lerp(MaterialTheme.colorScheme.primaryContainer, accent, glow * .85f))
+                .border(2.dp, accent.copy(alpha = .5f + .5f * glow), shape)
+                .then(press),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(size * 0.82f), contentAlignment = Alignment.Center) {
+                    Canvas(Modifier.fillMaxSize()) { smiley(mouth, listening) }
+                    if (thinking) CircularProgressIndicator(Modifier.fillMaxSize(), strokeWidth = 4.dp)
+                }
+                Text(
+                    when { thinking -> "Just a moment…"; listening -> "Listening… let go to send"; else -> label },
+                    Modifier.padding(start = 14.dp),
+                    style = if (size >= 72.dp) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (glow > .5f) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+        return
+    }
+    Box(modifier.size(size).then(press), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size).scale(pop)) {
-            // The glow: a soft halo in the theme's colour, breathing while held.
+            // The glow: a soft halo in the theme's colour while held.
             if (glow > 0f) {
                 drawCircle(
                     Brush.radialGradient(
@@ -109,7 +152,7 @@ fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modif
                     radius = this.size.minDimension / 2,
                 )
             }
-            talkingFace(mouth = if (listening) 0.6f + 0.4f * beat else 0.55f, waves = if (listening) beat else 0f, listening = listening, accent = accent)
+            smiley(mouth, listening, scale = .78f)
         }
         if (thinking) CircularProgressIndicator(Modifier.size(size * 0.9f), strokeWidth = 5.dp)
     }
@@ -117,31 +160,37 @@ fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modif
 
 private val INK = Color(0xFF2B2440)
 
-/** A round yellow face, mouth open, with sound waves coming out. */
-private fun DrawScope.talkingFace(mouth: Float, waves: Float, listening: Boolean, accent: Color) {
-    val s = size.minDimension
-    val c = Offset(s * .44f, s * .52f)
-    val r = s * .3f
+/** A round yellow face with a big, happy, open-mouthed grin (it talks while listening). */
+private fun DrawScope.smiley(open: Float, listening: Boolean, scale: Float = .92f) {
+    val r = size.minDimension / 2 * scale
+    val c = center
     drawCircle(Color(0xFFFFCC3D), r, c)
-    drawCircle(INK.copy(alpha = .35f), r, c, style = Stroke(s * .02f))
-    // Eyes (a little wider while listening).
-    val eye = s * (if (listening) .032f else .026f)
-    drawCircle(INK, eye, Offset(c.x - r * .38f, c.y - r * .28f))
-    drawCircle(INK, eye, Offset(c.x + r * .32f, c.y - r * .28f))
-    // The open mouth, with a tongue.
-    val mw = r * .62f
-    val mh = r * .62f * mouth
-    drawOval(Color(0xFFB3263A), Offset(c.x - mw / 2, c.y + r * .12f), Size(mw, mh))
-    drawOval(Color(0xFFFF8A9B), Offset(c.x - mw * .28f, c.y + r * .12f + mh * .55f), Size(mw * .56f, mh * .4f))
-    // Sound waves, rippling outward while held.
-    for (i in 0..2) {
-        val grow = s * (.12f + i * .085f) + s * .03f * waves
-        drawArc(
-            if (listening) accent else Color(0xFF6F5AA8), -38f, 76f, false,
-            topLeft = Offset(c.x + r * .9f - grow, c.y - grow),
-            size = Size(grow * 2, grow * 2),
-            style = Stroke(s * .035f, cap = StrokeCap.Round),
-            alpha = if (listening) (1f - i * .22f) else (.8f - i * .2f),
-        )
+    drawCircle(Color(0xFFE0A82E), r, c, style = Stroke(r * .06f))
+    // Rosy cheeks.
+    drawCircle(Color(0xFFFF8A80).copy(alpha = .45f), r * .14f, Offset(c.x - r * .58f, c.y + r * .12f))
+    drawCircle(Color(0xFFFF8A80).copy(alpha = .45f), r * .14f, Offset(c.x + r * .58f, c.y + r * .12f))
+    // Eyes: tall ovals, a little bigger while listening, each with a sparkle.
+    val ew = r * (if (listening) .2f else .17f)
+    val eh = r * (if (listening) .3f else .26f)
+    listOf(-1f, 1f).forEach { side ->
+        val e = Offset(c.x + side * r * .34f, c.y - r * .26f)
+        drawOval(INK, Offset(e.x - ew / 2, e.y - eh / 2), Size(ew, eh))
+        drawCircle(Color.White, ew * .2f, Offset(e.x + ew * .15f, e.y - eh * .2f))
+    }
+    // The grin: a wide "D" on its side (flat top, round bottom), with a tongue.
+    val top = c.y + r * .04f
+    val w = r * .62f
+    val h = r * .62f * open
+    val mouth = Path().apply {
+        moveTo(c.x - w, top)
+        lineTo(c.x + w, top)
+        arcTo(Rect(c.x - w, top - h, c.x + w, top + h), 0f, 180f, false)
+        close()
+    }
+    drawPath(mouth, Color(0xFF8E1F2F))
+    clipPath(mouth) {
+        drawOval(Color(0xFFFF6F7F), Offset(c.x - w * .55f, top + h * .45f), Size(w * 1.1f, h * .9f))
+        // Top teeth.
+        drawRect(Color.White, Offset(c.x - w * .8f, top), Size(w * 1.6f, h * .18f))
     }
 }

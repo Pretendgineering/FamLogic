@@ -106,6 +106,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/backup", s.admin(s.handleAdminBackup))
 	mux.HandleFunc("GET /api/admin/modules", s.consoleUser(s.handleAdminModules)) // any console user: which modules are on
 	mux.HandleFunc("PUT /api/admin/modules", s.admin(s.handleAdminSetModules))
+	mux.HandleFunc("GET /api/modules", s.device(s.handleDeviceModules))
+	mux.HandleFunc("PUT /api/modules", s.device(s.handleDeviceSetModules))
+	mux.HandleFunc("POST /api/modules", s.device(s.handleDeviceSetModules)) // for clients that can't send PUT
 	mux.HandleFunc("PUT /api/admin/members/{id}/role", s.admin(s.handleAdminSetRole))
 	mux.HandleFunc("POST /api/admin/dependents", s.admin(s.handleAdminAddDependent))
 	mux.HandleFunc("GET /api/admin/session", s.handleSession)

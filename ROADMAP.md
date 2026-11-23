@@ -30,7 +30,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 
 ### ✅ Phase 3: Design language (0.17.0)
 - **Serif headings, sans text:** Liberation Serif (the free, metric-compatible Times New Roman, OFL-licensed and bundled, so it works offline) for titles, names, card headers and big numbers; a clean sans for body text and controls. "Firm but friendly": old meets new.
-- **Themes,** chosen per device (app) or per browser (console), each with light and dark: **Default** (a muted Dracula), Warm paper, Forest, Ocean, and High contrast. (Purple was dropped in 0.20.)
+- **Themes,** chosen per device (app) or per browser (console), each with light and dark: **Default** (a muted Dracula), Warm paper, Forest, Ocean, and High contrast. (Purple was dropped in 0.20; renamed and joined by many more in 0.23.)
 
 ### ✅ Phase 3b: Home screen, parents' controls and tablets (0.19.0)
 - **Home screen** with tiles: a live map that opens Thereabouts, chat with the latest message, SOS, check-in, and module tiles as they arrive. Adults arrange their own; parents arrange children's.
@@ -54,59 +54,75 @@ Status: ✅ done · 🔨 next · ⏳ queued
 ### ✅ Voice for chat (0.21.0)
 - Built into the server image: Whisper (speech to text) and Piper (reading aloud), private and the same everywhere; the phone's own speech where it works better (Automatic: the Google edition uses it when present).
 - Younger children: a big push-to-talk smiley that pops and glows while held, sends what they said and reads it back; new messages read aloud; "Oops, try again!" when nothing was understood. Everyone else: a small talk button that types into the message box. A per-child switch in Access & Control.
-- Next for voice: the Pebble (hold to talk on watches with a microphone), the TV and Control Deck, and talking to your own agent (Phase 5).
+- Next for voice: the Pebble (hold to talk on watches with a microphone), the TV and Control Deck, and talking to your own agent (Steward).
 
 ### ✅ Home and chat polish (0.22.0)
 - Arranging Home: tiles follow your finger and the others make room as you drag; the corner grip stretches an outline that snaps to half width, full width or big.
 - One-button tiles (SOS, Check in) are the button, edge to edge. On Home the tab bar slides away (the tiles lead everywhere); it slides back in the other sections.
 - Chats open full screen in portrait; younger children keep the split-open list, now pinned while a chat is open and edge to edge.
 
-### ⏳ Android widgets
-- **Map snapshot** of who's where; **check in** in one tap; **SOS** (hold); **one person's card** (where, battery, last seen); **latest chat message** with Reply; **talk to Mom** (a face that opens a direct chat or push-to-talk, for kids); **quick nudges** (send ❤️ to someone); **where's my ride?** (whoever is driving to you, and how far away).
-- With the coming modules: **today's agenda**, **chores due now**, the **current routine's** checklist, the **shopping list**, **tonight's dinner**.
+### ✅ Layout, settings and looks (0.23.0)
+- **Settings in seven pages,** edge to edge: Location Sharing, You, Look and Feel, Alerts & Safety, Groups & Fences, Watch & Ring, About (with Device Mode folded under Advanced). Lists that are only just too long squeeze their rows to fit instead of scrolling a few pixels.
+- **Home screen:** flat, edge-to-edge tiles (squares appear only while arranging); a **drawer of tiles** to drag onto the screen; half-width tiles keep their size (the map too); the Chitchat tile's half size has quick buttons for the family chat and your last chat; **chat shortcut** tiles open one chosen chat, with that person's face; "coming soon" tiles for planned modules. Module switches in Look and Feel (admins: the family's; everyone else: hide on this phone).
+- **Map:** opens where it last was and jumps (rather than flies) to the family, so there's no jittery first load.
+- **Talking:** a wide talk bar above the message box for children and tablets; a friendlier, grinning smiley.
+- **Themes:** Hannah's Theme, Hobbit Door, Boring Blue, Lofi Cabin, Logic Noir, Suspicious Orange, And Chill, Night Shift, Gamer Mode, Grandma's Couch. More icon colours, a colour mixer and many more emoji.
 
-### ⏳ Settings overhaul
-- A full review of the order and names of every setting in the app and the console (after 0.20's first pass: Title Case, Customize third, Account second).
+## Focus: the core three, polished first
 
-### 🔨 Phase 4: Tasks, tags and the Markdown vault
-- **Tags on everything:** to-dos, chores, routines, events and list items can be tagged to people (`@Sam`) and groups (`#kids`, `#parents`), so each person's screens show what's theirs.
-- The **vault** folder of Markdown files (Obsidian-friendly; see ARCHITECTURE.md → Vault), watched for edits made elsewhere. ✅ Started: the vault's location (inside the container, or a host folder with `PUID`/`PGID`), People notes, and the formatting guide for agents (`docs/agents/famlogic-vault.md`, `AGENTS.md` in the vault, `/api/v1/vault/guide`).
-- **To-dos and lists:** shared lists (shopping, packing) and personal to-dos with due dates and **time of day** (morning, after school, evening), so screens show what matters now. Quick add from the app, console, Pebble and Index 01.
-- **Chores:** who, what, how often; tick off anywhere; optional stars for children.
-- **Routines and daily rhythms:** checklists like *Morning*, *After school* or *Bedtime*, and a **daily rhythm** set in the console (mini schedules per day, per person or group: "07:00 Morning, 15:30 After school, 19:30 Bedtime", "13:00 Nap time" for the little one). Screens switch to the current routine on their own.
+The map, chat and safety features are what families use every day. Next, each gets a round of real-use polish before any new module starts. After that, modules come **one at a time**, each finished (app, console, watch, docs) before the next.
 
-### ⏳ Phase 5: Voice and the agent bridge
-- **Press to talk** and **read aloud** as a main way to use FamLogic, everywhere: phones, kids' tablets, the TV, Pebble watches, the Index 01 ring.
-- FamLogic is the **gateway**, not the AI: speech is turned into text, sent with who's talking (and their role) to **your own agent** (Hermes, OpenClaw or anything with a webhook or OpenAI-style API, on your home server or VPS), and the reply is read back.
-- The agent uses FamLogic's API (scoped keys, OpenAPI, a ready-made **skill file**) to do things: "I fed the cat" ticks off the chore, "tell Mom I'm at the park" sends a chat message, "what's next?" reads the routine, parents ask "what still needs doing today?".
-- **Speech** on the server first (optional Whisper for speech-to-text and Piper for text-to-speech containers: private and the same on every device), falling back to the device's own Android speech services.
-- **Read aloud:** new messages and chores can be spoken on kids' devices and the TV (per device, with quiet hours).
-- **TV remote:** a remote button mapped (with a button-remapper app) to FamLogic's talk shortcut.
-- **Pebble:** hold a button to talk (watches with a microphone); the reply shows on the watch.
-- **Parents' summary:** an optional end-of-day summary (chores done, messages, who went where), from the agent or FamLogic itself.
+### 🔨 1. Map (Thereabouts)
+- The people list as a pull-up sheet over a full-height map (drag it up for everyone, down for more map); tap a face to follow them.
+- Clearer pins: a small "how long ago" on each, a soft halo for SOS, grouped pins when people are together.
+- Place (fence) editing on the map itself: drag the circle's edge to resize.
+- Trips: a cleaner day view (stops and drives on a timeline), share a trip to chat.
+- Battery and accuracy: smarter update timing when someone's still, honest "last seen" wording everywhere.
 
-### ⏳ Phase 6: TV launcher and tablet layout
-- **Android TV launcher:** FamLogic as the TV's home screen. Connect to the server in its settings (no personal account; a parent approves it in the console). A horizontally scrolling row of rounded cards, three at a time: today's agenda, a small map of who's where, to-dos for this time of day, the current routine (it changes with the daily rhythm: Morning, Nap time, Bedtime…), this week's menu, recent chat. Below: shortcuts to your most-used apps. D-pad friendly, dark and burn-in friendly.
-- **Front Room, the TV launcher, as its own APK** (Android TV's launcher needs a separate build); same server.
-- **Control Deck (countertop mode), round two:** a layout designed for a kitchen counter or wall, beyond full-screen home tiles.
-- **Tablet layout, next:** the signed-in person's chores, to-dos and routine beside the map, filtered by their tags; a big talk button on kids' tablets.
-- **Devices:** several devices per person, the console's Devices page with role, version, last seen and Revoke; display/launcher pairing with a code approved in the console.
+### 🔨 2. Chat (Chitchat)
+- "Message" from a person's card on the map; reply to a specific message; reactions with the nudge set.
+- Photos: a proper viewer (pinch to zoom, save), several at once.
+- Voice messages (record and play), building on the built-in voice.
+- Search, and a "jump to unread" button; typing indicators.
+- Quick replies from the Pebble and the Index 01 ring.
 
-### ⏳ Phase 7: Calendar
-- Shared family calendar, events as Markdown notes with tags; **CalDAV** so phone calendars (DAVx⁵ on Android, iOS natively) and Thunderbird sync both ways; outside calendars (school, sports) by ICS link.
+### 🔨 3. Safety
+- SOS: a clearer full-screen alert for everyone else (who, where, how long ago, call and directions buttons), with "I'm on my way" replies the sender sees.
+- Check-ins: scheduled check-in reminders for children ("check in when you get to school"), missed check-in alerts to parents.
+- Arrive/leave alerts that are easier to set up from a fence, with a test button.
+- "Where's my ride?": whoever is driving to you, and how far away.
+- Low-battery and quiet-phone alerts with a single tap to call.
 
-### ⏳ Phase 8: Meals and menus
-- Weekly meal plans and recipes; ingredients to the shopping list; easy for an agent to plan.
+### ⏳ 4. Android widgets
+- **Map snapshot,** **check in** in one tap, **SOS** (hold), **one person's card**, **latest chat message** with Reply, **talk to Mom** (for kids), **quick nudges**, **where's my ride?**. Module widgets come with each module.
 
-### ⏳ Chat, next steps
-- "Message" from a person's card on the map; chat on the Pebble (quick replies) and from the Index 01 ring; parents editing a child's switches from the app (today: the web console).
+### ⏳ 5. Modules, one at a time
+In this order (each is finished before the next starts):
+1. **Odds & Ends** (lists and to-dos) on the Markdown vault, with tags (`@Sam`, `#kids`) and time of day. The vault itself has started: its location setting, People notes and the agents' formatting guide.
+2. **Fair Share** (chores): who, what, how often; tick off anywhere; optional stars.
+3. **Rhythms** (routines and daily rhythms): checklists that switch with the time of day.
+4. **Datebook** (calendar) with CalDAV and outside calendars by link.
+5. **Pantry** (meals and recipes), feeding the shopping list.
+6. **Steward** (the agent bridge): your own AI agent, using FamLogic's API with scoped keys and the vault guide; voice in, voice out.
+7. **Corkboard / Front Room** (Control Deck round two and the Android TV launcher, its own APK).
 
 ### ⏳ Later and parked
-- **Pebble App Store listing** (draft in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md)), and **F-Droid / IzzyOnDroid** for the app.
-- **Shareable invite message** with an app download link, once the app is in a store.
-- **Profile pictures** (emoji icons cover the simple case; they stay as the fallback).
-- **Google Find Hub trackers** (parked, Nov 2026): no official API; the only route is the unofficial GoogleFindMyTools approach with the admin's own Google account. Alternative: family phones listening for the family's own cheap Bluetooth tags.
-- **Home Assistant** integration (presence, chores done, display on a dashboard).
+- **iPhone app** (see below).
+- **Voice, beyond chat:** the Pebble (hold to talk), the TV and Control Deck, read-aloud with quiet hours.
+- **Devices page** in the console (several devices per person, last seen, Revoke); pairing displays with a code.
+- **Pebble App Store listing** (draft in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md)), and **F-Droid / IzzyOnDroid** for the app; a shareable invite message with a download link once the app is in a store.
+- **Profile pictures** (emoji icons stay as the fallback).
+- **Google Find Hub trackers** (parked, Nov 2026): no official API. Alternative: family phones listening for the family's own cheap Bluetooth tags.
+- **Home Assistant** integration (presence, chores done, a dashboard).
+
+### iPhone: how feasible?
+Possible, with real limits. The server and its API already work for any client, so an iPhone app is "only" a second app (SwiftUI, or Kotlin Multiplatform sharing the app's logic). The hard parts are Apple's rules, not the code:
+- **Background location** works (significant-change and region monitoring, plus fences via iOS geofences), but iOS decides when the app runs; updates are less regular than Android's always-on service.
+- **Instant alerts** need Apple's push service (APNs). FamLogic avoids Google push on Android with its own always-on connection; iOS doesn't allow that, so the server would need to send pushes through Apple, which needs an Apple developer account ($99/year) and the server reaching Apple's servers.
+- **Distribution:** the App Store (review, the developer account), or TestFlight for a family. No sideloading like an APK.
+- **Pebble** works on iPhone (the new Pebble app supports iOS), so the watch could follow.
+
+A sensible first step would be a smaller iPhone app (map, chat, SOS, check-in, push alerts), after the core three are polished on Android.
 
 ## History: location sharing (the Thereabouts module)
 

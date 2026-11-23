@@ -1,5 +1,7 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.width
@@ -455,6 +457,7 @@ fun MapScreen(
         BackHandler { showSettings = false; onSettingsClosed() }
         SettingsScreen(
             prefs = prefs,
+            onOpenHomeEditor = { HomeEditor.requested = true; showSettings = false; onSettingsClosed() },
             perms = perms,
             features = features,
             sharing = sharing,
@@ -791,12 +794,22 @@ fun MapScreen(
                 }
             }
 
-            // Everyone, in a card.
-            ElevatedCard(
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier.fillMaxWidth().then(if (wide) Modifier.weight(1f) else Modifier).padding(start = 12.dp, end = 12.dp, top = 8.dp),
-            ) {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = if (wide) androidx.compose.ui.unit.Dp.Infinity else 260.dp)) {
+            // Everyone, edge to edge under the map. A list only just too long for its space
+            // tightens its rows to fit instead of scrolling a few pixels.
+            val peopleState = androidx.compose.foundation.lazy.rememberLazyListState()
+            var peopleViewport by remember { mutableIntStateOf(0) }
+            // Portrait: the list's room is fixed (it shrinks to fit when short), so measure against that.
+            val listRoom = if (wide) peopleViewport else with(androidx.compose.ui.platform.LocalDensity.current) { 260.dp.roundToPx() }
+            val squeeze = rememberSqueeze(shown.size, listRoom) { peopleState.overflowPx() }
+            Column(Modifier.fillMaxWidth().then(if (wide) Modifier.weight(1f) else Modifier).padding(top = 8.dp)) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                androidx.compose.runtime.CompositionLocalProvider(LocalSqueeze provides squeeze.factor) {
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = if (wide) androidx.compose.ui.unit.Dp.Infinity else 260.dp)
+                        .onSizeChanged { peopleViewport = it.height }
+                        .graphicsLayer { alpha = if (squeeze.ready) 1f else 0f },
+                    state = peopleState,
+                ) {
                     if (shown.isEmpty()) {
                         item { Text("Loading…", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
@@ -825,6 +838,7 @@ fun MapScreen(
                             onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
                         )
                     }
+                }
                 }
             }
 
@@ -870,7 +884,7 @@ private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> U
     Row(
         Modifier.fillMaxWidth()
             .combinedClickable(onClickLabel = "Show on map", onLongClickLabel = "More about ${m.name}", onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = squeezed(10.dp)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -1015,7 +1029,7 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
     Box(
         modifier
             .then(if (tile) Modifier else Modifier.height(if (tall) 84.dp else 60.dp))
-            .clip(RoundedCornerShape(if (tile) 24.dp else 16.dp))
+            .clip(RoundedCornerShape(if (tile) 0.dp else 16.dp))
             .background(red.copy(alpha = if (tile) 0.2f else 0.14f))
             .drawBehind { drawRect(red, size = size.copy(width = size.width * progress.value)) }
             .semantics { contentDescription = "SOS. Press and hold for 3 seconds to alert everyone." }

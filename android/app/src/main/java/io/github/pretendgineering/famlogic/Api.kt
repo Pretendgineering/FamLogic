@@ -355,6 +355,21 @@ class Api(private val baseUrl: String, private val token: String = "") {
     }
 
     /** Arranges your own home screen (adults). */
+    /** The family's modules and which are on. */
+    suspend fun modules(): List<ModuleInfo> {
+        val arr = request("GET", "/api/modules").optJSONArray("modules") ?: return emptyList()
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            ModuleInfo(o.optString("id"), o.optString("name"), o.optString("plain"), o.optString("description"), o.optBoolean("available"), o.optBoolean("enabled"))
+        }
+    }
+
+    /** Admins: switch modules on or off for the whole family. */
+    suspend fun setModules(enabled: Map<String, Boolean>): List<ModuleInfo> {
+        request("POST", "/api/modules", JSONObject().put("enabled", JSONObject(enabled)))
+        return modules()
+    }
+
     suspend fun setHome(tiles: List<String>) {
         request("POST", "/api/me", JSONObject().put("home", org.json.JSONArray(tiles)))
     }
@@ -860,3 +875,6 @@ data class ChatThread(
     val reads: Map<String, Long>,
     val canPost: Boolean,
 )
+
+/** A FamLogic module (Thereabouts, Chitchat…): whether it's built yet, and whether the family has it on. */
+data class ModuleInfo(val id: String, val name: String, val plain: String, val description: String, val available: Boolean, val enabled: Boolean)

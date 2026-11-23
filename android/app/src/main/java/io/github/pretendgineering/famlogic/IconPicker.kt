@@ -42,20 +42,23 @@ import androidx.compose.ui.unit.sp
 
 /** Colours to pick for your circle (the same list as the dashboard). */
 val ICON_COLORS = listOf(
-    "#e6194b", "#f58231", "#e0a100", "#3cb44b", "#469990", "#0fa3c2",
-    "#4363d8", "#6e48d6", "#911eb4", "#f032e6", "#9a6324", "#607d8b",
+    "#e6194b", "#c2185b", "#ff6f61", "#f58231", "#ff9000", "#e0a100",
+    "#c0ca33", "#3cb44b", "#1e5631", "#00a88c", "#00e3bd", "#469990",
+    "#0fa3c2", "#4363d8", "#1a237e", "#6e48d6", "#911eb4", "#f032e6",
+    "#ff8fab", "#a85c6f", "#9a6324", "#5d4037", "#607d8b", "#2b2b2b",
 )
 
 /** A hand-picked set of emoji, by theme. "" means "just my initial". */
 val ICON_EMOJI = listOf(
-    "Faces" to "😀 😎 🤓 🥳 😇 🤠 🙂 😺 👻 🤖 👽 🎃",
-    "People" to "👩 👨 🧑 👧 👦 👶 👵 👴 🧔 👸 🤴 🦸",
-    "Animals" to "🐶 🐱 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🦉 🦄 🐝 🦋 🐢 🐙 🐬 🐳 🦈 🦖",
-    "Nature" to "🌸 🌻 🌵 🌲 🍀 🍁 🌈 ⭐ 🌙 ☀️ ⚡ ❄️ 🔥 🌊",
-    "Food" to "🍎 🍓 🍉 🍕 🍔 🌮 🍩 🍪 🧁 ☕ 🍦 🥑",
-    "Activities" to "⚽ 🏀 🏈 ⚾ 🎾 🏐 🎮 🎸 🎨 📚 🎣 🏄 🚴 🧗 🏕️ 🎯",
-    "Travel" to "🚗 🚙 🏍️ 🚲 🛴 🚌 🚂 ✈️ 🚀 ⛵ 🏠 🏫",
-    "Symbols" to "❤️ 🧡 💛 💚 💙 💜 🖤 💎 👑 🎵 🍄 🌟",
+    "Faces" to "😀 😄 😁 😆 😂 🤣 😊 😇 🙂 😉 😍 🥰 😘 😋 😛 🤪 😜 🤗 🤭 🤫 🤔 🤨 😐 😏 😌 😴 🤤 😎 🤓 🧐 🥳 🥸 🤠 🤡 🥺 😤 😱 🤯 🥶 🥵 😈 👿 👹 👺 💀 👻 👽 👾 🤖 🎃 😺 😸 😹 😻 🙈 🙉 🙊",
+    "People" to "👩 👨 🧑 👧 👦 👶 👵 👴 🧔 👱 👩‍🦰 👨‍🦰 👩‍🦱 👨‍🦱 👩‍🦳 👨‍🦳 👩‍🦲 👨‍🦲 👸 🤴 🦸 🦹 🧙 🧚 🧛 🧜 🧝 🧞 🧟 🥷 👮 👷 💂 🕵️ 👩‍⚕️ 👨‍⚕️ 👩‍🍳 👨‍🍳 👩‍🎓 👨‍🎓 👩‍🏫 👨‍🏫 👩‍🚀 👨‍🚀 👩‍🎤 👨‍🎤 👩‍🎨 👨‍🎨 🤶 🎅",
+    "Animals" to "🐶 🐕 🐩 🐱 🐈 🦊 🦝 🐻 🐻‍❄️ 🐼 🐨 🐯 🦁 🐮 🐷 🐗 🐴 🦓 🦄 🐸 🐵 🦍 🐔 🐧 🐦 🐤 🦆 🦅 🦉 🦇 🐺 🐝 🐛 🦋 🐌 🐞 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦀 🦞 🐠 🐡 🐬 🐳 🦈 🦭 🐊 🦒 🐘 🦛 🦏 🐪 🦘 🦥 🦦 🦨 🦔 🐇 🐿️ 🦫 🐁 🐉",
+    "Nature" to "🌸 🌺 🌹 🌷 🌻 🌼 💐 🌵 🌲 🌳 🌴 🍀 ☘️ 🍁 🍂 🍃 🍄 🌾 🪴 🌈 ⭐ 🌟 ✨ 🌙 🌚 🌝 ☀️ 🌤️ ⛅ 🌧️ ⛈️ ⚡ ❄️ ☃️ ⛄ 🔥 💧 🌊 🌋 🏔️ 🌍 🪐 ☄️",
+    "Food" to "🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🥑 🥦 🥕 🌽 🌶️ 🥐 🥯 🥨 🧀 🥚 🥞 🧇 🥓 🍗 🌭 🍔 🍟 🍕 🌮 🌯 🥪 🍝 🍜 🍣 🍱 🥟 🍙 🍿 🧂 🍩 🍪 🎂 🍰 🧁 🍫 🍬 🍭 🍦 🍨 ☕ 🧃 🥤 🧋 🍵",
+    "Activities" to "⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🏓 🏸 🏒 🏑 🥍 🏏 ⛳ 🏹 🎣 🥊 🥋 🛹 🛼 ⛸️ 🎿 🏂 🏄 🏊 🚣 🧗 🚴 🏇 🤸 🧘 🎮 🕹️ 🎲 ♟️ 🧩 🎯 🎳 🎸 🎹 🥁 🎺 🎻 🎷 🎤 🎧 🎨 🖌️ 🧶 🧵 📚 📷 🎬 🏕️ 🎪 🎢 🎡",
+    "Travel" to "🚗 🚙 🚕 🚓 🚑 🚒 🚐 🛻 🚚 🚜 🏎️ 🏍️ 🛵 🚲 🛴 🚌 🚎 🚂 🚆 🚇 🚊 🚁 ✈️ 🛩️ 🚀 🛸 ⛵ 🚤 🛶 🚢 ⚓ 🏠 🏡 🏫 🏰 🏯 🗼 🗽 🎠 🏖️ 🏝️ ⛺ 🗺️ 🧭",
+    "Things" to "⌚ 📱 💻 🖥️ 🎁 🎈 🎉 🎊 🪁 🧸 🪀 🔮 🪄 🧿 💡 🔦 🕯️ 📦 ✏️ 🖍️ 📌 📎 ✂️ 🔑 🗝️ 🔨 🪛 🔧 ⚙️ 🧲 🧪 🔭 🔬 🩺 💊 🧼 🪥 🛁 🧺 👓 🕶️ 🎩 🧢 👒 🎒 👟 🥾 👑 💍 💎 🪙",
+    "Symbols" to "❤️ 🧡 💛 💚 💙 💜 🤎 🖤 🤍 🩷 🩵 💖 💗 💓 💞 💕 💘 ☮️ ☯️ ♾️ ⚛️ 🔆 💫 💥 💢 💤 🎵 🎶 ✅ ❎ ⭕ ❌ ❓ ❗ 💯 🔴 🟠 🟡 🟢 🔵 🟣 🟤 ⚫ ⚪ 🏁 🚩 🏳️‍🌈 🏴‍☠️",
 ).map { (title, list) -> title to list.split(" ") }
 
 /**
@@ -68,6 +71,7 @@ fun IconPickerDialog(name: String, emoji: String, color: String, onSave: (emoji:
     val haptics = LocalHapticFeedback.current
     var pickedEmoji by remember { mutableStateOf(emoji) }
     var pickedColor by remember { mutableStateOf(color) }
+    var mixing by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -86,6 +90,14 @@ fun IconPickerDialog(name: String, emoji: String, color: String, onSave: (emoji:
                 item(span = { GridItemSpan(maxLineSpan) }) { Section("Colour") }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Your own colour: tap the rainbow to mix one.
+                        Box(
+                            Modifier.size(34.dp).clip(CircleShape)
+                                .background(androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
+                                .then(if (mixing) Modifier.border(BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface), CircleShape) else Modifier)
+                                .clickable { mixing = !mixing }
+                                .semantics { contentDescription = "Mix your own colour" },
+                        )
                         ICON_COLORS.forEach { c ->
                             val selected = c.equals(pickedColor, ignoreCase = true)
                             Box(
@@ -99,6 +111,9 @@ fun IconPickerDialog(name: String, emoji: String, color: String, onSave: (emoji:
                             )
                         }
                     }
+                }
+                if (mixing) item(span = { GridItemSpan(maxLineSpan) }) {
+                    ColorMixer(pickedColor) { pickedColor = it }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) { Section("Icon") }
                 item {
@@ -154,5 +169,30 @@ fun Avatar(name: String, emoji: String, color: String, size: Int = 36) {
     ) {
         if (emoji.isNotEmpty()) Text(emoji, fontSize = (size * 0.5).sp)
         else Text(initialOf(name), color = Color.White, fontWeight = FontWeight.Bold, fontSize = (size * 0.42).sp)
+    }
+}
+
+/** Mix any colour: a hue, then how light and how strong it is. Gives "#rrggbb". */
+@Composable
+private fun ColorMixer(current: String, onChange: (String) -> Unit) {
+    val start = remember {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(parseColor(current), hsv)
+        hsv
+    }
+    var hue by remember { mutableStateOf(start[0]) }
+    var sat by remember { mutableStateOf(start[1].coerceAtLeast(.15f)) }
+    var value by remember { mutableStateOf(start[2].coerceIn(.25f, 1f)) }
+    fun emit() {
+        val argb = android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, value))
+        onChange("#%06x".format(argb and 0xFFFFFF))
+    }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text("Colour", style = MaterialTheme.typography.labelMedium)
+        androidx.compose.material3.Slider(value = hue, onValueChange = { hue = it; emit() }, valueRange = 0f..360f)
+        Text("Strength", style = MaterialTheme.typography.labelMedium)
+        androidx.compose.material3.Slider(value = sat, onValueChange = { sat = it; emit() }, valueRange = .15f..1f)
+        Text("Light or dark", style = MaterialTheme.typography.labelMedium)
+        androidx.compose.material3.Slider(value = value, onValueChange = { value = it; emit() }, valueRange = .25f..1f)
     }
 }

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"net/http/httptest"
 	"os"
+	"strings"
 	"path/filepath"
 	"testing"
 )
@@ -90,5 +92,25 @@ func TestRoles(t *testing.T) {
 		if v.ID == baby.ID {
 			t.Fatal("non-users shouldn't be in the app's people list")
 		}
+	}
+}
+
+func TestDeviceModuleSwitches(t *testing.T) {
+	store, ms := newStoreWithMembers(t, "Mom", "Dad")
+	s := NewServer(Config{AdminPassword: "correct horse"}, store, nil)
+	put := func(m *Member) int {
+		rec := httptest.NewRecorder()
+		s.handleDeviceSetModules(rec, httptest.NewRequest("PUT", "/api/modules", strings.NewReader(`{"enabled":{"thereabouts":true,"chat":false}}`)), m)
+		return rec.Code
+	}
+	if code := put(ms[1]); code != 403 {
+		t.Fatalf("a parent who isn't an admin: %d", code)
+	}
+	ms[0].Admin = true
+	if code := put(ms[0]); code != 200 {
+		t.Fatalf("admin: %d", code)
+	}
+	if m := store.Modules(); m.Enabled["chat"] || !m.Enabled["thereabouts"] || !m.SetupDone {
+		t.Fatalf("after: %+v", m)
 	}
 }

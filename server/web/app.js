@@ -4,7 +4,7 @@
 const $ = (sel) => document.querySelector(sel);
 
 // ---- appearance: this browser's palette and light/dark (the same palettes as the app) ----
-const THEMES = [["dracula", "Default"], ["paper", "Warm paper"], ["forest", "Forest"], ["ocean", "Ocean"], ["contrast", "High contrast"]];
+const THEMES = [["dracula", "Default"], ["hannah", "Hannah's Theme"], ["forest", "Hobbit Door"], ["ocean", "Boring Blue"], ["paper", "Lofi Cabin"], ["noir", "Logic Noir"], ["orange", "Suspicious Orange"], ["chill", "And Chill"], ["nightshift", "Night Shift"], ["gamer", "Gamer Mode"], ["couch", "Grandma's Couch"], ["contrast", "High contrast"]];
 // The modules' own names (Thereabouts, Chitchat…) or plain ones (Map, Chat…), per browser.
 let plainNames = false;
 try { plainNames = localStorage.getItem("plainNames") === "1"; } catch (_) {}
@@ -795,8 +795,8 @@ function showTrip(m, t) {
 
 // ---- icon picker: an emoji (or the initial) on a colour ----
 
-const ICON_COLORS = ["#e6194b", "#f58231", "#e0a100", "#3cb44b", "#469990", "#0fa3c2",
-  "#4363d8", "#6e48d6", "#911eb4", "#f032e6", "#9a6324", "#607d8b"];
+const ICON_COLORS = ["#e6194b", "#c2185b", "#ff6f61", "#f58231", "#ff9000", "#e0a100", "#c0ca33", "#3cb44b", "#1e5631", "#00a88c", "#00e3bd", "#469990",
+  "#0fa3c2", "#4363d8", "#1a237e", "#6e48d6", "#911eb4", "#f032e6", "#ff8fab", "#a85c6f", "#9a6324", "#5d4037", "#607d8b", "#2b2b2b"];
 const ICON_EMOJI = [
   ["Faces", "😀 😎 🤓 🥳 😇 🤠 🙂 😺 👻 🤖 👽 🎃"],
   ["People", "👩 👨 🧑 👧 👦 👶 👵 👴 🧔 👸 🤴 🦸"],
@@ -1112,8 +1112,9 @@ $("#pin-clear").addEventListener("click", async () => {
 
 // ---- Access & Control: what each person can use (parents and admins)
 const TILE_NAMES = { map: ["Thereabouts", "Map"], chat: ["Chitchat", "Chat"], sos: ["SOS", "SOS"], checkin: ["Check in", "Check in"],
-  calendar: ["Datebook", "Calendar"], todos: ["Odds & Ends", "Lists"], chores: ["Fair Share", "Chores"], meals: ["Pantry", "Meals"] };
-const tileName = (t) => (TILE_NAMES[t] || [t, t])[plainNames ? 1 : 0];
+  calendar: ["Datebook", "Calendar"], todos: ["Odds & Ends", "Lists"], chores: ["Fair Share", "Chores"], meals: ["Pantry", "Meals"],
+  routines: ["Rhythms", "Routines"], nudges: ["Nudges", "Nudges"], ride: ["Where's My Ride", "Where's my ride"], steward: ["Steward", "AI"] };
+const tileName = (t) => t.startsWith("convo.") ? "Chat shortcut" : (TILE_NAMES[t] || [t, t])[plainNames ? 1 : 0];
 const LEVEL_NAMES = { off: "Off", view: "View only", add: "Can add", full: "Full" };
 const SIZE_NAMES = { half: "Half width", wide: "Full width", big: "Big" };
 const accessOpen = new Set();   // whose panels are open
@@ -1224,7 +1225,7 @@ function drawAccess(m, body) {
     opt("pictures", "Picture icons (a tiny map, a talking face) instead of the usual symbols")));
   // Home screen: drag to order, tick to show, choose a size
   parts.push(el("h3", {}, "Home screen"),
-    el("p", { class: "acc-note" }, "Drag ☰ to reorder, tick what to show and pick a size. A half-width tile alone on its row stretches to fill it. Nothing ticked: the app's default."),
+    el("p", { class: "acc-note" }, "Drag ☰ to reorder, tick what to show and pick a size. Two half-width tiles sit side by side. Nothing ticked: the app's default."),
     homeEditor(d, (home) => saveAccess(m, body, { home })));
   // Their device
   parts.push(el("h3", {}, "Their device"), el("div", { class: "row" },
@@ -1250,7 +1251,7 @@ function homeEditor(d, save) {
       on = box.checked ? on.concat({ id: t.id, size: t.size }) : on.filter((x) => x.id !== t.id);
       commit();
     });
-    const size = el("select", { "aria-label": `${tileName(t.id)} size` }, ...Object.entries(SIZE_NAMES).filter(([k]) => !(t.id === "map" && k === "half")).map(([k, v]) => el("option", { value: k }, v)));
+    const size = el("select", { "aria-label": `${tileName(t.id)} size` }, ...Object.entries(SIZE_NAMES).map(([k, v]) => el("option", { value: k }, v)));
     size.value = t.size;
     size.disabled = !!t.off;
     size.addEventListener("change", () => { on = on.map((x) => x.id === t.id ? { ...x, size: size.value } : x); commit(); });

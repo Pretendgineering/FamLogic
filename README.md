@@ -7,7 +7,7 @@ A self-hosted family hub: location sharing (**Thereabouts**), chat (**Chitchat**
 - **Works without Google:** the default app has no Google code at all (an optional Google edition adds a few extras).
 - **For every age:** younger children sign in with a code from a parent, no password, and get a picture-first app with big buttons and no settings to stumble into. Parents choose exactly what each child can use (each module off, view only, can add, or full, plus single features), approve their group chats and can see, pause or delete their chats. **Grandparents** get the app without the parents' controls, with bigger buttons and picture icons as options.
 - **Talk instead of typing:** hold the smiley to talk and your words become a message; messages can be read aloud. Built into the server (Whisper and Piper, nothing leaves your house), or the phone's own speech where that works better. Younger children can message a parent almost on their own. *Coming:* talking to your own AI agent (Hermes, OpenClaw…) to tick off chores or hear what's next.
-- **Looks like itself:** serif headings over clean sans text, in five colour themes (Default, Warm paper, Forest, Ocean, High contrast), light or dark, chosen per device, and the same on the watch. Prefer plain words? **Customize → Plain names** says Map, Chat, Calendar and Lists instead.
+- **Looks like itself:** serif headings over clean sans text, in a dozen colour themes (Default, Hannah's Theme, Hobbit Door, Boring Blue, Lofi Cabin, Logic Noir, Suspicious Orange, And Chill, Night Shift, Gamer Mode, Grandma's Couch, High contrast), light or dark, chosen per device. Prefer plain words? **Look and Feel → Plain names** says Map, Chat, Calendar and Lists instead.
 - **Open source:** [AGPLv3](LICENSE). Use it, change it and share it freely; if you run a changed version for others (for example as a hosted service), you must offer them your changes too. For other licensing, contact the maintainer.
 
 ## Devices
@@ -80,7 +80,7 @@ Parents and admins log in to the web console with their own username and passwor
 
 **Access & Control** (in the web console) lists everyone; open a person to set what they can use. For a child: start from the *Younger child* or *Older child* preset, then set each module to **Off**, **View only**, **Can add** or **Full**, switch single features (SOS, nudges, starting chats, sending photos, deleting their own messages, muting chats…), choose bigger buttons and picture icons, and arrange their home screen. An admin sets the family's **parent PIN** there too.
 
-Younger children have no settings button; older children only get Customize, Account and About. To open everything on a child's device, **hold the family name at the top for 5 seconds** and type the parent PIN, or use **Open their settings for 10 minutes** in Access & Control (or from a parent's phone).
+Younger children have no settings button; older children only get You, Look and Feel, and About. To open everything on a child's device, **hold the family name at the top for 5 seconds** and type the parent PIN, or use **Open their settings for 10 minutes** in Access & Control (or from a parent's phone).
 
 **New phone?** Sign in with your username and password (your old phone is signed out). **Forgot your password?** An admin sends a one-time reset link from **Family → ⋯ → Reset sign-in**. Passwords need 12+ characters and can't be common ones; a few random words like `blue canoe at midnight` are ideal.
 

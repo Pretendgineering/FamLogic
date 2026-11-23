@@ -141,3 +141,27 @@ func (s *Server) handleAdminSetModules(w http.ResponseWriter, r *http.Request) {
 	}
 	s.handleAdminModules(w, r)
 }
+
+// The app's own module switches (Settings → Look and Feel): everyone can see
+// what's on; an admin can switch modules on or off for the whole family.
+func (s *Server) handleDeviceModules(w http.ResponseWriter, r *http.Request, me *Member) {
+	s.handleAdminModules(w, r)
+}
+
+func (s *Server) handleDeviceSetModules(w http.ResponseWriter, r *http.Request, me *Member) {
+	if me.access() != AccessAdmin {
+		writeError(w, http.StatusForbidden, "only an admin can switch modules for the family")
+		return
+	}
+	var body struct {
+		Enabled map[string]bool `json:"enabled"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	if err := s.store.SetModules(body.Enabled, true); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	s.handleAdminModules(w, r)
+}

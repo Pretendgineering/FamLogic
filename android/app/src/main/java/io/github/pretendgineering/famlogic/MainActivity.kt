@@ -1,5 +1,6 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.runtime.LaunchedEffect
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -69,12 +70,15 @@ class MainActivity : ComponentActivity() {
                         tab = tab,
                         onTab = { tab = it },
                     ) { current ->
+                        // Settings → Arrange home screen: back to Home, where the editor opens.
+                        LaunchedEffect(HomeEditor.requested) { if (HomeEditor.requested) tab = Tab.Home }
                         when (current) {
                             Tab.Home -> HomeScreen(
                                 prefs = prefs,
                                 features = features,
                                 onOpen = { tab = it },
                                 onOpenSettings = { full -> settingsRequest = if (full) "full" else "limited"; tab = Tab.Map },
+                                onOpenChat = { id -> openChat = id; tab = Tab.Chat },
                             )
                             Tab.Chat -> ChatScreen(prefs, openRequest = openChat, onOpenHandled = { openChat = null })
                             Tab.Map -> MapScreen(

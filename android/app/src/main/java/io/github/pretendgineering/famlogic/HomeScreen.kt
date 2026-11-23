@@ -1,5 +1,14 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.key
@@ -116,6 +125,7 @@ fun HomeScreen(
     features: Set<String>,
     onOpen: (Tab) -> Unit,
     onOpenSettings: (full: Boolean) -> Unit,
+    onOpenChat: (String) -> Unit = { onOpen(Tab.Chat) },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -158,14 +168,25 @@ fun HomeScreen(
         "chat" -> chatOn && Access.can("chat")
         "sos" -> locationOn && Access.can("sos") && "sos" in features && !Access.isDisplay
         "checkin" -> locationOn && Access.can("checkin") && "checkin" in features && !Access.isDisplay
-        else -> Modules.has(features, t) // modules still being built show as "coming soon"
+        "convo.new" -> false // only while a new chat shortcut waits for its chat
+        // Modules still being built: "coming soon" tiles, so a layout can be planned.
+        "routines", "nudges", "ride", "steward" -> t !in Modules.hidden
+        "calendar", "todos", "chores", "meals" -> t !in Modules.hidden
+        else -> t.startsWith("convo.") && chatOn && Access.can("chat")
     }
     val saved = parseTiles(Access.home.ifEmpty { Access.defaultHome() })
     // While arranging: a draft, saved with Done.
     var draft by remember { mutableStateOf<List<HomeTile>?>(null) }
     val editing = draft != null
     if (editing) androidx.activity.compose.BackHandler { draft = null }
-    val tiles = (draft ?: saved).filter { usable(it.id) }
+    LaunchedEffect(HomeEditor.requested) {
+        if (HomeEditor.requested) {
+            HomeEditor.requested = false
+            draft = saved.filter { usable(it.id) }
+        }
+    }
+    val tiles = (draft ?: saved).filter { usable(it.id) || (draft != null && it.id == "convo.new") }
+    var pickingChat by remember { mutableStateOf(false) }
     val config = LocalConfiguration.current
     val landscape = config.screenWidthDp > config.screenHeightDp
     val big = Access.big || Access.isDisplay
@@ -181,7 +202,7 @@ fun HomeScreen(
                 actions = {
                     if (editing) {
                         TextButton(onClick = {
-                            val out = draft.orEmpty()
+                            val out = draft.orEmpty().filter { it.id != "convo.new" }
                             scope.launch {
                                 try {
                                     val list = out.map { it.encode() }
@@ -224,7 +245,7 @@ fun HomeScreen(
             val tile: @Composable (HomeTile, Dp) -> Unit = { t, h ->
                 when (t.id) {
                     "map" -> MapTile(prefs, members, tileUrl, tileUrlDark, attribution, cameraSeq, big, h) { onOpen(Tab.Map) }
-                    "chat" -> ChatTile(chats, members, big, h) { onOpen(Tab.Chat) }
+                    "chat" -> ChatTile(chats, members, prefs.memberId, big, h, t.size == "half", prefs.lastChat, onOpen = { onOpen(Tab.Chat) }, onOpenChat = onOpenChat)
                     // One-button tiles: the tile is the button.
                     "sos" -> HoldForSosBar(
                         onTriggered = { Sos.send(context, scope, end = false); sosActive = true },
@@ -232,10 +253,11 @@ fun HomeScreen(
                     )
                     "checkin" -> ButtonTile(if (Access.pictures) "I'm here!" else "Check in", h, big,
                         picture = { Pictures.HereIAm(it) }, icon = Icons.Filled.CheckCircle) { confirmCheckIn = true }
-                    "calendar" -> SimpleTile(Access.name("calendar"), "Coming soon", h, big, icon = Icons.Filled.DateRange) {}
-                    "todos" -> SimpleTile(Access.name("todos"), "Coming soon", h, big, icon = Icons.AutoMirrored.Filled.List) {}
-                    "chores" -> SimpleTile(Access.name("chores"), "Coming soon", h, big, icon = Icons.Filled.Star) {}
-                    "meals" -> SimpleTile(Access.name("meals"), "Coming soon", h, big, icon = Icons.Filled.ShoppingCart) {}
+                    in PLACEHOLDER_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) {}
+                    "convo.new" -> SimpleTile(Access.name(t.id), "Choosing a chat…", h, big, icon = tileIcon(t.id)) {}
+                    else -> if (t.id.startsWith("convo.")) {
+                        ConvoTile(chats.find { it.id == t.id.removePrefix("convo.") }, members, prefs.memberId, big, h, onOpenChat)
+                    }
                 }
             }
             val unit = if (big) 176.dp else 148.dp
@@ -252,8 +274,11 @@ fun HomeScreen(
                     edit = draft?.let { d ->
                         TileEdit(
                             onChange = { draft = it },
-                            hidden = (listOf("map", "chat", "sos", "checkin") + listOf("calendar", "todos", "chores", "meals"))
-                                .filter { id -> usable(id) && d.none { it.id == id } },
+                            hidden = ALL_TILES.filter { id ->
+                                if (id == "convo.new") chatOn && Access.can("chat") && d.none { it.id == id }
+                                else usable(id) && d.none { it.id == id }
+                            },
+                            onPickChat = { pickingChat = true },
                         )
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -261,6 +286,34 @@ fun HomeScreen(
                 )
             }
         }
+    }
+
+    // A new chat shortcut: which chat does it open?
+    if (pickingChat) {
+        val taken = draft.orEmpty().map { it.id }.toSet()
+        AlertDialog(
+            onDismissRequest = { pickingChat = false; draft = draft?.filter { it.id != "convo.new" } },
+            title = { Text("Which chat?") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    chats.filter { "convo.${it.id}" !in taken }.forEach { c ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                pickingChat = false
+                                draft = draft?.map { if (it.id == "convo.new") it.copy(id = "convo.${c.id}") else it }
+                            }.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ConvoFace(c, members, prefs.memberId, 40)
+                            Text(c.title, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                    if (chats.isEmpty()) Text("No chats yet.")
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { pickingChat = false; draft = draft?.filter { it.id != "convo.new" } }) { Text("Cancel") } },
+        )
     }
 
     if (confirmCheckIn) {
@@ -286,6 +339,11 @@ fun HomeScreen(
     }
 }
 
+/** Settings asks the home screen to open in arranging mode. */
+object HomeEditor {
+    var requested by mutableStateOf(false)
+}
+
 /** A home screen tile and its size: "half" (half the width), "wide" (the full width) or "big" (full width, twice as tall). */
 data class HomeTile(val id: String, val size: String) {
     fun encode() = "$id:$size"
@@ -295,10 +353,10 @@ data class HomeTile(val id: String, val size: String) {
 fun parseTiles(list: List<String>): List<HomeTile> = list.map {
     val id = it.substringBefore(':')
     val size = it.substringAfter(':', "").ifEmpty { if (id in setOf("map", "chat", "sos")) "wide" else "half" }
-    HomeTile(id, if (id == "map" && size == "half") "wide" else size)
+    HomeTile(id, size)
 }
 
-/** Rows: two half tiles side by side; a half tile alone on its row stretches to the full width. */
+/** Rows: two half tiles side by side; a half tile alone keeps its half width (the rest of the row stays empty). */
 private fun rowsOf(tiles: List<HomeTile>): List<List<HomeTile>> {
     val rows = mutableListOf<List<HomeTile>>()
     var pending: HomeTile? = null
@@ -315,8 +373,74 @@ private fun rowsOf(tiles: List<HomeTile>): List<List<HomeTile>> {
     return rows
 }
 
-/** How the tiles are being arranged (null when they aren't). */
-class TileEdit(val onChange: (List<HomeTile>) -> Unit, val hidden: List<String>)
+/** How the tiles are being arranged (null when they aren't). [onPickChat] asks which chat a new chat shortcut opens. */
+class TileEdit(val onChange: (List<HomeTile>) -> Unit, val hidden: List<String>, val onPickChat: () -> Unit = {})
+
+/** Tiles for modules still being built: they show "coming soon" so a layout can be planned. */
+val PLACEHOLDER_TILES = listOf("calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward")
+
+/** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
+val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin") + PLACEHOLDER_TILES
+
+private val DRAWER_HEIGHT = 132.dp
+
+/** A tile's name in the drawer, and its symbol. */
+fun tileIcon(id: String): ImageVector = when (id) {
+    "map" -> Icons.Filled.LocationOn
+    "chat" -> Icons.Filled.Email
+    "convo.new" -> Icons.Filled.Face
+    "sos" -> Icons.Filled.Warning
+    "checkin" -> Icons.Filled.CheckCircle
+    "calendar" -> Icons.Filled.DateRange
+    "todos" -> Icons.AutoMirrored.Filled.List
+    "chores" -> Icons.Filled.Star
+    "meals" -> Icons.Filled.ShoppingCart
+    "routines" -> Icons.Filled.Refresh
+    "nudges" -> Icons.Filled.Favorite
+    "ride" -> Icons.Filled.Place
+    else -> Icons.Filled.Build
+}
+
+/** The drawer of tiles under the board while arranging: drag one up to add it. */
+@Composable
+private fun TileDrawer(ids: List<String>, modifier: Modifier, onBounds: (Rect) -> Unit, items: MutableMap<String, Rect>) {
+    androidx.compose.material3.Surface(
+        modifier.fillMaxWidth().height(DRAWER_HEIGHT).onGloballyPositioned { onBounds(it.boundsInRoot()) },
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shadowElevation = 10.dp,
+    ) {
+        Column {
+            Text(
+                if (ids.isEmpty()) "Every tile is on your home screen" else "Tiles: drag one up, or tap it",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, top = 10.dp),
+            )
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                ids.forEach { id ->
+                    key(id) {
+                        DisposableEffect(id) { onDispose { items.remove(id) } }
+                        Column(
+                            Modifier.size(width = 92.dp, height = 80.dp).clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f))
+                                .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = .6f), RoundedCornerShape(12.dp))
+                                .onGloballyPositioned { items[id] = it.boundsInRoot() }
+                                .padding(6.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(tileIcon(id), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                            Text(Access.name(id), style = MaterialTheme.typography.labelMedium, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * The tiles, in rows. While arranging, the tiles follow your finger: press and hold
@@ -328,8 +452,10 @@ class TileEdit(val onChange: (List<HomeTile>) -> Unit, val hidden: List<String>)
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier: Modifier, tile: @Composable (HomeTile, Dp) -> Unit) {
-    val gap = 12.dp
-    val pad = 12.dp
+    // Arranging: tiles become separate squares with gaps. Otherwise they sit edge to
+    // edge, divided by hairlines, so the home screen reads as one surface.
+    val gap = if (edit != null) 10.dp else 0.dp
+    val pad = if (edit != null) 12.dp else 0.dp
     // Where everything is on screen (root coordinates), for the gestures.
     val bounds = remember { mutableStateMapOf<String, Rect>() }
     val handles = remember { mutableStateMapOf<String, Rect>() }
@@ -348,6 +474,14 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
     val current by rememberUpdatedState(tiles)
     val editing by rememberUpdatedState(edit)
     var skip by remember { mutableStateOf<String?>(null) }
+    val drawerItems = remember { mutableStateMapOf<String, Rect>() }
+    var drawerRect by remember { mutableStateOf(Rect.Zero) }
+    val drawer: (Rect) -> Unit = { drawerRect = it }
+    // Adds a tile from the drawer at the end; a chat shortcut then asks which chat.
+    fun add(id: String) {
+        editing?.onChange?.invoke(current + parseTiles(listOf(id)))
+        if (id == "convo.new") editing?.onPickChat?.invoke()
+    }
     // A tile on the right-hand side stretches leftwards (from its right edge), others rightwards.
     var anchorRight by remember { mutableStateOf(false) }
     fun span(r: Rect): Pair<Float, Float> {
@@ -364,7 +498,6 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
         editing?.onChange?.invoke(list)
     }
     fun resize(id: String, size: String) {
-        if (id == "map" && size == "half") return
         if (current.firstOrNull { it.id == id }?.size == size) return
         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
         editing?.onChange?.invoke(current.map { if (it.id == id) it.copy(size = size) else it })
@@ -390,7 +523,7 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
         val h = finger.y - r.top
         resize(id, when {
             h > unitPx * 1.5f -> "big"
-            w < full * 0.7f && id != "map" -> "half"
+            w < full * 0.7f -> "half"
             else -> "wide"
         })
     }
@@ -411,6 +544,51 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val at = boardAt + down.position
             if (closes.values.any { it.contains(at) }) return@awaitEachGesture // ✕ handles itself
+            // Carrying a tile under the finger until it's let go; over the drawer, it comes off.
+            suspend fun AwaitPointerEventScope.carry(id: String) {
+                dragging = id
+                skip = null
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                while (true) {
+                    val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                    c.consume()
+                    if (!c.pressed) break
+                    finger = boardAt + c.position
+                    edge = when {
+                        c.position.y < zone -> -(zone - c.position.y) / 4f
+                        c.position.y > size.height - zone - DRAWER_HEIGHT.toPx() && !drawerRect.contains(finger) -> (c.position.y - (size.height - zone - DRAWER_HEIGHT.toPx())) / 4f
+                        else -> 0f
+                    }
+                    if (!drawerRect.contains(finger)) follow()
+                }
+                edge = 0f
+                dragging = null
+                if (drawerRect.contains(finger)) {
+                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    editing?.onChange?.invoke(current.filter { it.id != id })
+                } else if (id == "convo.new") {
+                    editing?.onPickChat?.invoke()
+                }
+            }
+            val fromDrawer = drawerItems.entries.firstOrNull { it.value.contains(at) }?.key
+            if (fromDrawer != null) {
+                // Up and out of the drawer carries the tile onto the board; sideways scrolls
+                // the drawer; a tap adds it at the end.
+                while (true) {
+                    val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+                    if (!c.pressed) { add(fromDrawer); return@awaitEachGesture }
+                    val d = c.position - down.position
+                    if (kotlin.math.abs(d.x) > slop && kotlin.math.abs(d.x) > kotlin.math.abs(d.y)) return@awaitEachGesture
+                    if (-d.y > slop) {
+                        c.consume()
+                        finger = boardAt + c.position
+                        grab = Offset(-1f, -1f) // held by its middle
+                        editing?.onChange?.invoke(current + parseTiles(listOf(fromDrawer)))
+                        carry(fromDrawer)
+                        return@awaitEachGesture
+                    }
+                }
+            }
             val grip = grips.entries.firstOrNull { it.value.contains(at) }?.key
             if (grip != null) {
                 // Resize: on the first movement the outline appears and follows the finger.
@@ -428,7 +606,7 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
                 if (!moved) {
                     // A tap: half → full width → big → half.
                     val t = current.firstOrNull { it.id == grip }
-                    if (t != null) resize(grip, when (t.size) { "half" -> "wide"; "wide" -> "big"; else -> if (grip == "map") "wide" else "half" })
+                    if (t != null) resize(grip, when (t.size) { "half" -> "wide"; "wide" -> "big"; else -> "half" })
                 }
                 resizing = null
                 return@awaitEachGesture
@@ -446,25 +624,9 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
                 }
                 if (result != null || !held) return@awaitEachGesture
             }
-            dragging = id
             finger = at
             grab = at - (bounds[id]?.topLeft ?: at)
-            skip = null
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            while (true) {
-                val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
-                c.consume()
-                if (!c.pressed) break
-                finger = boardAt + c.position
-                edge = when {
-                    c.position.y < zone -> -(zone - c.position.y) / 4f
-                    c.position.y > size.height - zone -> (c.position.y - (size.height - zone)) / 4f
-                    else -> 0f
-                }
-                follow()
-            }
-            edge = 0f
-            dragging = null
+            carry(id)
         }
     }
 
@@ -473,13 +635,18 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
             .onGloballyPositioned { boardAt = it.positionInRoot(); boardSize = it.size }
             .then(gestures),
     ) {
+        val line = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .7f)
         Column(
-            Modifier.fillMaxSize().verticalScroll(scroll).padding(pad),
+            Modifier.fillMaxSize().verticalScroll(scroll).padding(pad).padding(bottom = if (edit != null) DRAWER_HEIGHT else 0.dp),
             verticalArrangement = Arrangement.spacedBy(gap),
         ) {
-            rowsOf(tiles).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    row.forEach { t ->
+            rowsOf(tiles).forEachIndexed { r, row ->
+                if (edit == null && r > 0) HorizontalDivider(color = line)
+                // Tiles in a row share its height (a fixed size each), so the hairline between them spans it.
+                val rowH = row.maxOf { if (it.size == "big") unit * 2 + gap else unit }
+                Row(Modifier.fillMaxWidth().height(rowH), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    row.forEachIndexed { i, t ->
+                        if (edit == null && i > 0) VerticalDivider(color = line)
                         key(t.id) {
                             val h = if (t.size == "big") unit * 2 + gap else unit
                             val isDragged = dragging == t.id
@@ -492,36 +659,41 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
                                         if (isDragged) {
                                             // Glued to the finger, wherever the tile's slot is now.
                                             val b = bounds[t.id]
-                                            if (b != null) { translationX = finger.x - grab.x - b.left; translationY = finger.y - grab.y - b.top }
+                                            if (b != null) {
+                                                val g = if (grab.x < 0) Offset(b.width / 2, b.height / 2) else grab
+                                                translationX = finger.x - g.x - b.left; translationY = finger.y - g.y - b.top
+                                            }
                                             scaleX = 1.05f; scaleY = 1.05f; shadowElevation = 28f
                                         }
-                                    },
+                                    }
+                                    .then(if (edit != null) Modifier.clip(RoundedCornerShape(12.dp)) else Modifier),
                             ) {
                                 tile(t, h)
                                 if (edit != null) EditChrome(t.id, isDragged || resizing == t.id, edit, tiles, handles, grips, closes)
                             }
                         }
                     }
-                }
-            }
-            if (edit != null) {
-                if (edit.hidden.isNotEmpty()) Text("Add to home", style = MaterialTheme.typography.titleMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    edit.hidden.forEach { id ->
-                        androidx.compose.material3.AssistChip(
-                            onClick = { edit.onChange(tiles + parseTiles(listOf(id))) },
-                            label = { Text(Access.name(id)) },
-                            leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                        )
+                    // A half-width tile on its own keeps its size; the rest of the row stays free.
+                    if (row.size == 1 && row[0].size == "half") {
+                        if (edit == null) VerticalDivider(color = line)
+                        Spacer(Modifier.weight(1f))
                     }
                 }
+            }
+            if (edit == null && tiles.isNotEmpty()) HorizontalDivider(color = line)
+            if (edit != null) {
                 Text(
-                    "Press and hold a tile, then drag it where you want it. Drag the corner grip to stretch a tile: " +
-                        "narrow for half width, wide for the full width, or down for a big tile. Two half-width tiles sit side by side.",
+                    "Drag a tile up from the drawer below to add it. Press and hold a tile to move it, or drag it back down to the drawer to take it off. " +
+                        "Drag the corner grip to stretch a tile: narrow for half width, wide for the full width, or down for a big tile.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
+        }
+        // The drawer: every tile that isn't on the home screen yet.
+        if (edit != null) {
+            TileDrawer(edit.hidden, Modifier.align(Alignment.BottomCenter), drawer, items = drawerItems)
         }
         // The stretch outline, from the tile's top-left corner to the finger.
         val r = resizing?.let { bounds[it] }
@@ -551,9 +723,9 @@ private fun androidx.compose.foundation.layout.BoxScope.EditChrome(
     handles: MutableMap<String, Rect>, grips: MutableMap<String, Rect>, closes: MutableMap<String, Rect>,
 ) {
     Box(
-        Modifier.matchParentSize().clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = if (active) .18f else .08f))
-            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp))
+        Modifier.matchParentSize().clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = if (active) .18f else .06f))
+            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
             // Takes the touches so the tile underneath (an SOS button, say) never fires.
             .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
     )
@@ -587,9 +759,8 @@ private fun MapTile(
     val tiles = MapStyles.resolve(prefs.mapStyle, dark, tileUrl, tileUrlDark, attribution, prefs.dimMap)
     val placed = members.filter { it.loc != null && !it.paused }
     val fill = height == Dp.Unspecified
-    ElevatedCard(
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth().then(if (fill) Modifier.fillMaxHeight() else Modifier.height(height)).clickable(onClickLabel = "Open the map", onClick = onClick),
+    Column(
+        Modifier.fillMaxWidth().then(if (fill) Modifier.fillMaxHeight() else Modifier.height(height)).clickable(onClickLabel = "Open the map", onClick = onClick),
     ) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             OsmMap(
@@ -633,35 +804,111 @@ private fun whereShort(m: Member): String {
     return if (m.place.isNotEmpty()) "at ${m.place} · $ago" else ago
 }
 
+/**
+ * Chitchat. Half width: two quick buttons, the family chat and the last chat you
+ * had open. Full width (or big): the latest messages, each with the sender's face.
+ */
 @Composable
-private fun ChatTile(chats: List<ChatConversation>, members: List<Member>, big: Boolean, height: Dp, onClick: () -> Unit) {
+private fun ChatTile(
+    chats: List<ChatConversation>, members: List<Member>, me: String, big: Boolean, height: Dp, half: Boolean, lastChat: String,
+    onOpen: () -> Unit, onOpenChat: (String) -> Unit,
+) {
     val unread = chats.sumOf { it.unread }
-    val recent = chats.mapNotNull { c -> c.last?.let { c to it } }.sortedByDescending { it.second.time }
-    ElevatedCard(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().height(height).clickable(onClick = onClick)) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (Access.pictures) Pictures.Talk(if (big) 48.dp else 32.dp)
-                else Icon(Icons.Filled.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(if (big) 40.dp else 28.dp))
-                Text(Access.name("chat"), Modifier.padding(start = 8.dp).weight(1f), style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge)
-                if (unread > 0) androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$unread", fontSize = if (big) 16.sp else 11.sp) }
+    if (half) {
+        val family = chats.firstOrNull { it.kind == "family" }
+        val last = chats.firstOrNull { it.id == lastChat && it.id != family?.id }
+            ?: chats.filter { it.id != family?.id && it.last != null }.maxByOrNull { it.last!!.time }
+        Column(Modifier.fillMaxWidth().height(height)) {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClickLabel = "Open all chats", onClick = onOpen).padding(start = 12.dp, end = 12.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(Access.name("chat"), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                if (unread > 0) androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$unread") }
             }
-            Spacer(Modifier.height(10.dp))
-            if (recent.isEmpty()) {
-                Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                // The latest messages (more on a big tile), each with the sender's face.
-                recent.take(if (height > 300.dp) 4 else 1).forEach { (c, msg) ->
-                    val sender = members.find { it.id == msg.sender }
-                    Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(sender?.name ?: "?", sender?.emoji.orEmpty(), sender?.color ?: "#888888", if (big) 44 else 32)
-                        Column(Modifier.padding(start = 10.dp)) {
-                            Text(c.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(msg.text.ifEmpty { "Photo" }, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
+            Row(Modifier.fillMaxWidth().weight(1f).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOfNotNull(family, last).forEach { c ->
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp))
+                            .clickable(onClickLabel = "Open ${c.title}") { onOpenChat(c.id) },
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        ConvoFace(c, members, me, if (big) 56 else 44)
+                        Text(c.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
+                if (family == null && last == null) Text("No chats yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        return
+    }
+    val recent = chats.mapNotNull { c -> c.last?.let { c to it } }.sortedByDescending { it.second.time }
+    Column(Modifier.fillMaxWidth().height(height).clickable(onClick = onOpen).padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (Access.pictures) Pictures.Talk(if (big) 48.dp else 32.dp)
+            else Icon(Icons.Filled.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(if (big) 40.dp else 28.dp))
+            Text(Access.name("chat"), Modifier.padding(start = 8.dp).weight(1f), style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge)
+            if (unread > 0) androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$unread", fontSize = if (big) 16.sp else 11.sp) }
+        }
+        Spacer(Modifier.height(10.dp))
+        if (recent.isEmpty()) {
+            Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            // The latest messages (more on a big tile), each with the sender's face.
+            recent.take(if (height > 300.dp) 4 else 1).forEach { (c, msg) ->
+                val sender = members.find { it.id == msg.sender }
+                Row(
+                    Modifier.fillMaxWidth().clickable { onOpenChat(c.id) }.padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Avatar(sender?.name ?: "?", sender?.emoji.orEmpty(), sender?.color ?: "#888888", if (big) 44 else 32)
+                    Column(Modifier.padding(start = 10.dp)) {
+                        Text(c.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(msg.text.ifEmpty { "Photo" }, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
         }
+    }
+}
+
+/** A chat's picture: its own icon, the other person's face for a one-to-one chat, or a star for the family chat. */
+@Composable
+private fun ConvoFace(c: ChatConversation, members: List<Member>, me: String, size: Int) {
+    val other = if (c.kind == "direct") members.find { it.id in c.members && it.id != me } else null
+    when {
+        c.kind != "direct" && (c.emoji.isNotEmpty() || c.color.isNotEmpty()) -> Avatar(c.title, c.emoji, c.color.ifEmpty { "#6F5AA8" }, size)
+        c.kind == "family" -> Box(Modifier.size(size.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size((size / 2).dp))
+        }
+        other != null -> Avatar(other.name, other.emoji, other.color, size)
+        else -> Avatar(c.title, "", "#6F5AA8", size)
+    }
+}
+
+/**
+ * A shortcut to one chat, chosen when the tile was placed: the chat's picture
+ * (for a one-to-one chat, the other person's face), big enough for a small child
+ * to find, and its name. A tap opens that chat.
+ */
+@Composable
+private fun ConvoTile(c: ChatConversation?, members: List<Member>, me: String, big: Boolean, height: Dp, onOpenChat: (String) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().height(height).then(if (c != null) Modifier.clickable(onClickLabel = "Open ${c.title}") { onOpenChat(c.id) } else Modifier).padding(10.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (c == null) {
+            Icon(Icons.Filled.Face, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp))
+            Text("Chat not found", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            return@Column
+        }
+        Box {
+            ConvoFace(c, members, me, if (Access.younger || big) 84 else 64)
+            if (c.unread > 0) androidx.compose.material3.Badge(Modifier.align(Alignment.TopEnd), containerColor = MaterialTheme.colorScheme.primary) { Text("${c.unread}") }
+        }
+        Text(c.title, Modifier.padding(top = 6.dp), style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -673,10 +920,8 @@ private fun ButtonTile(
 ) {
     androidx.compose.material3.Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary,
-        shadowElevation = 3.dp,
         modifier = Modifier.fillMaxWidth().height(height),
     ) {
         Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -693,15 +938,13 @@ private fun SimpleTile(
     title: String, sub: String, height: Dp, big: Boolean,
     picture: (@Composable (Dp) -> Unit)? = null, icon: ImageVector, onClick: () -> Unit,
 ) {
-    ElevatedCard(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().height(height).clickable(onClick = onClick)) {
-        Column(Modifier.padding(16.dp)) {
-            val s = if (big) 56.dp else 36.dp
-            if (Access.pictures && picture != null) picture(s + 8.dp)
-            else Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(s))
-            Spacer(Modifier.height(10.dp))
-            Text(title, style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(sub, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-        }
+    Column(Modifier.fillMaxWidth().height(height).clickable(onClick = onClick).padding(16.dp)) {
+        val s = if (big) 56.dp else 36.dp
+        if (Access.pictures && picture != null) picture(s + 8.dp)
+        else Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary.copy(alpha = .6f), modifier = Modifier.size(s))
+        Spacer(Modifier.height(10.dp))
+        Text(title, style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(sub, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2)
     }
 }
 

@@ -109,10 +109,10 @@ object PebbleBridge {
 
     /** The app's colour theme, as the watchface's number for it. */
     private fun themeNumber(prefs: Prefs) = when (prefs.appTheme) {
-        "paper" -> 1
+        "paper", "nightshift", "couch" -> 1 // the watch has five; newer themes use the closest
         "forest" -> 2
-        "ocean" -> 3
-        "contrast" -> 4
+        "ocean", "hannah" -> 3
+        "contrast", "noir" -> 4
         else -> 0
     }
 

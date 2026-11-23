@@ -69,8 +69,11 @@ func TestKidSettings(t *testing.T) {
 	if st, _ := e.status("PUT", path, f.mom, map[string]any{"home": []string{"casino"}}); st != 400 {
 		t.Fatalf("unknown tile: %d", st)
 	}
-	if st, _ := e.status("PUT", path, f.mom, map[string]any{"home": []string{"map:half"}}); st != 400 {
-		t.Fatalf("a half-width map: %d", st)
+	if st, _ := e.status("PUT", path, f.mom, map[string]any{"home": []string{"map:half", "convo.abc123:half", "routines"}}); st != 200 {
+		t.Fatalf("a half-width map, a chat shortcut and a placeholder: %d", st)
+	}
+	if st, _ := e.status("PUT", path, f.mom, map[string]any{"home": []string{"convo.../etc"}}); st != 400 {
+		t.Fatalf("a bad chat shortcut: %d", st)
 	}
 	if st, _ := e.status("PUT", path, f.mom, map[string]any{"modules": map[string]string{"meals": "maybe"}}); st != 400 {
 		t.Fatalf("bad level: %d", st)

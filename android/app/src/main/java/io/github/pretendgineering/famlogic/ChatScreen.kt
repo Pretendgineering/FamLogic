@@ -438,6 +438,7 @@ private fun ConversationView(
     var confirmDelete by remember { mutableStateOf(false) }
     var iconPicking by remember { mutableStateOf(false) }
     val readAloud = Access.younger && Access.can("voice")
+    LaunchedEffect(convId) { prefs.lastChat = convId }
     DisposableEffect(convId) { Voice.warmUp(context); onDispose { Voice.stop() } }
     var deleting by remember { mutableStateOf<ChatMessage?>(null) }
     val listState = rememberLazyListState()
@@ -701,24 +702,30 @@ private fun ConversationView(
             // Talking: younger children get a big push-to-talk button that sends what they say;
             // everyone else a small one that types it into the message box.
             val canTalk = canPost && Access.can("voice") && Voice.listener(context, prefs.serverFeatures) != null
-            if (canTalk && Access.younger) {
-                Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    TalkButton(prefs, 132.dp, onText = { said ->
-                        if (said.isEmpty()) {
-                            Voice.oops(context)
-                        } else {
-                            sendText(said) {
+            // Children and tablets: a wide talk bar above the message box. Younger children's
+            // goes straight out (and is read back); everyone else's types into the box.
+            val talkBar = canTalk && (Access.isChild || LocalConfiguration.current.screenWidthDp >= 600)
+            if (talkBar) {
+                TalkButton(
+                    prefs, if (Access.younger || big) 84.dp else 64.dp,
+                    bar = true,
+                    label = if (Access.younger) "Hold to talk" else "Hold to say it",
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp),
+                    onText = { said ->
+                        when {
+                            said.isEmpty() -> Voice.oops(context)
+                            Access.younger -> sendText(said) {
                                 // Read back what went, so they know it was right.
                                 scope.launch { Voice.speak(context, prefs, "Sent! $said") }
                             }
+                            else -> text = (text.trimEnd() + " " + said).trim().take(4000)
                         }
-                    })
-                    Text("Hold to talk", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                    },
+                )
             }
             if (canPost) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (canTalk && !Access.younger) {
+                    if (canTalk && !talkBar) {
                         TalkButton(prefs, 48.dp, onText = { said ->
                             if (said.isEmpty()) android.widget.Toast.makeText(context, "Didn't catch that. Hold, talk, then let go.", android.widget.Toast.LENGTH_SHORT).show()
                             else text = (text.trimEnd() + " " + said).trim().take(4000)

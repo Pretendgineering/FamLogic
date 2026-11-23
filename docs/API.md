@@ -33,6 +33,8 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `DELETE /api/chat/{id}/messages/{mid}` (or `POST …/delete`) | `Bearer <token>` | Delete your own message, or (parents) any message in a chat with a child in it |
 | `POST /api/voice/transcribe` (body: 16 kHz mono 16-bit WAV, up to a minute) | `Bearer <token>` | Speech to text on the server: `{text}` (`""` if nothing was understood). Feature `voice-stt` |
 | `POST /api/voice/speak` `{text}` | `Bearer <token>` | Reads text aloud: `audio/wav`. Feature `voice-tts` |
+| `GET /api/modules` | `Bearer <token>` | The family's modules: `{modules:[{id, name, plain, description, available, enabled}]}` |
+| `PUT` or `POST /api/modules` `{enabled:{id:bool}}` | `Bearer <token>` (an admin) | Switch modules on or off for the whole family, from the app |
 | `GET /api/v1/vault/guide` | none | The notes vault's formatting guide for people and AI agents (`text/markdown`) |
 | `GET /api/admin/vault` | admin session | Where the vault is, whether FamLogic can write there, the user it writes as, and the number of notes |
 | `POST /api/pin/check` `{pin}` | `Bearer <token>` | Checks the family's parent PIN (204 or 403; locks after repeated wrong tries) |

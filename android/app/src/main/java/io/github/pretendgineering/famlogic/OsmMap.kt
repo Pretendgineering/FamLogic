@@ -59,7 +59,18 @@ private class TemplateTileSource(private val template: String, attribution: Stri
     }
 }
 
+/**
+ * Where the last map was looking, so a new map (the home tile, then the map
+ * screen) opens there instead of on the whole world.
+ */
+private object MapMemory {
+    var center: GeoPoint? = null
+    var zoom = 3.0
+}
+
 private class MapState {
+    /** False until the map has been placed once: that first move is a jump, not a flight. */
+    var placed = false
     var tileUrl: String? = null
     var dark: Boolean? = null
     var dim: Boolean? = null
@@ -109,7 +120,8 @@ fun OsmMap(
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
             minZoomLevel = 2.0
-            controller.setZoom(3.0)
+            controller.setZoom(MapMemory.zoom)
+            MapMemory.center?.let { controller.setCenter(it) }
             // First overlay = last to see touches, so markers and places get theirs first.
             overlays.add(
                 MapEventsOverlay(object : MapEventsReceiver {
@@ -225,8 +237,25 @@ fun OsmMap(
 
         if (camera != null && camera.seq != state.appliedSeq) {
             state.appliedSeq = camera.seq
-            map.post {
-                when (camera) {
+            // The first placement jumps straight there: animating from a world view
+            // flies across the globe faster than the tiles can load (the jitter).
+            val jump = !state.placed && MapMemory.center == null
+            val apply: () -> Unit = {
+                if (jump) {
+                    when (camera) {
+                        is CameraCommand.Center -> { map.controller.setZoom(16.0); map.controller.setCenter(GeoPoint(camera.lat, camera.lon)) }
+                        is CameraCommand.FitPoints -> camera.points.map { GeoPoint(it.lat, it.lon) }.takeIf { it.size >= 2 }?.let {
+                            map.zoomToBoundingBox(boxAround(it, 1.25f), false, (56 * context.resources.displayMetrics.density).toInt(), 17.0, null)
+                        }
+                        is CameraCommand.FitAll -> {
+                            val pts = located.map { GeoPoint(it.loc!!.lat, it.loc.lon) }
+                            when {
+                                pts.size == 1 -> { map.controller.setZoom(15.0); map.controller.setCenter(pts[0]) }
+                                pts.size > 1 -> map.zoomToBoundingBox(boxAround(pts, 1.3f), false, 80, 16.0, null)
+                            }
+                        }
+                    }
+                } else when (camera) {
                     is CameraCommand.Center -> {
                         // One smooth glide (pan and zoom together).
                         map.controller.animateTo(GeoPoint(camera.lat, camera.lon), maxOf(map.zoomLevelDouble, 16.0), 700L)
@@ -249,7 +278,12 @@ fun OsmMap(
                         }
                     }
                 }
+                if (located.isNotEmpty() || camera !is CameraCommand.FitAll) state.placed = true
+                MapMemory.center = map.mapCenter as? GeoPoint ?: GeoPoint(map.mapCenter.latitude, map.mapCenter.longitude)
+                MapMemory.zoom = map.zoomLevelDouble
             }
+            // Before its first layout the map has no size to fit anything into.
+            if (map.width > 0 && map.height > 0) map.post(apply) else map.addOnFirstLayoutListener { _, _, _, _, _ -> apply() }
         }
         map.invalidate()
     }

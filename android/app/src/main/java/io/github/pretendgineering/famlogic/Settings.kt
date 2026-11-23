@@ -29,6 +29,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
@@ -85,20 +87,17 @@ import java.io.IOException
 
 /** The pages of Settings. */
 private enum class SettingsPage(val title: String, val icon: ImageVector) {
-    Sharing("Sharing", Icons.Filled.Share),
-    Account("Account", Icons.Filled.AccountCircle),
-    Customize("Customize", Icons.Filled.Edit),
-    Alerts("Alerts", Icons.Filled.Notifications),
-    Groups("Groups", Icons.Filled.Face),
-    Fences("Fences", Icons.Filled.Place),
-    Trail("Trail & Trips", Icons.Filled.DateRange),
-    Device("Device Mode", Icons.Filled.Phone),
-    Pebble("Pebble & Index", Icons.Filled.Star),
+    Sharing("Location Sharing", Icons.Filled.Share),
+    You("You", Icons.Filled.AccountCircle),
+    Look("Look and Feel", Icons.Filled.Edit),
+    Alerts("Alerts & Safety", Icons.Filled.Notifications),
+    Places("Groups & Fences", Icons.Filled.Place),
+    Pebble("Watch & Ring", Icons.Filled.Star),
     About("About", Icons.Filled.Info),
 }
 
 /** What children see in Settings: making the app their own, and their sign-in. */
-private val CHILD_PAGES = setOf(SettingsPage.Account, SettingsPage.Customize, SettingsPage.About)
+private val CHILD_PAGES = setOf(SettingsPage.You, SettingsPage.Look, SettingsPage.About)
 
 /**
  * Settings: a short menu of pages (Sharing, Groups, Fences, Alerts, Trail,
@@ -136,8 +135,10 @@ fun SettingsScreen(
     onDimMapChange: (Boolean) -> Unit = {},
     tripDays: Int? = null,
     onTripDaysChange: (Int) -> Unit = {},
-    /** A child's own settings: only Customize, Account and About. */
+    /** A child's own settings: only You, Look and Feel, and About. */
     limited: Boolean = false,
+    /** Opens the home screen in arranging mode, with the drawer of tiles. */
+    onOpenHomeEditor: () -> Unit = {},
 ) {
     var pageName by rememberSaveable { mutableStateOf<String?>(null) }
     val page = pageName?.let { SettingsPage.valueOf(it) }
@@ -157,46 +158,47 @@ fun SettingsScreen(
             )
         },
     ) { padding ->
-        Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        FitScrollColumn(page, Modifier.padding(padding).fillMaxSize()) {
             when (page) {
                 null -> {
                     val pages = SettingsPage.entries.filter {
                         when (it) {
-                            SettingsPage.Groups -> supports("circles")
-                            SettingsPage.Fences -> supports("places")
-                            SettingsPage.Trail -> supports("trails")
+                            SettingsPage.Places -> supports("circles") || supports("places")
                             else -> true
                         } && (!limited || it in CHILD_PAGES)
                     }
-                    SettingsCard {
-                        pages.forEachIndexed { i, p ->
-                            if (i > 0) HorizontalDivider(Modifier.padding(start = 56.dp))
-                            MenuRow(p.icon, p.title, menuSummary(p, prefs, sharing, circles, places, trailHours, username, hasPassword, perms, tripDays)) {
-                                pageName = p.name
-                            }
+                    pages.forEachIndexed { i, p ->
+                        if (i > 0) HorizontalDivider(Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
+                        MenuRow(p.icon, p.title, menuSummary(p, prefs, sharing, circles, places, trailHours, username, hasPassword, perms, tripDays)) {
+                            pageName = p.name
                         }
                     }
                 }
-                SettingsPage.Sharing -> SharingPage(prefs, sharing, onSharingChange)
-                SettingsPage.Groups -> GroupsPage(prefs, sharing, circles, onCircleSharingChange, onCirclesChanged)
-                SettingsPage.Fences -> {
-                    FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
-                    if (supports("reminders") && features != null) RemindersCard(prefs, places)
+                SettingsPage.Sharing -> {
+                    SharingPage(prefs, sharing, onSharingChange)
+                    if (supports("trails")) TrailPage(prefs, trailHours, onTrailHoursChange, tripDays, onTripDaysChange, supports("trips"))
+                    MapStyleCards(prefs, onMapStyleChange, onDimMapChange)
                 }
-                SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
-                SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange, tripDays, onTripDaysChange, supports("trips"))
-                SettingsPage.Customize -> {
+                SettingsPage.You -> {
                     IconCard(prefs, members.find { it.id == myId }, supports("emoji"), onProfileChanged)
-                    MapPage(prefs, onMapStyleChange, onDimMapChange)
+                    AccountPage(prefs, username, hasPassword, onPasswordSaved)
+                }
+                SettingsPage.Look -> {
+                    LookCards(prefs)
+                    if (!limited && !Access.isChild) ModulesCard(prefs, features, onOpenHomeEditor)
                     VoiceCard(prefs)
                 }
-                SettingsPage.Device -> DevicePage()
+                SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
+                SettingsPage.Places -> {
+                    if (supports("circles")) GroupsPage(prefs, sharing, circles, onCircleSharingChange, onCirclesChanged)
+                    if (supports("places")) FencesPage(prefs, circles, places, onEditPlace, shareArrivals, onShareArrivalsChange)
+                    if (supports("reminders") && features != null) RemindersCard(prefs, places)
+                }
                 SettingsPage.Pebble -> PebblePage(prefs, supports("index01"))
-                SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved)
-                SettingsPage.About -> AboutPage(prefs, perms, serverVersion, onLeave)
+                SettingsPage.About -> {
+                    AboutPage(prefs, perms, serverVersion, onLeave)
+                    if (!limited) AdvancedCard()
+                }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -215,20 +217,18 @@ private fun menuSummary(
     perms: PermissionState,
     tripDays: Int?,
 ): String = when (p) {
-    SettingsPage.Sharing -> if (sharing) "On, every ${plural(prefs.intervalMinutes, "minute")}" else "Paused"
-    SettingsPage.Groups -> circles.joinToString(", ") { it.name }.ifEmpty { "Who sees whom" }
-    SettingsPage.Fences -> if (places.isEmpty()) "Alerts when people arrive or leave" else places.joinToString(", ") { it.name }
-    SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, low battery, who you hear about" else "$it ${if (it == 1) "person" else "people"} muted" }
-    SettingsPage.Customize -> "Your icon, colours, names, map style"
-    SettingsPage.Pebble -> "Watch app, timeline, Index 01 ring"
-    SettingsPage.Device -> if (Access.isDisplay) "Control Deck: a family screen on the wall or counter" else "Someone's own phone or tablet"
-    SettingsPage.Trail -> listOfNotNull(
-        trailHours?.takeIf { it > 0 }?.let { "Trail $it h" },
+    SettingsPage.Sharing -> listOfNotNull(
+        if (sharing) "On, every ${plural(prefs.intervalMinutes, "minute")}" else "Paused",
+        trailHours?.takeIf { it > 0 }?.let { "trail $it h" },
         tripDays?.takeIf { it > 0 }?.let { "trips ${if (it == 1) "1 day" else "$it days"}" },
-    ).joinToString(", ").ifEmpty { "Off" }
-    SettingsPage.Account -> when (hasPassword) {
-        false -> "No password yet: set one"
-        else -> if (username.isNotEmpty()) "Signed in as $username" else "Username and password"
+    ).joinToString(", ")
+    SettingsPage.Places -> (circles.map { it.name } + places.map { it.name }).joinToString(", ").ifEmpty { "Who sees whom, and alerts when people arrive or leave" }
+    SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, driving, low battery" else "$it ${if (it == 1) "person" else "people"} muted" }
+    SettingsPage.Look -> "Colours, names, home screen, voice"
+    SettingsPage.Pebble -> "Pebble watch app, timeline, Index 01 ring"
+    SettingsPage.You -> when (hasPassword) {
+        false -> "Your icon · no password yet: set one"
+        else -> if (username.isNotEmpty()) "Your name and icon · signed in as $username" else "Your name, icon and sign-in"
     }
     SettingsPage.About -> if (perms.background && perms.batteryUnrestricted && perms.notifications) {
         "Version ${BuildConfig.VERSION_NAME} · all set"
@@ -278,11 +278,73 @@ private fun VoiceCard(prefs: Prefs) {
     }
 }
 
+/**
+ * Look and Feel → Home Screen and Modules: arrange the home screen (with the
+ * drawer of tiles), and choose modules. An admin's switches change the whole
+ * family; everyone else's only hide a module on their own phone.
+ */
 @Composable
-private fun DevicePage() {
+private fun ModulesCard(prefs: Prefs, features: Set<String>?, onOpenHomeEditor: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val admin = prefs.access == "admin"
+    var mods by remember { mutableStateOf<List<ModuleInfo>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        mods = runCatching { Api(prefs.serverUrl, prefs.token).modules() }.onFailure { error = it.message }.getOrNull()
+    }
+    SettingsCard("Home Screen and Modules") {
+        OutlinedButton(onClick = onOpenHomeEditor, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("Arrange home screen") }
+        Hint(
+            if (admin) "As an admin, switching a module off here switches it off for the whole family."
+            else "Hide the modules you don't use on this phone. Your family's admin chooses which modules the family has.",
+        )
+        val list = mods
+        when {
+            list == null && error != null -> Hint("Couldn't load the modules: $error")
+            list == null -> Hint("Loading…")
+            else -> list.filter { admin || it.enabled }.forEach { m ->
+                val name = if (Access.plainNames) m.plain.ifEmpty { m.name } else m.name
+                SwitchRow(
+                    title = name + if (!m.available) " (coming soon)" else "",
+                    detail = m.description,
+                    checked = if (admin) m.enabled && m.id !in Modules.hidden else m.id !in Modules.hidden,
+                    onChange = { on ->
+                        if (admin && (on || m.enabled)) {
+                            // An admin switching on also un-hides it here; switching off is family-wide.
+                            Modules.hidden = Modules.hidden - m.id
+                            prefs.hiddenModules = Modules.hidden
+                            scope.launch {
+                                runCatching { Api(prefs.serverUrl, prefs.token).setModules(list.associate { it.id to (if (it.id == m.id) on else it.enabled) }) }
+                                    .onSuccess { mods = it }
+                                    .onFailure { android.widget.Toast.makeText(context, "Couldn't save: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
+                            }
+                        } else {
+                            Modules.hidden = if (on) Modules.hidden - m.id else Modules.hidden + m.id
+                            prefs.hiddenModules = Modules.hidden
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** About → Advanced: things hardly anyone changes, folded away. */
+@Composable
+private fun AdvancedCard() {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    SettingsCard("Control Deck") {
+    var open by rememberSaveable { mutableStateOf(Access.isDisplay) }
+    Row(
+        Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Advanced", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+        Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = if (open) "Hide" else "Show")
+    }
+    if (!open) return
+    SettingsCard("Device Mode") {
         SwitchRow(
             title = "Use as a Control Deck",
             detail = "A family screen for the wall or the kitchen counter: full-screen home tiles, the screen stays on while charging, " +
@@ -756,10 +818,8 @@ private fun TrailPage(
 }
 
 @Composable
-private fun MapPage(prefs: Prefs, onChange: (String) -> Unit, onDimChange: (Boolean) -> Unit) {
-    var dim by remember { mutableStateOf(prefs.dimMap) }
+private fun LookCards(prefs: Prefs) {
     val haptics = LocalHapticFeedback.current
-    var style by remember { mutableStateOf(prefs.mapStyle) }
     val namesContext = LocalContext.current
     SettingsCard("Names") {
         SwitchRow(
@@ -821,6 +881,14 @@ private fun MapPage(prefs: Prefs, onChange: (String) -> Unit, onDimChange: (Bool
             }
         }
     }
+}
+
+/** Location Sharing → the map's look (this phone only). */
+@Composable
+private fun MapStyleCards(prefs: Prefs, onChange: (String) -> Unit, onDimChange: (Boolean) -> Unit) {
+    var dim by remember { mutableStateOf(prefs.dimMap) }
+    val haptics = LocalHapticFeedback.current
+    var style by remember { mutableStateOf(prefs.mapStyle) }
     SettingsCard("Map Style") {
         Hint("Only changes this phone. All are free maps from OpenStreetMap data.")
         MapStyles.all.forEach { s ->
@@ -1000,28 +1068,30 @@ private fun AboutPage(prefs: Prefs, perms: PermissionState, serverVersion: Strin
 
 // ---------------------------------------------------------------- building blocks
 
-/** A raised card holding one group of settings. */
+/**
+ * One group of settings: a heading and its rows, edge to edge, with a thin line
+ * under it. (No cards: settings read as one continuous page.)
+ */
 @Composable
 internal fun SettingsCard(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            if (title != null) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 4.dp),
-                )
-            }
-            content()
+    Column(Modifier.fillMaxWidth()) {
+        if (title != null) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = squeezed(14.dp)),
+            )
         }
+        Column(Modifier.padding(horizontal = 16.dp, vertical = squeezed(6.dp))) { content() }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
     }
 }
 
 @Composable
 private fun MenuRow(icon: ImageVector, title: String, summary: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = squeezed(14.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(40.dp)) {
@@ -1138,7 +1208,7 @@ private fun AccountSection(prefs: Prefs, username: String, hasPassword: Boolean?
 internal fun SwitchRow(title: String, detail: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     val haptics = LocalHapticFeedback.current
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        Modifier.fillMaxWidth().padding(vertical = squeezed(6.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {

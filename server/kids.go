@@ -87,10 +87,14 @@ var kidFeatures = []kidSwitch{
 
 // Home screen tiles. Module tiles show once the module is available and on.
 // Each can carry a size: "chat:half", "map:big" (half, wide or big; the map is never half).
-var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals"}
+// Home tiles. Some are placeholders for modules still being built (they show
+// "coming soon"); "convo.<id>" is a shortcut to one chat.
+var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward"}
+
+var convoTile = regexp.MustCompile(`^convo\.[A-Za-z0-9_-]{1,64}$`)
 var tileSizes = []string{"half", "wide", "big"}
 
-const maxHomeTiles = 12
+const maxHomeTiles = 24
 
 func presetFor(m *Member) string {
 	if m.Kid != nil && (m.Kid.Preset == "younger" || m.Kid.Preset == "older") {
@@ -192,7 +196,7 @@ func cleanHome(tiles []string) ([]string, bool) {
 	seen := []string{}
 	for _, t := range tiles {
 		id, size, sized := strings.Cut(t, ":")
-		if !slices.Contains(homeTiles, id) || (sized && !slices.Contains(tileSizes, size)) || (id == "map" && size == "half") {
+		if !(slices.Contains(homeTiles, id) || convoTile.MatchString(id)) || (sized && !slices.Contains(tileSizes, size)) {
 			return nil, false
 		}
 		if !slices.Contains(seen, id) {

@@ -247,6 +247,14 @@ class Prefs(context: Context) {
         set(v) = sp.edit { putBoolean("plain_names", v) }
 
     /** Voice engine: "auto", "phone" (Android's own speech) or "server" (the family's server). */
+    /** The chat last opened on this phone (the chat tile's quick button). */
+    var lastChat: String
+        get() = sp.getString("last_chat", "") ?: ""
+        set(v) = sp.edit { putString("last_chat", v) }
+    /** Modules this person has hidden on this phone (the family still has them). */
+    var hiddenModules: Set<String>
+        get() = sp.getStringSet("hidden_modules", emptySet()) ?: emptySet()
+        set(v) = sp.edit { putStringSet("hidden_modules", v) }
     var voiceEngine: String
         get() = sp.getString("voice_engine", "auto") ?: "auto"
         set(v) = sp.edit { putString("voice_engine", v) }
