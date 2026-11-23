@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- FamLogic: a house with a heart (home and family). -->
+<!-- FamLogic: a house and its "shifted" copy joined at the corners, like a tesseract
+     (a house passing through a fourth dimension). Same drawing as server/web/icon.svg. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
-        android:pathData="M54,29.5L80.5,52.5L75,52.5L75,77.5Q75,80 72.5,80L35.5,80Q33,80 33,77.5L33,52.5L27.5,52.5ZM54,73C42,64.5 43.5,55 49.5,55C51.8,55 53.3,56.6 54,58.3C54.7,56.6 56.2,55 58.5,55C64.5,55 66,64.5 54,73Z" />
+    <!-- The 64x64 drawing, scaled up and centred in the icon's safe zone. -->
+    <group android:pivotX="32" android:pivotY="31" android:scaleX="1.25" android:scaleY="1.25"
+        android:translateX="22" android:translateY="23">
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M11,34 L27,20 L43,34 M15,31 L15,50 L39,50 L39,31" />
+        <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.7" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M21,26 L37,12 L53,26 M25,23 L25,42 L49,42 L49,23" />
+        <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.6" android:strokeWidth="1.4" android:strokeLineCap="round"
+            android:pathData="M27,20 L37,12 M15,50 L25,42 M39,50 L49,42 M43,34 L53,26 M11,34 L21,26" />
+    </group>
 </vector>

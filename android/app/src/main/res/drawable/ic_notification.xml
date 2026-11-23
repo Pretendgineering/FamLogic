@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The FamLogic mark at status-bar size (slightly bolder lines so it stays readable). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
     android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
-        android:pathData="M12,2.5L22,11L19.5,11L19.5,20.5Q19.5,21.5 18.5,21.5L5.5,21.5Q4.5,21.5 4.5,20.5L4.5,11L2,11ZM12,19C7.6,15.9 8.2,12.3 10.4,12.3C11.2,12.3 11.75,12.9 12,13.5C12.25,12.9 12.8,12.3 13.6,12.3C15.8,12.3 16.4,15.9 12,19Z" />
+    <group android:scaleX="0.5" android:scaleY="0.5" android:translateX="-4" android:translateY="-3">
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="3.4" android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M11,34 L27,20 L43,34 M15,31 L15,50 L39,50 L39,31" />
+        <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.75" android:strokeWidth="2.8" android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M21,26 L37,12 L53,26 M25,23 L25,42 L49,42 L49,23" />
+        <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.65" android:strokeWidth="2.2" android:strokeLineCap="round"
+            android:pathData="M27,20 L37,12 M15,50 L25,42 M39,50 L49,42 M43,34 L53,26 M11,34 L21,26" />
+    </group>
 </vector>
