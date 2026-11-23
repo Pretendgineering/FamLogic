@@ -13,6 +13,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -39,11 +40,13 @@ type Server struct {
 
 	indexSeen *indexDeliveries // Index 01 ring deliveries already handled
 	chat      *ChatStore       // nil if the chat database couldn't be opened
+	voice     *Voice           // speech to text and reading aloud, when the tools are there
 }
 
 func NewServer(cfg Config, store *Store, static fs.FS) *Server {
 	s := &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter(), geo: newGeocoder(cfg.GeocoderURL),
 		indexSeen: &indexDeliveries{seen: map[string]time.Time{}}}
+	s.voice = openVoice(env("VOICE_DIR", "/voice"), filepath.Join(filepath.Dir(store.path), "tmp"))
 	if s.chat = openChatNextTo(store.path); s.chat != nil {
 		chat := s.chat
 		store.AddBackupHook(func(dir string, keep int) error { return keepDaily(dir, "chat-", ".db", keep, chat.Backup) })
@@ -122,6 +125,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/chat/{id}/messages/{mid}", s.admin(s.handleAdminChatDeleteMessage))
 	// Parents' controls (kids.go).
 	mux.HandleFunc("POST /api/pin/check", s.device(s.handleCheckPIN))
+	mux.HandleFunc("POST /api/voice/transcribe", s.device(s.handleTranscribe))
+	mux.HandleFunc("POST /api/voice/speak", s.device(s.handleSpeak))
 	mux.HandleFunc("PUT /api/family/pin", s.device(s.handleFamilyPIN))
 	mux.HandleFunc("GET /api/admin/pin", s.admin(s.handleAdminPIN))
 	mux.HandleFunc("PUT /api/admin/pin", s.admin(s.handleAdminPIN))
@@ -257,6 +262,7 @@ func (s *Server) serverInfo() map[string]any {
 		features = append(features, "silence")
 	}
 	features = append(features, s.store.moduleFeatures()...)
+	features = append(features, s.voice.features()...)
 	return map[string]any{
 		"name":            s.cfg.FamilyName,
 		"version":         version,

@@ -82,6 +82,7 @@ var kidFeatures = []kidSwitch{
 	{"chat_photos", "Send photos", "chat", true, true},
 	{"chat_delete", "Delete their own messages", "chat", false, false},
 	{"chat_mute", "Mute chats", "chat", false, false},
+	{"voice", "Talk instead of typing, and hear messages read aloud", "chat", true, true},
 }
 
 // Home screen tiles. Module tiles show once the module is available and on.

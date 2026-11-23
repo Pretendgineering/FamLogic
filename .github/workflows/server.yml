@@ -25,7 +25,8 @@ jobs:
         working-directory: server
 
   image:
-    # Publishes ghcr.io/<owner>/famlogic for amd64 and arm64 (e.g. Raspberry Pi 4/5).
+    # Publishes ghcr.io/<owner>/famlogic for amd64 and arm64 (e.g. Raspberry Pi 4/5),
+    # with voice (whisper.cpp, Piper and their models) built in.
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -60,3 +61,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: VERSION=${{ steps.ver.outputs.v }}
+          # whisper.cpp takes a while to compile (ARM under emulation especially): reuse it.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
