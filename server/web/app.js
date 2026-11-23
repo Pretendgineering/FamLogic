@@ -932,6 +932,7 @@ const ICONS = {
   meal: '<path d="M7 3.5v17M4.5 3.5v5a2.5 2.5 0 0 0 5 0v-5M17 20.5V3.5c-2.5 1.5-3.5 5-3.5 8.5h3.5"/>',
   people: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 20c0-3.6 2.7-6.2 6-6.2s6 2.6 6 6.2"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.8 14.3c2.9.1 5.2 2.3 5.2 5.7"/>',
   device: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  camera: '<path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3v11H4z"/><circle cx="12" cy="13.5" r="3.3"/>',
   gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
 };
 const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -1067,7 +1068,8 @@ function renderFamily() {
         el("div", { class: "title" }, m.name),
         sub ? el("div", { class: "sub" }, sub) : null),
       control,
-      !isAdmin() ? null : moreButton(`Options for ${m.name}`, [
+      !isAdmin() ? (m.role === "child" && me.member && me.member.role === "parent" ? moreButton(`Options for ${m.name}`, [["What they can use…", () => openKid(m)]]) : null) : moreButton(`Options for ${m.name}`, [
+        ...(m.role === "child" ? [["What they can use…", () => openKid(m)], "-"] : []),
         ["Rename…", () => rename(m)],
         ["Icon and colour…", () => openIconPicker(m)],
         ...(access === "dependent" ? [] : [[access === "younger_child" ? "New join code…" : "Reset sign-in…", () => resetSignIn(m)]]),
@@ -1076,7 +1078,83 @@ function renderFamily() {
       ]));
   }));
   if (!lastMembers.length) $("#family-list").append(el("li", { class: "muted" }, "Nobody yet. Invite the first person."));
+  if (isAdmin()) loadPIN();
 }
+
+// ---- the parent PIN (admins)
+async function loadPIN() {
+  try {
+    const { set } = await api("GET", "/api/admin/pin");
+    $("#pin-status").textContent = set ? "Set. It unlocks settings on children's devices and family displays."
+      : "Not set yet. Set one so children's devices can keep their settings locked.";
+    $("#pin-set").textContent = set ? "Change PIN…" : "Set PIN…";
+    $("#pin-clear").hidden = !set;
+  } catch (_) { $("#pin-row").hidden = true; }
+}
+$("#pin-set").addEventListener("click", async () => {
+  const pin = prompt("New parent PIN (4 to 8 digits). Every parent uses the same one:");
+  if (pin === null) return;
+  if (!/^[0-9]{4,8}$/.test(pin)) { alert("The PIN is 4 to 8 digits."); return; }
+  if (prompt("Type it again:") !== pin) { alert("Those didn't match."); return; }
+  try { await api("PUT", "/api/admin/pin", { pin }); loadPIN(); } catch (err) { alert(err.message); }
+});
+$("#pin-clear").addEventListener("click", async () => {
+  if (!confirm("Remove the parent PIN? Children's devices will then keep their settings closed until a new one is set.")) return;
+  try { await api("PUT", "/api/admin/pin", { pin: "" }); loadPIN(); } catch (err) { alert(err.message); }
+});
+
+// ---- what a child can use (parents and admins)
+const TILE_NAMES = { map: "Map", chat: "Chat", sos: "SOS", checkin: "Check in", calendar: "Calendar", todos: "To-dos", chores: "Chores", meals: "Meals" };
+const kidDialog = $("#kid-dialog");
+let kidTarget = null, kidData = null, kidHome = [];
+kidDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => kidDialog.close()));
+async function openKid(m) {
+  try { kidData = await api("GET", `${memberBase()}/${m.id}/kid`); } catch (err) { alert(err.message); return; }
+  kidTarget = m;
+  $("#kid-title").textContent = `What ${m.name} can use`;
+  kidHome = kidData.home.slice();
+  renderKid(kidData.settings);
+  kidDialog.showModal();
+}
+function renderKid(settings) {
+  kidDialog.querySelectorAll("input[name=kid-preset]").forEach((r) => { r.checked = r.value === settings.preset; });
+  const rows = (target, list, values, kind) => target.replaceChildren(...list.map((sw) => {
+    const box = el("input", { type: "checkbox", "data-kind": kind, "data-id": sw.id });
+    box.checked = !!values[sw.id];
+    return el("li", {}, el("label", {}, box, el("div", { class: "grow" }, el("div", { class: "title" }, sw.name))));
+  }));
+  rows($("#kid-sections"), kidData.sections, settings.sections, "sections");
+  rows($("#kid-features"), kidData.features, settings.features, "features");
+  renderKidHome();
+}
+function renderKidHome() {
+  const order = kidHome.concat(kidData.tiles.filter((t) => !kidHome.includes(t)));
+  $("#kid-home").replaceChildren(...order.map((t) => {
+    const on = kidHome.includes(t);
+    const box = el("input", { type: "checkbox" });
+    box.checked = on;
+    box.addEventListener("change", () => { kidHome = box.checked ? kidHome.concat(t) : kidHome.filter((x) => x !== t); renderKidHome(); });
+    const move = (d) => { const i = kidHome.indexOf(t), j = i + d; if (i < 0 || j < 0 || j >= kidHome.length) return; [kidHome[i], kidHome[j]] = [kidHome[j], kidHome[i]]; renderKidHome(); };
+    return el("li", {}, el("label", {}, box, el("div", { class: "grow" }, el("div", { class: "title" }, TILE_NAMES[t] || t))),
+      on ? el("button", { type: "button", class: "home-move", "aria-label": `Move ${TILE_NAMES[t]} up`, onclick: () => move(-1) }, "↑") : null,
+      on ? el("button", { type: "button", class: "home-move", "aria-label": `Move ${TILE_NAMES[t]} down`, onclick: () => move(1) }, "↓") : null);
+  }));
+}
+// Picking a preset shows its defaults straight away (saved with Save).
+kidDialog.querySelectorAll("input[name=kid-preset]").forEach((r) => r.addEventListener("change", () => {
+  const pick = (list) => Object.fromEntries(list.map((sw) => [sw.id, r.value === "younger" ? sw.younger : sw.older]));
+  renderKid({ preset: r.value, sections: pick(kidData.sections), features: pick(kidData.features) });
+}));
+$("#kid-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const collect = (kind) => Object.fromEntries([...kidDialog.querySelectorAll(`input[data-kind=${kind}]`)].map((b) => [b.dataset.id, b.checked]));
+  const preset = (kidDialog.querySelector("input[name=kid-preset]:checked") || {}).value || "";
+  try {
+    // A changed preset resets first; the switches as shown then apply on top.
+    await api("PUT", `${memberBase()}/${kidTarget.id}/kid`, { preset, sections: collect("sections"), features: collect("features"), home: kidHome });
+    kidDialog.close();
+  } catch (err) { alert(err.message); }
+});
 $("#family-dependent").addEventListener("click", async () => {
   const name = prompt("Their name (e.g. a baby who doesn't use the app):");
   if (!name) return;
@@ -1213,16 +1291,61 @@ function renderChatList() {
   $("#chat-note").textContent = me.owner ? "You're the main admin: you can read every chat, but not post. Log in with your own account to chat."
     : me.member && me.member.role === "parent" && chatConvs.some((c) => c.oversight) ? "Chats marked “Watching” are your children's: you can read them, not post." : "";
   $("#chat-convs").replaceChildren(...chatConvs.map((c) => {
-    const last = c.last ? (c.last.text || "📷 Photo") : "No messages yet";
+    const last = c.last ? (c.last.text || "Photo") : "No messages yet";
     const who = c.last && c.kind !== "direct" ? nameOf(c.last.sender) + ": " : "";
     return el("li", { class: "clickable" + (c.id === chatOpen ? " active" : ""), onclick: () => openChat(c.id) },
       el("div", { class: "avatar" + (c.kind === "family" ? "" : ""), style: `background:${c.kind === "direct" ? (personById(c.members.find((id) => id !== (me.member || {}).id)) || {}).color || "var(--accent)" : "var(--accent)"}` },
         c.kind === "family" ? "★" : (c.title || "?").trim().charAt(0).toUpperCase()),
       el("div", { class: "grow" },
-        el("div", { class: "title" }, c.title, c.oversight ? el("span", { class: "badge" }, "Watching") : null),
+        el("div", { class: "title" }, c.title, c.oversight ? el("span", { class: "badge" }, "Watching") : null,
+          c.status ? el("span", { class: "badge warn" }, STATUS_LABELS[c.status] || c.status) : null),
         el("div", { class: "sub" }, (who + last).slice(0, 80))),
       c.unread ? el("span", { class: "badge on" }, String(c.unread)) : null);
   }));
+}
+
+const STATUS_LABELS = { pending: "Needs OK", paused: "Paused", blocked: "Blocked" };
+const hasChildIn = (conv) => conv.members.some((id) => (personById(id) || {}).role === "child");
+// Parents (and the main admin) manage chats with a child in them.
+const canModerate = (conv) => conv.kind !== "family" && (me.owner || (me.member && me.member.role === "parent" && hasChildIn(conv)));
+const modPath = (id) => (me.owner ? "/api/admin/chat/" : "/api/chat/") + encodeURIComponent(id) + "/moderate";
+
+async function moderate(conv, action) {
+  if (action === "delete" && !confirm(`Delete "${conv.title}" and all its messages and photos for everyone? This can't be undone.`)) return;
+  if (action === "block" && !confirm(`Block "${conv.title}"? The children in it won't see it any more; parents still can.`)) return;
+  try {
+    await api("POST", modPath(conv.id), { action });
+    if (action === "delete") { chatOpen = ""; chatMsgs = []; $("#chat-messages").replaceChildren(); $("#chat-mod").replaceChildren(); $("#chat-title").textContent = "Choose a chat"; $("#chat-sub").textContent = ""; $("#chat-banner").hidden = true; }
+    await loadChats();
+    renderChatList();
+    if (chatOpen) await pollThread();
+  } catch (err) { alert(err.message); }
+}
+
+async function deleteMessage(conv, m) {
+  if (!confirm("Delete this message for everyone?")) return;
+  try {
+    await api("DELETE", (me.owner ? "/api/admin/chat/" : "/api/chat/") + `${encodeURIComponent(conv.id)}/messages/${m.id}`);
+    chatMsgs = chatMsgs.filter((x) => x.id !== m.id);
+    await pollThread();
+  } catch (err) { alert(err.message); }
+}
+
+function renderModeration(conv) {
+  const mod = canModerate(conv);
+  const b = (label, action, cls = "secondary") => el("button", { type: "button", class: cls, onclick: () => moderate(conv, action) }, label);
+  $("#chat-mod").replaceChildren(...(!mod ? [] : [
+    conv.status === "pending" ? b("Say yes", "approve", "") : null,
+    conv.status === "pending" || conv.status === "blocked" ? null : conv.status === "paused" ? b("Resume", "resume") : b("Pause", "pause"),
+    conv.status === "blocked" ? b("Unblock", "unblock") : conv.status === "pending" ? null : b("Block", "block"),
+    b("Delete", "delete", "danger"),
+  ].filter(Boolean)));
+  const banner = $("#chat-banner");
+  const text = conv.status === "pending" ? (mod ? "A child started this group. Nobody can post until a parent says yes (or delete it to say no)." : "Waiting for a parent to say yes.")
+    : conv.status === "paused" ? "Paused by a parent: everyone can read it, nobody can post."
+    : conv.status === "blocked" ? "Blocked by a parent: hidden from the children in it." : "";
+  banner.textContent = text;
+  banner.hidden = !text;
 }
 
 function dayLabel(ms) {
@@ -1253,20 +1376,25 @@ function renderThread(data) {
     const bubble = el("div", { class: "bubble" });
     if (m.photo) bubble.append(el("img", { src: `/api/chat-media/${encodeURIComponent(m.photo)}`, alt: "Photo", loading: "lazy" }));
     if (m.text) bubble.append(m.text);
+    const canDelete = isMine || canModerate(conv);
     nodes.push(el("div", { class: "msg" + (isMine ? " mine" : "") },
       isMine || conv.kind === "direct" && !conv.oversight ? null : el("div", { class: "who" }, nameOf(m.sender)),
       bubble,
       el("div", { class: "meta" }, new Date(m.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) +
-        (myLast && m.id === myLast.id && seenBy.length ? ` · Seen by ${seenBy.join(", ")}` : ""))));
+        (myLast && m.id === myLast.id && seenBy.length ? ` · Seen by ${seenBy.join(", ")}` : ""),
+        canDelete ? el("button", { type: "button", class: "del", onclick: () => deleteMessage(conv, m) }, "Delete") : null)));
   }
   if (!chatMsgs.length) nodes.push(el("p", { class: "muted" }, "No messages yet. Say hello!"));
   box.replaceChildren(...nodes);
   if (atBottom || box.dataset.conv !== conv.id) box.scrollTop = box.scrollHeight;
   box.dataset.conv = conv.id;
+  renderModeration(conv);
   const canPost = !!data.canPost && !me.owner;
   $("#chat-compose").hidden = !canPost;
   $("#chat-readonly").hidden = canPost;
-  $("#chat-readonly").textContent = me.owner ? "Read only (main admin)." : "You can read this chat because a child of yours is in it. Only the people in it can post.";
+  $("#chat-readonly").textContent = me.owner ? "Read only (main admin)."
+    : conv.status && conv.members.includes((me.member || {}).id) ? "" : "You can read this chat because a child of yours is in it. Only the people in it can post.";
+  if (!$("#chat-readonly").textContent) $("#chat-readonly").hidden = true;
 }
 
 async function openChat(id) {

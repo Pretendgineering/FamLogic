@@ -58,6 +58,11 @@
         <div class="panel-actions admin-only"><button id="family-invite" class="tonal">+ Invite someone</button><button id="family-dependent" class="secondary">+ Someone who doesn't use the app</button></div>
         <p class="muted small admin-only">Roles: <strong>Admin</strong> (a parent who can use these admin pages; only the main admin can make admins), <strong>Parent</strong>, <strong>Older child</strong> (may use a password), <strong>Younger child</strong> (joins with a code from you, no password), and family members who <strong>don't use the app</strong> (such as a baby), so events and reminders can include them.</p>
         <ul class="list" id="family-list"></ul>
+        <div class="pin-row admin-only" id="pin-row">
+          <div class="grow"><div class="title">Parent PIN</div><div class="sub" id="pin-status">Unlocks settings on children's devices and family displays.</div></div>
+          <button type="button" class="secondary" id="pin-set">Set PIN…</button>
+          <button type="button" class="link" id="pin-clear" hidden>Remove</button>
+        </div>
       </div>
     </main>
 
@@ -116,10 +121,11 @@
           <ul class="list" id="chat-convs"></ul>
         </section>
         <section class="chat-thread panel">
-          <header class="chat-thread-head"><h2 id="chat-title">Choose a chat</h2><span class="muted small" id="chat-sub"></span></header>
+          <header class="chat-thread-head"><div class="grow"><h2 id="chat-title">Choose a chat</h2><span class="muted small" id="chat-sub"></span></div><div class="chat-mod" id="chat-mod"></div></header>
+          <p class="chat-banner" id="chat-banner" hidden></p>
           <div class="chat-messages" id="chat-messages"></div>
           <form class="chat-compose" id="chat-compose" hidden>
-            <label class="chat-photo" title="Add a photo"><input type="file" id="chat-photo" accept="image/*" hidden>📷</label>
+            <label class="chat-photo" title="Add a photo"><input type="file" id="chat-photo" accept="image/*" hidden><span data-icon="camera"></span></label>
             <input id="chat-text" autocomplete="off" placeholder="Message" maxlength="4000">
             <button type="submit">Send</button>
           </form>
@@ -197,6 +203,25 @@
       <ul class="list modules" id="chat-new-people"></ul>
       <label id="chat-new-name-label" hidden>Group name <input id="chat-new-name" maxlength="40" placeholder="e.g. Movie night"></label>
       <div class="row"><button type="submit">Start</button><button type="button" class="secondary" data-close>Cancel</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="kid-dialog">
+    <form method="dialog" id="kid-form">
+      <h2 id="kid-title">What they can use</h2>
+      <p class="muted small">Start from a preset, then switch single things on or off. Family settings are never available to children; their device's settings open with the parent PIN.</p>
+      <div class="preset-row" id="kid-preset">
+        <label><input type="radio" name="kid-preset" value="younger"> <strong>Younger child</strong><span class="sub">Can't read yet: home, chat with big pictures, SOS</span></label>
+        <label><input type="radio" name="kid-preset" value="older"> <strong>Older child</strong><span class="sub">Everything except family settings</span></label>
+      </div>
+      <h3>Sections</h3>
+      <ul class="list modules compact" id="kid-sections"></ul>
+      <h3>Features</h3>
+      <ul class="list modules compact" id="kid-features"></ul>
+      <h3>Home screen</h3>
+      <p class="muted small">Tick the tiles to show and use the arrows to order them. Nothing ticked: the app's default.</p>
+      <ul class="list modules compact" id="kid-home"></ul>
+      <div class="row"><button type="submit">Save</button><button type="button" class="secondary" data-close>Cancel</button></div>
     </form>
   </dialog>
 
