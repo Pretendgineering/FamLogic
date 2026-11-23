@@ -99,7 +99,7 @@ class LocationService : Service() {
     @SuppressLint("InlinedApi") // the type constants are plain ints; ServiceCompat ignores them where unsupported
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val fromBackground = intent?.getBooleanExtra(EXTRA_FROM_BACKGROUND, false) ?: false
-        val share = prefs.joined && prefs.sharing && prefs.locationModule && hasLocationPermission(this) &&
+        val share = prefs.joined && prefs.sharing && prefs.locationModule && prefs.deviceMode != "display" && hasLocationPermission(this) &&
             (!fromBackground || hasBackgroundPermission(this))
         if (!needed(this)) {
             // Android requires every service started with startForegroundService() to call
@@ -563,7 +563,7 @@ class LocationService : Service() {
         fun needed(ctx: Context): Boolean {
             val prefs = Prefs(ctx)
             if (!prefs.joined) return false
-            return (prefs.sharing && prefs.locationModule && hasLocationPermission(ctx)) || prefs.instantAlerts ||
+            return (prefs.sharing && prefs.locationModule && prefs.deviceMode != "display" && hasLocationPermission(ctx)) || prefs.instantAlerts ||
                 prefs.sosPending || prefs.sosEndPending
         }
 

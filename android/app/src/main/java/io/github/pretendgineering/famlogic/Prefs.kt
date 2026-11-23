@@ -220,6 +220,26 @@ class Prefs(context: Context) {
         get() = sp.getStringSet("server_features", null) ?: emptySet()
         set(v) = sp.edit { putStringSet("server_features", v) }
 
+    /** A child's switched-on sections and features (see Access); empty until the server says. */
+    var kidAllowed: Set<String>?
+        get() = if (sp.contains("kid_allowed")) sp.getStringSet("kid_allowed", emptySet()) else null
+        set(v) = sp.edit { if (v == null) remove("kid_allowed") else putStringSet("kid_allowed", v) }
+    var kidPreset: String
+        get() = sp.getString("kid_preset", "") ?: ""
+        set(v) = sp.edit { putString("kid_preset", v) }
+    /** Home screen tiles, in order (empty = default). */
+    var homeTiles: List<String>
+        get() = (sp.getString("home_tiles", "") ?: "").split(',').filter { it.isNotBlank() }
+        set(v) = sp.edit { putString("home_tiles", v.joinToString(",")) }
+    /** Whether the family has a parent PIN (it unlocks settings on kids' devices and displays). */
+    var pinSet: Boolean
+        get() = sp.getBoolean("pin_set", false)
+        set(v) = sp.edit { putBoolean("pin_set", v) }
+    /** How this device is used: "phone", "interactive" or "display". This device only. */
+    var deviceMode: String
+        get() = sp.getString("device_mode", "phone") ?: "phone"
+        set(v) = sp.edit { putString("device_mode", v) }
+
     /** Muted chats: conversation id → muted until (unix ms; Long.MAX_VALUE = until unmuted). This phone only. */
     fun chatMutedUntil(conv: String): Long = sp.getLong("chat_muted_$conv", 0)
     fun muteChat(conv: String, until: Long) = sp.edit { if (until <= 0) remove("chat_muted_$conv") else putLong("chat_muted_$conv", until) }

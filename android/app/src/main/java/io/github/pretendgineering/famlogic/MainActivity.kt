@@ -22,7 +22,8 @@ class MainActivity : ComponentActivity() {
     private var focusMember by mutableStateOf<String?>(null) // from tapping an alert about someone
     private var joinCircleCode by mutableStateOf<String?>(null) // an invite link opened while signed in
     private var features by mutableStateOf<Set<String>>(emptySet()) // what the server does, and which modules are on
-    private var tab by mutableStateOf(Tab.Map)
+    private var tab by mutableStateOf(Tab.Home)
+    private var settingsRequest by mutableStateOf(false) // the home screen asked for settings
     private var openChat by mutableStateOf<String?>(null) // from tapping a chat notification
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         prefs = Prefs(this)
         ThemeState.load(this)
+        Access.load(this)
         joined = prefs.joined
         features = prefs.serverFeatures
         handleIntent(intent)
@@ -45,6 +47,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 if (joined) {
+                    DisplayModeEffects(window)
                     HomeShell(
                         prefs = prefs,
                         features = features,
@@ -52,6 +55,12 @@ class MainActivity : ComponentActivity() {
                         onTab = { tab = it },
                     ) { current ->
                         when (current) {
+                            Tab.Home -> HomeScreen(
+                                prefs = prefs,
+                                features = features,
+                                onOpen = { tab = it },
+                                onOpenSettings = { settingsRequest = true; tab = Tab.Map },
+                            )
                             Tab.Chat -> ChatScreen(prefs, openRequest = openChat, onOpenHandled = { openChat = null })
                             Tab.Map -> MapScreen(
                                 prefs = prefs,
@@ -61,6 +70,10 @@ class MainActivity : ComponentActivity() {
                                 joinCircleCode = joinCircleCode,
                                 onJoinCircleHandled = { joinCircleCode = null },
                                 onFeatures = { features = it },
+                                openSettings = settingsRequest,
+                                onSettingsHandled = { settingsRequest = false },
+                                // Someone without the map came here only for settings: back home after.
+                                onSettingsClosed = { if (Tab.Map !in visibleTabs(features, prefs)) tab = Tab.Home },
                             )
                         }
                     }
@@ -90,8 +103,45 @@ class MainActivity : ComponentActivity() {
         joined = prefs.joined
     }
 
+    /**
+     * A family display: full screen (no status or navigation bars) and, while it's
+     * charging, the screen stays on.
+     */
+    @Composable
+    private fun DisplayModeEffects(window: android.view.Window) {
+        val display = Access.isDisplay
+        val context = androidx.compose.ui.platform.LocalContext.current
+        androidx.compose.runtime.DisposableEffect(display) {
+            val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+            if (display) {
+                controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            } else {
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+            fun keepOn(plugged: Boolean) {
+                if (display && plugged) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: android.content.Context, i: Intent) {
+                    keepOn(i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0)
+                }
+            }
+            val sticky = androidx.core.content.ContextCompat.registerReceiver(
+                context, receiver, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            keepOn((sticky?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0)
+            onDispose {
+                context.unregisterReceiver(receiver)
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+    }
+
     private fun handleIntent(intent: Intent?) {
-        intent?.getStringExtra(Alerts.EXTRA_FOCUS_MEMBER)?.let { focusMember = it; tab = Tab.Map }
+        intent?.getStringExtra(Alerts.EXTRA_FOCUS_MEMBER)?.let { focusMember = it; tab = if (Access.can("map")) Tab.Map else Tab.Home }
         intent?.getStringExtra(ChatNotify.EXTRA_OPEN_CHAT)?.let { openChat = it; tab = Tab.Chat }
         val data: Uri = intent?.data ?: return
         if (data.scheme != "famlogic" || data.host != "join") return

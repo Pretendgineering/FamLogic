@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
@@ -88,6 +89,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
     Trail("Trail & trips", Icons.Filled.DateRange),
     Sharing("Sharing", Icons.Filled.Share),
     Map("Look & map", Icons.Filled.Edit),
+    Device("This device", Icons.Filled.Phone),
     Account("Account", Icons.Filled.AccountCircle),
     Pebble("Pebble & Index", Icons.Filled.Star),
     About("About", Icons.Filled.Info),
@@ -180,6 +182,7 @@ fun SettingsScreen(
                 SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
                 SettingsPage.Trail -> TrailPage(prefs, trailHours, onTrailHoursChange, tripDays, onTripDaysChange, supports("trips"))
                 SettingsPage.Map -> MapPage(prefs, onMapStyleChange, onDimMapChange)
+                SettingsPage.Device -> DevicePage()
                 SettingsPage.Pebble -> PebblePage(prefs, supports("index01"))
                 SettingsPage.Account -> AccountPage(prefs, username, hasPassword, onPasswordSaved, members.find { it.id == myId },
                     supports("emoji"), onProfileChanged)
@@ -208,6 +211,7 @@ private fun menuSummary(
     SettingsPage.Alerts -> prefs.mutedPeople.size.let { if (it == 0) "SOS, check-ins, low battery, who you hear about" else "$it ${if (it == 1) "person" else "people"} muted" }
     SettingsPage.Map -> "${Palette.byId(prefs.appTheme).title} · ${MapStyles.byId(prefs.mapStyle).title}"
     SettingsPage.Pebble -> "Watch app, timeline, Index 01 ring"
+    SettingsPage.Device -> DEVICE_MODES.first { it.first == Access.deviceMode }.second
     SettingsPage.Trail -> listOfNotNull(
         trailHours?.takeIf { it > 0 }?.let { "Trail $it h" },
         tripDays?.takeIf { it > 0 }?.let { "trips ${if (it == 1) "1 day" else "$it days"}" },
@@ -220,6 +224,40 @@ private fun menuSummary(
         "Version ${BuildConfig.VERSION_NAME} · all set"
     } else {
         "Phone setup needs attention"
+    }
+}
+
+private val DEVICE_MODES = listOf(
+    Triple("phone", "Phone", "Someone's own phone: shares their location, alerts, everything they use."),
+    Triple("interactive", "Interactive tablet", "A tablet someone uses: the same as a phone, laid out for the bigger screen."),
+    Triple("display", "Display tablet", "A family dashboard on the wall or the fridge: full-screen home tiles, the screen stays on while charging, it doesn't share its own location, and settings open with the parent PIN."),
+)
+
+@Composable
+private fun DevicePage() {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    SettingsCard("How this device is used") {
+        Hint("Only changes this device.")
+        DEVICE_MODES.forEach { (id, title, text) ->
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = Access.deviceMode == id) {
+                    if (Access.deviceMode != id) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    Access.setDeviceMode(context, id)
+                    LocationService.start(context) // a display stops sharing its location
+                }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = Access.deviceMode == id, onClick = null)
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    Hint(text)
+                }
+            }
+        }
+        if (Access.isDisplay && !Access.pinSet) {
+            Hint("No parent PIN is set yet, so anyone can open settings here. An admin sets one in the web console (Family → Parent PIN).")
+        }
     }
 }
 

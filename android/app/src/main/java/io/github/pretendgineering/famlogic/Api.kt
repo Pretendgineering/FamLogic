@@ -185,6 +185,11 @@ data class MembersResponse(
     val trailHours: Int = 0,
     /** How many days of trips you keep (0 = off). */
     val tripDays: Int = 0,
+    /** For a child: the sections and features a parent switched on (null for adults). */
+    val kidAllowed: Set<String>? = null,
+    val kidPreset: String = "",
+    val home: List<String> = emptyList(),
+    val pinSet: Boolean = false,
 )
 
 /** What join, sign-in and password resets return: this phone is now signed in as [member]. */
@@ -298,7 +303,37 @@ class Api(private val baseUrl: String, private val token: String = "") {
             features = inferFeatures(o),
             trailHours = settings?.optInt("trailHours", 0) ?: 0,
             tripDays = settings?.optInt("tripDays", 0) ?: 0,
+            kidAllowed = settings?.optJSONObject("kid")?.let { k ->
+                val on = mutableSetOf<String>()
+                listOf("sections", "features").forEach { key ->
+                    k.optJSONObject(key)?.let { m -> m.keys().forEach { if (m.optBoolean(it)) on += it } }
+                }
+                on
+            },
+            kidPreset = settings?.optJSONObject("kid")?.optString("preset").orEmpty(),
+            home = settings?.optJSONArray("home")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
+            pinSet = settings?.optBoolean("pinSet", false) ?: false,
         )
+    }
+
+    /** Checks the family's parent PIN (wrong guesses lock it for a while). */
+    suspend fun checkPin(pin: String) {
+        request("POST", "/api/pin/check", JSONObject().put("pin", pin))
+    }
+
+    /** Arranges your own home screen (adults). */
+    suspend fun setHome(tiles: List<String>) {
+        request("POST", "/api/me", JSONObject().put("home", org.json.JSONArray(tiles)))
+    }
+
+    /** A parent's decision on a chat with a child in it: approve, pause, resume, block, unblock or delete. */
+    suspend fun chatModerate(conv: String, action: String) {
+        request("POST", "/api/chat/${enc(conv)}/moderate", JSONObject().put("action", action))
+    }
+
+    /** Deletes a message (your own, or as a parent one in a child's chat). */
+    suspend fun chatDeleteMessage(conv: String, id: Long) {
+        request("POST", "/api/chat/${enc(conv)}/messages/$id/delete", JSONObject())
     }
 
     /**
@@ -600,6 +635,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             last = o.optJSONObject("last")?.let { parseMessage(it) },
             unread = o.optInt("unread", 0), oversight = o.optBoolean("oversight", false),
             createdBy = o.optString("createdBy"),
+            status = o.optString("status"),
         )
     }
 
@@ -770,6 +806,8 @@ data class ChatConversation(
     /** A parent looking at a child's chat: read only. */
     val oversight: Boolean,
     val createdBy: String = "",
+    /** "" (open), "pending" (waiting for a parent's OK), "paused" or "blocked". */
+    val status: String = "",
 )
 
 data class ChatThread(

@@ -126,6 +126,9 @@ fun MapScreen(
     joinCircleCode: String? = null,
     onJoinCircleHandled: () -> Unit = {},
     onFeatures: (Set<String>) -> Unit = {},
+    openSettings: Boolean = false,
+    onSettingsHandled: () -> Unit = {},
+    onSettingsClosed: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -143,6 +146,14 @@ fun MapScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var sharing by remember { mutableStateOf(prefs.sharing) }
     var showSettings by remember { mutableStateOf(false) }
+    // The home screen asked for settings (it already checked the parent PIN).
+    LaunchedEffect(openSettings) {
+        if (openSettings) {
+            showSettings = true
+            onSettingsHandled()
+        }
+    }
+    val askSettings = rememberSettingsGate(prefs) { showSettings = true }
     var camera by remember { mutableStateOf<CameraCommand?>(null) }
     var cameraSeq by remember { mutableIntStateOf(0) }
     var fittedOnce by remember { mutableStateOf(false) }
@@ -209,6 +220,7 @@ fun MapScreen(
                 LocationService.start(context)
             }
             res.members.find { it.id == prefs.memberId }?.let { prefs.role = it.role; prefs.access = it.access }
+            Access.update(context, res)
             if (res.features != prefs.serverFeatures) {
                 prefs.serverFeatures = res.features
                 onFeatures(res.features)
@@ -432,7 +444,7 @@ fun MapScreen(
     }
 
     if (showSettings) {
-        BackHandler { showSettings = false }
+        BackHandler { showSettings = false; onSettingsClosed() }
         SettingsScreen(
             prefs = prefs,
             perms = perms,
@@ -514,7 +526,7 @@ fun MapScreen(
                     }
                 }
             },
-            onBack = { showSettings = false; scope.launch { refresh() } },
+            onBack = { showSettings = false; onSettingsClosed(); scope.launch { refresh() } },
             onMapStyleChange = { mapStyle = it },
             onDimMapChange = { dimMap = it },
             members = members,
@@ -542,8 +554,8 @@ fun MapScreen(
             m = m,
             isMe = m.id == prefs.memberId,
             status = statusOf(m),
-            canTrips = supports("trips"),
-            canRequests = features?.contains("requests") == true,
+            canTrips = supports("trips") && Access.can("trips"),
+            canRequests = features?.contains("requests") == true && Access.can("requests"),
             canNudges = features?.contains("nudges") == true,
             onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
             onShowTrip = { t ->
@@ -561,7 +573,7 @@ fun MapScreen(
             TopAppBar(
                 title = { Text(familyName.ifEmpty { "FamLogic" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
-                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                    IconButton(onClick = askSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
                 },
             )
         },
@@ -621,7 +633,7 @@ fun MapScreen(
                 hasPassword == false && prefs.canUsePassword -> Banner(
                     "Set a password so you can sign back in on a new phone.",
                     "Set up",
-                ) { showSettings = true }
+                ) { askSettings() }
                 !perms.background -> Banner(
                     "Choose \"Allow all the time\" so sharing keeps working after a restart.",
                     "Fix",
@@ -742,7 +754,7 @@ fun MapScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (prefs.showCheckInButton && supports("checkin")) {
+                if (prefs.showCheckInButton && supports("checkin") && Access.can("checkin") && !Access.isDisplay) {
                     FilledTonalButton(onClick = { showCheckIn = true }, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text("Check in", Modifier.padding(start = 8.dp))
@@ -800,7 +812,7 @@ fun MapScreen(
                 }
             }
 
-            if (prefs.showSosButton && !sosActive && supports("sos")) {
+            if (prefs.showSosButton && !sosActive && supports("sos") && Access.can("sos") && !Access.isDisplay) {
                 HoldForSosBar(
                     onTriggered = { sendSos(end = false) },
                     modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
@@ -966,7 +978,7 @@ private fun SosBanner(text: String, action: String?, secondAction: String? = nul
  * across), so it can't go off by accident in a pocket. Letting go early cancels.
  */
 @Composable
-private fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier) {
+internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val progress = remember { Animatable(0f) }

@@ -10,6 +10,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,11 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Notifications
@@ -46,6 +52,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -143,7 +150,9 @@ private fun ConversationList(prefs: Prefs, people: List<Member>, onOpen: (String
     Scaffold(
         topBar = { TopAppBar(title = { Text("Chat") }) },
         floatingActionButton = {
-            LargeFloatingActionButton(onClick = { newChat = true }) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
+            if (Access.can("chat_start")) {
+                LargeFloatingActionButton(onClick = { newChat = true }) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
+            }
         },
     ) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
@@ -206,6 +215,7 @@ private fun ConversationRow(c: ChatConversation, people: List<Member>, me: Strin
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (c.oversight) SuggestionChip(onClick = {}, label = { Text("Watching") }, modifier = Modifier.padding(start = 6.dp).heightIn(max = 26.dp))
+                STATUS_LABELS[c.status]?.let { SuggestionChip(onClick = {}, label = { Text(it) }, modifier = Modifier.padding(start = 6.dp).heightIn(max = 26.dp)) }
             }
             val last = c.last
             val who = if (last != null && c.kind != "direct") (if (last.sender == me) "You" else people.find { it.id == last.sender }?.name ?: "") + ": " else ""
@@ -266,6 +276,8 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
     var sending by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<ChatMessage?>(null) }
     val listState = rememberLazyListState()
     val api = remember { Api(prefs.serverUrl, prefs.token) }
 
@@ -276,11 +288,15 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
     }
     // Load, then keep up with new messages and mark them read.
     LaunchedEffect(convId) {
+        var round = 0
         while (true) {
             try {
-                val after = messages.lastOrNull()?.id ?: 0
+                // Now and then a full reload, so messages a parent deleted disappear here too.
+                val full = round++ % 10 == 9
+                val after = if (full) 0 else messages.lastOrNull()?.id ?: 0
                 val t = api.chatThread(convId, after = after)
                 thread = t
+                if (full) messages.retainAll { m -> t.messages.any { it.id == m.id } || m.id < (t.messages.firstOrNull()?.id ?: 0) }
                 if (t.messages.isNotEmpty()) {
                     messages += t.messages.filter { m -> messages.none { it.id == m.id } }
                     listState.animateScrollToItem(0)
@@ -350,6 +366,19 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
 
     val conv = thread?.conversation
     val canPost = thread?.canPost == true
+    // Parents manage any chat with a child in it (not the family chat).
+    val moderator = prefs.role == "parent" && conv != null && conv.kind != "family" &&
+        conv.members.any { id -> people.find { it.id == id }?.role == "child" }
+    fun moderate(action: String) {
+        scope.launch {
+            try {
+                api.chatModerate(convId, action)
+                if (action == "delete") onBack() else thread = api.chatThread(convId, after = messages.lastOrNull()?.id ?: 0)
+            } catch (e: Exception) {
+                error = e.message
+            }
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -380,6 +409,20 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
                         } else {
                             DropdownMenuItem(text = { Text("Mute notifications…") }, leadingIcon = { Icon(Icons.Filled.NotificationsOff, null) }, onClick = { menu = false; muting = true })
                         }
+                        if (moderator && conv != null) {
+                            HorizontalDivider()
+                            if (conv.status == "pending") DropdownMenuItem(text = { Text("Say yes to this group") }, leadingIcon = { Icon(Icons.Filled.Check, null) }, onClick = { menu = false; moderate("approve") })
+                            when (conv.status) {
+                                "" -> DropdownMenuItem(text = { Text("Pause (read only)") }, leadingIcon = { Icon(Icons.Filled.Pause, null) }, onClick = { menu = false; moderate("pause") })
+                                "paused" -> DropdownMenuItem(text = { Text("Resume") }, leadingIcon = { Icon(Icons.Filled.PlayArrow, null) }, onClick = { menu = false; moderate("resume") })
+                            }
+                            when (conv.status) {
+                                "blocked" -> DropdownMenuItem(text = { Text("Unblock") }, leadingIcon = { Icon(Icons.Filled.Lock, null) }, onClick = { menu = false; moderate("unblock") })
+                                "pending" -> {}
+                                else -> DropdownMenuItem(text = { Text("Block (hide from the children)") }, leadingIcon = { Icon(Icons.Filled.Lock, null) }, onClick = { menu = false; moderate("block") })
+                            }
+                            DropdownMenuItem(text = { Text("Delete chat…") }, leadingIcon = { Icon(Icons.Filled.Delete, null) }, onClick = { menu = false; confirmDelete = true })
+                        }
                         if (conv?.kind == "group" && canPost) {
                             DropdownMenuItem(text = { Text("Rename group") }, leadingIcon = { Icon(Icons.Filled.Edit, null) }, onClick = { menu = false; renaming = true })
                             DropdownMenuItem(text = { Text("Leave group") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) }, onClick = {
@@ -393,6 +436,16 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
+            val banner = when (conv?.status) {
+                "pending" -> if (moderator) "A child started this group. Nobody can post until a parent says yes (⋮ → Say yes), or delete it to say no." else "Waiting for a parent to say yes."
+                "paused" -> "A parent paused this chat: you can read it, not post."
+                "blocked" -> "Blocked: hidden from the children in it."
+                else -> null
+            }
+            banner?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(horizontal = 16.dp, vertical = 8.dp))
+            }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp)) }
             // Newest at the bottom: the list is reversed.
             val reversed = messages.asReversed()
@@ -409,13 +462,14 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
                         prefs, m, people, mine = m.sender == prefs.memberId, showName = conv?.kind != "direct" || conv.oversight,
                         seenBy = if (m.id == myLast?.id) seenBy else emptyList(),
                         showAvatar = newer == null || newer.sender != m.sender || !sameDay(newer.time, m.time),
+                        onLongPress = if (m.sender == prefs.memberId || moderator) ({ deleting = m }) else null,
                     )
                     if (older == null || !sameDay(older.time, m.time)) DayHeader(m.time)
                 }
             }
             if (canPost) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box {
+                    if (Access.can("chat_photos")) Box {
                         IconButton(onClick = { photoMenu = true }, enabled = !sending) {
                             Icon(Icons.Filled.PhotoCamera, contentDescription = "Send a photo")
                         }
@@ -449,13 +503,44 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
                 }
             } else if (thread != null) {
                 Text(
-                    "You can read this chat because a child of yours is in it. Only the people in it can post.",
+                    if (conv?.members?.contains(prefs.memberId) == true) "You can't post here right now."
+                    else "You can read this chat because a child of yours is in it. Only the people in it can post.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
                 )
             }
         }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete this chat?") },
+            text = { Text("All its messages and photos are deleted for everyone. This can't be undone.") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; moderate("delete") }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
+    }
+    deleting?.let { m ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete this message?") },
+            text = { Text("It's deleted for everyone in the chat.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    scope.launch {
+                        try {
+                            api.chatDeleteMessage(convId, m.id)
+                            messages.removeAll { it.id == m.id }
+                        } catch (e: Exception) {
+                            error = e.message
+                        }
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
     }
     if (muting) {
         val now = System.currentTimeMillis()
@@ -500,8 +585,14 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
     }
 }
 
+private val STATUS_LABELS = mapOf("pending" to "Needs OK", "paused" to "Paused", "blocked" to "Blocked")
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun Bubble(prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boolean, showName: Boolean, seenBy: List<String>, showAvatar: Boolean = true) {
+private fun Bubble(
+    prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boolean, showName: Boolean, seenBy: List<String>,
+    showAvatar: Boolean = true, onLongPress: (() -> Unit)? = null,
+) {
     val sender = people.find { it.id == m.sender }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
     if (!mine) {
@@ -520,6 +611,7 @@ private fun Bubble(prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boo
             Modifier.widthIn(max = 300.dp)
                 .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (mine) 18.dp else 6.dp, bottomEnd = if (mine) 6.dp else 18.dp))
                 .background(bg)
+                .then(if (onLongPress != null) Modifier.combinedClickable(onLongClickLabel = "Delete", onLongClick = onLongPress, onClick = {}) else Modifier)
                 .padding(if (m.photo.isNotEmpty()) 4.dp else 0.dp),
         ) {
             if (m.photo.isNotEmpty()) ChatPhoto(prefs, m.photo)
