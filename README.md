@@ -5,7 +5,7 @@ A self-hosted family hub: location sharing, chat and (soon) a shared calendar, t
 - **Private:** no third-party accounts, no cloud, no ads, no tracking. Your family's data stays in one folder on your server.
 - **Modular:** at first setup you choose what your family uses, and you can change it any time.
 - **Works without Google:** the default app has no Google code at all (an optional Google edition adds a few extras).
-- **Kid-friendly:** younger children sign in with a code from a parent, no password; parents can see their children's chats.
+- **Kid-friendly:** younger children sign in with a code from a parent, no password, and get a picture-first app with big buttons. Parents choose what each child can use, approve their group chats, can see, pause or delete their chats, and lock settings on their devices with a family PIN.
 - **Voice first** *(coming)*: press and hold to talk, and hear things read out, on every device. It goes to an AI agent you host (such as Hermes or OpenClaw), so a child can say "I fed the cat" to tick off a chore, send a message, or hear what's next.
 - **Looks like itself:** serif headings over clean sans text, in six colour themes (Muted Dracula by default, Warm paper, Forest, Ocean, High contrast, Purple), light or dark, chosen per device.
 - **Open source:** [AGPLv3](LICENSE). Use it, change it and share it freely; if you run a changed version for others (for example as a hosted service), you must offer them your changes too. For other licensing, contact the maintainer.
@@ -14,9 +14,9 @@ A self-hosted family hub: location sharing, chat and (soon) a shared calendar, t
 
 | Device | What it does |
 |---|---|
-| **Android phones** | The FamLogic app: map, chat, alerts, SOS, and everything else that's switched on. One app for parents and children. |
-| **Android tablets** | The same app, on a bigger screen. Wi-Fi-only tablets can share their location too. *Coming:* a tablet layout with the map beside that person's chores and to-dos, and a big talk button for kids. |
-| **Android TV** *(coming)* | A **home-screen launcher**: set it as the TV's home screen and it becomes a family dashboard, with a scrolling row of cards (today's agenda, who's where, to-dos for this time of day, the current routine like "Morning" or "Bedtime") above shortcuts to your most-used apps. Connect it to your server in its settings; talk to your agent with a remote button. |
+| **Android phones** | The FamLogic app: a home screen of tiles, the map, chat, alerts, SOS, and everything else that's switched on. One app for parents and children. |
+| **Android tablets** | The same app laid out for the big screen: the map beside the people list, chats beside the chat list. Set a tablet as an **interactive tablet** (someone uses it) or a **display tablet** (a family dashboard: full screen, stays on while charging, doesn't share its location, settings behind the parent PIN). *Coming:* that person's chores and to-dos beside the map, and a big talk button for kids. |
+| **Android TV** *(coming, as its own APK)* | A **home-screen launcher**: set it as the TV's home screen and it becomes a family dashboard, with a scrolling row of cards (today's agenda, who's where, to-dos for this time of day, the current routine like "Morning" or "Bedtime") above shortcuts to your most-used apps. Connect it to your server in its settings; talk to your agent with a remote button. |
 | **Pebble watches** | A watchapp (family list, radar and maps, check-in, hold-to-SOS, nudges) and a Family watchface, on every Pebble from the original to the Pebble 2 Duo, Time 2 and Round 2. *Coming:* talk to your agent from the watch. |
 | **Pebble Index 01 ring** | Silent SOS, voice check-ins and voice place reminders. |
 | **Any web browser** | The web console: family and roles, devices, modules, the map and chat. |
@@ -26,9 +26,10 @@ A self-hosted family hub: location sharing, chat and (soon) a shared calendar, t
 | Module | Status |
 |---|---|
 | **Thereabouts**: everyone on a map, SOS, check-ins, fences with arrive/leave alerts, trips, driving, Pebble and Index 01 ([guide](docs/THEREABOUTS.md)) | ✅ |
-| **Chat**: a family chat, group chats and one-to-one, with photos and read receipts; parents can read their children's chats ([guide](docs/CHAT.md)) | ✅ |
+| **Chat**: a family chat, group chats and one-to-one, with photos, read receipts and per-chat mute; parents approve children's groups and can read, pause or delete their chats ([guide](docs/CHAT.md)) | ✅ |
 | **Calendar** (with CalDAV sync), **To-dos & lists**, **Chores**, **Routines** (checklists that follow the family's daily rhythm), **Meals & menus**, all taggable to people or groups | planned |
-| **TV launcher** for Android TV, and a **tablet layout** | planned |
+| **Tablet layouts** and the **display tablet** mode | ✅ |
+| **TV launcher** for Android TV | planned |
 | **Voice and AI**: press-to-talk and read-aloud everywhere, routed to your own agent (Hermes, OpenClaw…); family content as Markdown (Obsidian-friendly) that agents can edit; optional end-of-day summaries for parents | planned |
 
 See [ROADMAP.md](ROADMAP.md) for the order and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together.
@@ -69,11 +70,13 @@ In the web console, open **Family → Invite someone**, choose their role, and s
 |---|---|---|
 | **Admin** | username + password | everything a parent gets, plus the console's admin pages. Only the main admin (with `ADMIN_PASSWORD`) makes admins. |
 | **Parent** | username + password | the whole app, and the console's parent tools (the map, chat, their children's chats) |
-| **Older child** | username + password | the app, without family settings |
-| **Younger child** | a one-time code from a parent | the app, without family settings. New phone: **Family → ⋯ → New join code** |
+| **Older child** | username + password | the app, without family settings (parents can switch things off) |
+| **Younger child** | a one-time code from a parent | a picture-first app: home, chat with big pictures, SOS (parents can switch the map and more on). New phone: **Family → ⋯ → New join code** |
 | **Doesn't use the app** | – | part of the family, so events and reminders can include them (e.g. a baby's check-ups), without signing in |
 
 Parents and admins log in to the web console with their own username and password; the main admin can also use the admin password alone.
+
+**Children's settings:** in **Family → ⋯ → What they can use**, start from the *Younger child* or *Older child* preset, switch single sections and features on or off, and arrange their home screen. An admin sets the family's **parent PIN** at the bottom of the Family page; children's devices and display tablets ask for it before opening settings.
 
 **New phone?** Sign in with your username and password (your old phone is signed out). **Forgot your password?** An admin sends a one-time reset link from **Family → ⋯ → Reset sign-in**. Passwords need 12+ characters and can't be common ones; a few random words like `blue canoe at midnight` are ideal.
 

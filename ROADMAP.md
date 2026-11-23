@@ -32,6 +32,14 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Serif headings, sans text:** Liberation Serif (the free, metric-compatible Times New Roman, OFL-licensed and bundled, so it works offline) for titles, names, card headers and big numbers; a clean sans for body text and controls. "Firm but friendly": old meets new.
 - **Themes,** chosen per device (app) or per browser (console), each with light and dark: **Muted Dracula** (the default), Current purple, Warm paper, Forest, Ocean, and High contrast.
 
+### ✅ Phase 3b: Home screen, parents' controls and tablets (0.19.0)
+- **Home screen** with tiles: a live map that opens Thereabouts, chat with the latest message, SOS, check-in, and module tiles as they arrive. Adults arrange their own; parents arrange children's.
+- **Parents' controls:** one family **parent PIN** (set by an admin) locks settings on children's devices and displays; per child, parents start from the *younger* or *older* preset and switch sections and features on or off.
+- **Chat moderation:** a child's new group waits for a parent's OK; parents can pause, block or delete chats with a child in them and delete messages; anyone can delete their own messages and **mute** a chat (1 h, 8 h, until tomorrow, always).
+- **Device mode:** phone, interactive tablet or **display tablet** (full screen, screen on while charging, no location sharing, settings behind the PIN).
+- **Tablets and landscape:** a navigation rail, the map beside the people list, the chat list beside the open chat, chats as a shade in portrait; bigger pictures and buttons for younger children.
+- Small things: rotating keeps what you typed; a camera icon that takes a new photo or picks one; senders' pictures in chat; a clearer selected tab.
+
 ### 🔨 Phase 4: Tasks, tags and the Markdown vault
 - **Tags on everything:** to-dos, chores, routines, events and list items can be tagged to people (`@Sam`) and groups (`#kids`, `#parents`), so each person's screens show what's theirs.
 - The **vault** folder of Markdown files (Obsidian-friendly; see ARCHITECTURE.md → Vault), watched for edits made elsewhere.
@@ -51,7 +59,8 @@ Status: ✅ done · 🔨 next · ⏳ queued
 
 ### ⏳ Phase 6: TV launcher and tablet layout
 - **Android TV launcher:** FamLogic as the TV's home screen. Connect to the server in its settings (no personal account; a parent approves it in the console). A horizontally scrolling row of rounded cards, three at a time: today's agenda, a small map of who's where, to-dos for this time of day, the current routine (it changes with the daily rhythm: Morning, Nap time, Bedtime…), this week's menu, recent chat. Below: shortcuts to your most-used apps. D-pad friendly, dark and burn-in friendly.
-- **Tablet layout:** the map beside the signed-in person's chores, to-dos and routine, filtered by their tags; a big talk button on kids' tablets; works as a kitchen wall display too.
+- **TV launcher as its own APK** (Android TV's launcher needs a separate build); same server.
+- **Tablet layout, next:** the signed-in person's chores, to-dos and routine beside the map, filtered by their tags; a big talk button on kids' tablets.
 - **Devices:** several devices per person, the console's Devices page with role, version, last seen and Revoke; display/launcher pairing with a code approved in the console.
 
 ### ⏳ Phase 7: Calendar
@@ -61,13 +70,13 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Weekly meal plans and recipes; ingredients to the shopping list; easy for an agent to plan.
 
 ### ⏳ Chat, next steps
-- "Message" from a person's card on the map; chat on the Pebble (quick replies) and from the Index 01 ring; delete your own messages; mute a chat.
+- "Message" from a person's card on the map; chat on the Pebble (quick replies) and from the Index 01 ring; parents editing a child's switches from the app (today: the web console).
 
 ### ⏳ Later and parked
 - **Grandparents mode** (idea, to design): a third kind of family member, alongside parents and children, with its own set of features. To decide: which features it has.
 - **Pebble App Store listing** (draft in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md)), and **F-Droid / IzzyOnDroid** for the app.
 - **Shareable invite message** with an app download link, once the app is in a store.
-- **Profile pictures** (emoji icons cover the simple case).
+- **Profile pictures** (emoji icons cover the simple case; they stay as the fallback).
 - **Google Find Hub trackers** (parked, Nov 2026): no official API; the only route is the unofficial GoogleFindMyTools approach with the admin's own Google account. Alternative: family phones listening for the family's own cheap Bluetooth tags.
 - **Home Assistant** integration (presence, chores done, display on a dashboard).
 

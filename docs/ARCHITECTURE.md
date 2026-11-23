@@ -160,6 +160,15 @@ where: Smile Dental
 - Delivery: each message adds a `chat` event addressed to each other participant (`Event.To`), so it travels the same long-poll stream as SOS; the app shows it as a messaging-style notification with Reply.
 - Access: participants read and post; a **parent** can read (not post in) any conversation with a child in it; the main admin reads all (`/api/admin/chat`). Parents peeking don't leave read receipts.
 - Backups: `VACUUM INTO backups/chat-<date>.db` daily.
+- Parents' controls (0.19.0, `server/kids.go`): `conversations.status` is `""`, `pending` (a child's group, until a parent approves), `paused` (read only) or `blocked` (hidden from the children in it). Parents moderate chats with a child in them; message deletion removes the photo file too.
+
+## Parents' controls and the home screen (built in 0.19.0)
+
+- **Parent PIN:** one per family, set by an admin, stored hashed like a password (`data.parentPin`). Children's devices and family displays ask for it before opening settings; it's checked by the server (`POST /api/pin/check`, rate-limited like sign-in).
+- **What a child can use:** `Member.kid` holds a preset (`younger` or `older`) and per-switch overrides for sections (`map`, `chat`) and features (`sos`, `checkin`, `requests`, `chat_start`, `chat_photos`, `trips`, `pause`). The server enforces what it can (chat, starting chats, photos, pausing); the app hides the rest. Adults can use everything.
+- **Home screen:** `Member.home` lists tiles in order (`map`, `chat`, `sos`, `checkin` and module tiles); empty means the app's default for that person. Adults arrange their own in the app, parents arrange children's in the console.
+- **Device mode** (per device, in the app's Settings → This device): *Phone*, *Interactive tablet* (the same app laid out for a big screen) or *Display tablet* (full-screen home tiles, screen kept on while charging, no location sharing, settings behind the PIN).
+- **Layouts:** a bottom tab bar on phones, a navigation rail on tablets; in landscape the map sits beside the people list and chats beside the chat list; in portrait a tablet's chat opens as a shade over the list. Rotating keeps the screen as it was (the activity handles configuration changes itself).
 
 ## Tags, to-dos, routines and daily rhythms (Phase 4 design)
 
@@ -227,7 +236,9 @@ Press-to-talk and read-aloud are meant to be a main way of using FamLogic on eve
 
 ## Tablets
 
-- A two-pane layout: the map beside the signed-in person's chores, to-dos and current routine (filtered by their tags), plus chat. Kids' tablets get a big talk button and read-aloud. A tablet can also run as a wall display (the launcher layout, without replacing the home screen).
+- Built in 0.19.0: a navigation rail, the map beside the people list and the chat list beside the open chat in landscape, chats as a shade in portrait, and the *Display tablet* mode (see "Parents' controls and the home screen").
+- Next: the signed-in person's chores, to-dos and current routine (filtered by their tags) beside the map, and a big talk button and read-aloud on kids' tablets.
+- The **TV launcher** will be a separate APK (Android TV needs a leanback launcher build), sharing the same server API.
 
 ## Watches and the ring
 

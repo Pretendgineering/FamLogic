@@ -2,6 +2,19 @@ package io.github.pretendgineering.famlogic
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -63,6 +76,44 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
     )
     val big = Access.younger
+    // Tablets: the sections stay visible down the side (a rail), always on screen.
+    if (LocalConfiguration.current.screenWidthDp >= 600) {
+        val railColors = NavigationRailItemDefaults.colors(
+            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+            indicatorColor = MaterialTheme.colorScheme.primary,
+            selectedTextColor = MaterialTheme.colorScheme.primary,
+            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
+            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
+        )
+        Row(Modifier.fillMaxSize()) {
+            NavigationRail(Modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical))) {
+                Spacer(Modifier.weight(1f))
+                tabs.forEach { t ->
+                    val on = current == t
+                    val (filled, outlined, label) = tabLook(t)
+                    NavigationRailItem(
+                        selected = on,
+                        onClick = { if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); onTab(t) },
+                        icon = { Icon(if (on) filled else outlined, contentDescription = null, modifier = Modifier.size(if (big) 36.dp else 24.dp)) },
+                        label = {
+                            Text(
+                                label,
+                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                                textDecoration = if (on) TextDecoration.Underline else null,
+                                fontSize = if (big) 16.sp else 12.sp,
+                            )
+                        },
+                        alwaysShowLabel = true,
+                        colors = railColors,
+                        modifier = Modifier.padding(vertical = if (big) 12.dp else 6.dp),
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+            }
+            Box(Modifier.weight(1f).fillMaxHeight()) { content(current) }
+        }
+        return
+    }
     Scaffold(
         bottomBar = {
             NavigationBar {

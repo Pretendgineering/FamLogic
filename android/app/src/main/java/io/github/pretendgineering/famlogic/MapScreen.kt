@@ -1,5 +1,9 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.ColumnScope
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
@@ -676,11 +680,15 @@ fun MapScreen(
                 }
             }
 
+            // Phones and portrait tablets: the map above the people. Landscape tablets: side by side.
+            val config = LocalConfiguration.current
+            val wide = config.screenWidthDp >= 720 && config.screenWidthDp > config.screenHeightDp
             // The map, as a raised card.
+            val mapCard: @Composable (Modifier) -> Unit = { mapMod ->
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 shadowElevation = 3.dp,
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
+                modifier = mapMod,
             ) {
                 OsmMap(
                     members = shown,
@@ -749,6 +757,8 @@ fun MapScreen(
                 }
             }
 
+            }
+            val sidePanel: @Composable ColumnScope.() -> Unit = {
             // Actions, all in one row under the map.
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -778,9 +788,9 @@ fun MapScreen(
             // Everyone, in a card.
             ElevatedCard(
                 shape = RoundedCornerShape(20.dp),
-                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+                modifier = Modifier.fillMaxWidth().then(if (wide) Modifier.weight(1f) else Modifier).padding(start = 12.dp, end = 12.dp, top = 8.dp),
             ) {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 260.dp)) {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = if (wide) androidx.compose.ui.unit.Dp.Infinity else 260.dp)) {
                     if (shown.isEmpty()) {
                         item { Text("Loading…", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
@@ -819,6 +829,16 @@ fun MapScreen(
                 )
             } else {
                 Spacer(Modifier.height(12.dp))
+            }
+            }
+            if (wide) {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    mapCard(Modifier.weight(1f).fillMaxHeight().padding(start = 12.dp, top = 4.dp, bottom = 12.dp))
+                    Column(Modifier.width(400.dp).fillMaxHeight().padding(top = 4.dp)) { sidePanel() }
+                }
+            } else {
+                mapCard(Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp))
+                sidePanel()
             }
         }
     }

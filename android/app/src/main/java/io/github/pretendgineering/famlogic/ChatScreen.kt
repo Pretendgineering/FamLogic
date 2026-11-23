@@ -1,5 +1,22 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Surface
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -121,17 +138,77 @@ fun ChatScreen(prefs: Prefs, openRequest: String?, onOpenHandled: () -> Unit) {
         }
     }
     val conv = open
-    if (conv == null) {
-        ConversationList(prefs, people, onOpen = { open = it })
-    } else {
-        BackHandler { open = null }
-        ConversationView(prefs, conv, people, onBack = { open = null })
+    val config = LocalConfiguration.current
+    val tablet = config.screenWidthDp >= 600
+    val sideBySide = tablet && config.screenWidthDp > config.screenHeightDp
+    var fullscreen by rememberSaveable { mutableStateOf(false) }
+    if (conv != null) BackHandler { if (fullscreen) fullscreen = false else open = null }
+    when {
+        // Phones: the list, and a chat takes the whole screen.
+        !tablet -> if (conv == null) {
+            ConversationList(prefs, people, onOpen = { open = it })
+        } else {
+            ConversationView(prefs, conv, people, onBack = { open = null })
+        }
+        // Full screen on a tablet, by choice.
+        conv != null && fullscreen -> ConversationView(
+            prefs, conv, people, onBack = { fullscreen = false }, fullscreen = true, onToggleFullscreen = { fullscreen = false },
+        )
+        // Landscape tablets: the list beside the open chat.
+        sideBySide -> Row(Modifier.fillMaxSize()) {
+            Box(Modifier.width(if (Access.younger) 400.dp else 360.dp).fillMaxHeight()) {
+                ConversationList(prefs, people, selected = conv, onOpen = { open = if (open == it) null else it })
+            }
+            VerticalDivider()
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                if (conv == null) {
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.Email, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Pick a chat", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp))
+                    }
+                } else {
+                    ConversationView(prefs, conv, people, onBack = { open = null }, embedded = true, onToggleFullscreen = { fullscreen = true })
+                }
+            }
+        }
+        // Portrait tablets: the chat pulls down like a shade over the list, which
+        // stays in view below it; tap another chat to switch, or go full screen.
+        else -> Box(Modifier.fillMaxSize()) {
+            ConversationList(prefs, people, selected = conv, onOpen = { open = if (open == it) null else it })
+            AnimatedVisibility(
+                visible = conv != null,
+                enter = slideInVertically { -it } + fadeIn(),
+                exit = slideOutVertically { -it } + fadeOut(),
+            ) {
+                var shown by remember { mutableStateOf(conv) }
+                if (conv != null) shown = conv
+                Surface(
+                    shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                    shadowElevation = 12.dp,
+                    tonalElevation = 2.dp,
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(0.72f),
+                ) {
+                    Column {
+                        Box(Modifier.weight(1f)) {
+                            shown?.let { ConversationView(prefs, it, people, onBack = { open = null }, embedded = true, onToggleFullscreen = { fullscreen = true }) }
+                        }
+                        // The shade's handle: tap to fold it away.
+                        Box(
+                            Modifier.fillMaxWidth().clickable(onClickLabel = "Close the chat") { open = null }.padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.size(width = 56.dp, height = 6.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.outline))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConversationList(prefs: Prefs, people: List<Member>, onOpen: (String) -> Unit) {
+private fun ConversationList(prefs: Prefs, people: List<Member>, selected: String? = null, onOpen: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     var convs by remember { mutableStateOf<List<ChatConversation>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -171,7 +248,7 @@ private fun ConversationList(prefs: Prefs, people: List<Member>, onOpen: (String
             if (list == null) {
                 item { Text("Loading…", modifier = Modifier.padding(16.dp)) }
             } else {
-                items(list, key = { it.id }) { c -> ConversationRow(c, people, prefs.memberId) { onOpen(c.id) } }
+                items(list, key = { it.id }) { c -> ConversationRow(c, people, prefs.memberId, selected = c.id == selected) { onOpen(c.id) } }
             }
             item { Spacer(Modifier.heightIn(min = 96.dp)) }
         }
@@ -197,23 +274,48 @@ private fun ConversationList(prefs: Prefs, people: List<Member>, onOpen: (String
 }
 
 @Composable
-private fun ConversationRow(c: ChatConversation, people: List<Member>, me: String, onClick: () -> Unit) {
+private fun ConversationRow(c: ChatConversation, people: List<Member>, me: String, selected: Boolean = false, onClick: () -> Unit) {
     val other = if (c.kind == "direct") people.find { it.id in c.members && it.id != me } else null
+    // Children who can't read yet find chats by faces: bigger pictures, and a group shows who's in it.
+    val big = Access.younger
+    val size = if (big) 68 else 44
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth()
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = if (big) 14.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         when {
             c.kind == "family" -> Box(
-                Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                Modifier.size(size.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.onPrimary) }
-            other != null -> Avatar(other.name, other.emoji, other.color, 44)
-            else -> Avatar(c.title, "", "#6e48d6", 44)
+            ) { Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size((size / 2).dp)) }
+            other != null -> Avatar(other.name, other.emoji, other.color, size)
+            c.kind == "group" -> {
+                val faces = c.members.filter { it != me }.mapNotNull { id -> people.find { it.id == id } }.take(3)
+                Box(Modifier.size(size.dp)) {
+                    if (faces.isEmpty()) Avatar(c.title, "", "#6e48d6", size)
+                    val small = if (faces.size == 1) size else size * 6 / 10
+                    val gap = size - small
+                    // Two faces: top-left and bottom-right. Three: two on top, one below in the middle.
+                    val spots = when (faces.size) {
+                        1 -> listOf(0 to 0)
+                        2 -> listOf(0 to 0, gap to gap)
+                        else -> listOf(0 to 0, gap to 0, gap / 2 to gap)
+                    }
+                    faces.forEachIndexed { i, m ->
+                        Box(Modifier.padding(start = spots[i].first.dp, top = spots[i].second.dp)) {
+                            Avatar(m.name, m.emoji, m.color, small)
+                        }
+                    }
+                }
+            }
+            else -> Avatar(c.title, "", "#6e48d6", size)
         }
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(c.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(c.title, style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (c.oversight) SuggestionChip(onClick = {}, label = { Text("Watching") }, modifier = Modifier.padding(start = 6.dp).heightIn(max = 26.dp))
                 STATUS_LABELS[c.status]?.let { SuggestionChip(onClick = {}, label = { Text(it) }, modifier = Modifier.padding(start = 6.dp).heightIn(max = 26.dp)) }
             }
@@ -227,7 +329,7 @@ private fun ConversationRow(c: ChatConversation, people: List<Member>, me: Strin
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (c.unread > 0) Badge(Modifier.padding(start = 8.dp)) { Text(c.unread.toString()) }
+        if (c.unread > 0) Badge(Modifier.padding(start = 8.dp)) { Text(c.unread.toString(), fontSize = if (big) 16.sp else 11.sp) }
     }
 }
 
@@ -266,7 +368,14 @@ private fun NewChatDialog(people: List<Member>, onDismiss: () -> Unit, onStart: 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>, onBack: () -> Unit) {
+private fun ConversationView(
+    prefs: Prefs, convId: String, people: List<Member>, onBack: () -> Unit,
+    /** Shown beside the list or as a shade (tablets): a close button instead of Back. */
+    embedded: Boolean = false,
+    fullscreen: Boolean = false,
+    onToggleFullscreen: (() -> Unit)? = null,
+) {
+    val big = Access.younger
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val messages = remember(convId) { mutableStateListOf<ChatMessage>() }
@@ -382,7 +491,12 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
     Scaffold(
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        if (embedded) Icon(Icons.Filled.Close, contentDescription = "Close the chat")
+                        else Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 title = {
                     Column {
                         Text(conv?.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -398,6 +512,11 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
                 },
                 actions = {
                     if (mutedUntil > System.currentTimeMillis()) Icon(Icons.Filled.NotificationsOff, contentDescription = "Muted", modifier = Modifier.padding(end = 4.dp))
+                    onToggleFullscreen?.let {
+                        IconButton(onClick = it) {
+                            Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, contentDescription = if (fullscreen) "Smaller" else "Full screen")
+                        }
+                    }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Chat options") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         if (mutedUntil > System.currentTimeMillis()) {
@@ -470,8 +589,8 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
             if (canPost) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (Access.can("chat_photos")) Box {
-                        IconButton(onClick = { photoMenu = true }, enabled = !sending) {
-                            Icon(Icons.Filled.PhotoCamera, contentDescription = "Send a photo")
+                        IconButton(onClick = { photoMenu = true }, enabled = !sending, modifier = if (big) Modifier.size(64.dp) else Modifier) {
+                            Icon(Icons.Filled.PhotoCamera, contentDescription = "Send a photo", modifier = if (big) Modifier.size(36.dp) else Modifier)
                         }
                         DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
                             DropdownMenuItem(
@@ -497,8 +616,8 @@ private fun ConversationView(prefs: Prefs, convId: String, people: List<Member>,
                         maxLines = 5,
                         shape = RoundedCornerShape(24.dp),
                     )
-                    FilledIconButton(onClick = { send() }, enabled = text.isNotBlank() && !sending, modifier = Modifier.padding(start = 6.dp)) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    FilledIconButton(onClick = { send() }, enabled = text.isNotBlank() && !sending, modifier = Modifier.padding(start = 6.dp).then(if (big) Modifier.size(64.dp) else Modifier)) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", modifier = if (big) Modifier.size(32.dp) else Modifier)
                     }
                 }
             } else if (thread != null) {
@@ -597,8 +716,9 @@ private fun Bubble(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
     if (!mine) {
         // Their picture (emoji or initial, in their colour) so you can tell who wrote it without reading.
-        Box(Modifier.padding(end = 8.dp, bottom = 18.dp).size(36.dp)) {
-            if (showAvatar) Avatar(sender?.name ?: "?", sender?.emoji.orEmpty(), sender?.color ?: "#888888", 36)
+        val face = if (Access.younger) 52 else 36
+        Box(Modifier.padding(end = 8.dp, bottom = 18.dp).size(face.dp)) {
+            if (showAvatar) Avatar(sender?.name ?: "?", sender?.emoji.orEmpty(), sender?.color ?: "#888888", face)
         }
     }
     Column(Modifier.weight(1f).padding(vertical = 3.dp), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
