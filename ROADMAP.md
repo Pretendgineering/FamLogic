@@ -30,7 +30,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 
 ### ✅ Phase 3: Design language (0.17.0)
 - **Serif headings, sans text:** Liberation Serif (the free, metric-compatible Times New Roman, OFL-licensed and bundled, so it works offline) for titles, names, card headers and big numbers; a clean sans for body text and controls. "Firm but friendly": old meets new.
-- **Themes,** chosen per device (app) or per browser (console), each with light and dark: **Muted Dracula** (the default), Current purple, Warm paper, Forest, Ocean, and High contrast.
+- **Themes,** chosen per device (app) or per browser (console), each with light and dark: **Default** (a muted Dracula), Warm paper, Forest, Ocean, and High contrast. (Purple was dropped in 0.20.)
 
 ### ✅ Phase 3b: Home screen, parents' controls and tablets (0.19.0)
 - **Home screen** with tiles: a live map that opens Thereabouts, chat with the latest message, SOS, check-in, and module tiles as they arrive. Adults arrange their own; parents arrange children's.
@@ -39,6 +39,27 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Device mode:** phone, interactive tablet or **display tablet** (full screen, screen on while charging, no location sharing, settings behind the PIN).
 - **Tablets and landscape:** a navigation rail, the map beside the people list, the chat list beside the open chat, chats as a shade in portrait; bigger pictures and buttons for younger children.
 - Small things: rotating keeps what you typed; a camera icon that takes a new photo or picks one; senders' pictures in chat; a clearer selected tab.
+
+### ✅ Phase 3c: Access & Control, grandparents and a friendlier app (0.20.0)
+- **Module names** with a vibe: Thereabouts, **Chitchat**, **Datebook**, **Odds & Ends**, **Fair Share**, **Rhythms**, **Pantry**, **Corkboard**, **Front Room**, **Steward** (nudges stay nudges). **Plain names** switch (Customize, and the console's Look) for Map, Chat, Calendar…
+- **Access & Control** page in the console: everyone in a list that opens into their switches. Per child: a preset, then each module **Off / View only / Can add / Full** and single features; bigger buttons and picture icons; their home screen (drag to reorder, sizes); **open their settings for 10 minutes** from afar. The parent PIN lives here.
+- **Grandparents:** a role with the whole app but no parents' controls or children's chats; bigger buttons and picture icons as options.
+- **Children's settings:** none for younger children, only Customize/Account/About for older ones; the secret way in is holding the family name for 5 seconds, then the parent PIN.
+- **Home screen:** tiles in half, full-width and big sizes, dragged by a handle and resized with a corner grip; half tiles pair up or fill the row; in landscape the map sits on the right beside the tiles.
+- **Picture icons** (a tiny map, a talking face, an alarm, a house, a waving hand, a camera): the default for younger children. A bigger SOS button with an icon.
+- **Layouts:** map and navigation rail on the right; chats split the list open in portrait; photos wait with an ✕ until Send; children can't delete messages or mute chats unless a parent allows it; family chat and group icons.
+- **Settings:** Title Case, Customize (your icon, colours, names, map) third, Account second, **Control Deck** as a single switch; the app no longer draws under the status bar.
+- **Nudges:** 👍 ❤️ 👋 😊 🏠 🤠 👽 👹 (and 🍆 🍑 between grown-ups), from the app, from 👍/❤️ buttons on check-in notifications, and from the watch, which also offers them as a reply to a check-in. **FamLogic Face** watchface: serif type and the app's colour themes.
+
+### ⏳ Next: voice for younger children (waiting on a choice of speech engine)
+- A big push-to-talk button (a smiley with an open mouth and sound waves) that pops and glows while held; speech becomes a text message; replies are read aloud; a failed transcription says "Oops, try again!" out loud. Goal: a small child can message a parent almost on their own.
+
+### ⏳ Android widgets
+- **Map snapshot** of who's where; **check in** in one tap; **SOS** (hold); **one person's card** (where, battery, last seen); **latest chat message** with Reply; **talk to Mom** (a face that opens a direct chat or push-to-talk, for kids); **quick nudges** (send ❤️ to someone); **where's my ride?** (whoever is driving to you, and how far away).
+- With the coming modules: **today's agenda**, **chores due now**, the **current routine's** checklist, the **shopping list**, **tonight's dinner**.
+
+### ⏳ Settings overhaul
+- A full review of the order and names of every setting in the app and the console (after 0.20's first pass: Title Case, Customize third, Account second).
 
 ### 🔨 Phase 4: Tasks, tags and the Markdown vault
 - **Tags on everything:** to-dos, chores, routines, events and list items can be tagged to people (`@Sam`) and groups (`#kids`, `#parents`), so each person's screens show what's theirs.
@@ -59,7 +80,8 @@ Status: ✅ done · 🔨 next · ⏳ queued
 
 ### ⏳ Phase 6: TV launcher and tablet layout
 - **Android TV launcher:** FamLogic as the TV's home screen. Connect to the server in its settings (no personal account; a parent approves it in the console). A horizontally scrolling row of rounded cards, three at a time: today's agenda, a small map of who's where, to-dos for this time of day, the current routine (it changes with the daily rhythm: Morning, Nap time, Bedtime…), this week's menu, recent chat. Below: shortcuts to your most-used apps. D-pad friendly, dark and burn-in friendly.
-- **TV launcher as its own APK** (Android TV's launcher needs a separate build); same server.
+- **Front Room, the TV launcher, as its own APK** (Android TV's launcher needs a separate build); same server.
+- **Control Deck (countertop mode), round two:** a layout designed for a kitchen counter or wall, beyond full-screen home tiles.
 - **Tablet layout, next:** the signed-in person's chores, to-dos and routine beside the map, filtered by their tags; a big talk button on kids' tablets.
 - **Devices:** several devices per person, the console's Devices page with role, version, last seen and Revoke; display/launcher pairing with a code approved in the console.
 
@@ -73,7 +95,6 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - "Message" from a person's card on the map; chat on the Pebble (quick replies) and from the Index 01 ring; parents editing a child's switches from the app (today: the web console).
 
 ### ⏳ Later and parked
-- **Grandparents mode** (idea, to design): a third kind of family member, alongside parents and children, with its own set of features. To decide: which features it has.
 - **Pebble App Store listing** (draft in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md)), and **F-Droid / IzzyOnDroid** for the app.
 - **Shareable invite message** with an app download link, once the app is in a store.
 - **Profile pictures** (emoji icons cover the simple case; they stay as the fallback).

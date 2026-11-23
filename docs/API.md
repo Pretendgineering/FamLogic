@@ -25,7 +25,7 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `POST /api/checkin` `{note, loc?}` | `Bearer <token>` | Check in |
 | `POST /api/location?since=<cursor>` `{lat, lon, acc, speed, battery, charging, time}` | `Bearer <token>` | Report a fix; the reply carries new alerts `{events, cursor}` |
 | `GET /api/members?since=<cursor>` | `Bearer <token>` | Everyone's latest position, map settings, your feature settings (including `kid`: what you may use, `home` and `pinSet`), and new alerts |
-| `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?, home?}` | `Bearer <token>` | Rename yourself / pause / feature switches / arrange your home screen (adults; parents arrange children's) |
+| `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?, home?, big?, pictures?}` | `Bearer <token>` | Rename yourself / pause / feature switches / arrange your home screen (adults; parents arrange children's) |
 | `DELETE /api/me` | `Bearer <token>` | Leave |
 | `/api/admin/*` | console login cookie | Admin pages (invites, members, roles, modules, backups). `GET /api/admin/session` says who's logged in |
 | `/api/chat`, `/api/chat/{id}/messages`, … | `Bearer <token>` or a parent's console session | Chat: see [ARCHITECTURE.md](ARCHITECTURE.md#chat-built-in-0160) |
@@ -33,7 +33,9 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `DELETE /api/chat/{id}/messages/{mid}` (or `POST …/delete`) | `Bearer <token>` | Delete your own message, or (parents) any message in a chat with a child in it |
 | `POST /api/pin/check` `{pin}` | `Bearer <token>` | Checks the family's parent PIN (204 or 403; locks after repeated wrong tries) |
 | `PUT /api/admin/pin` `{pin}` (or `PUT /api/family/pin` from an admin's phone) | admin | Sets the parent PIN (4–8 digits; `""` removes it). `GET /api/admin/pin` says whether one is set |
-| `GET`/`PUT /api/members/{id}/kid` `{preset?, sections?, features?, home?}` | a parent (`/api/admin/members/{id}/kid` for admins) | A child's switches: preset `younger` or `older`, then sections (`map`, `chat`) and features (`sos`, `checkin`, `requests`, `chat_start`, `chat_photos`, `trips`, `pause`) on or off, and their home-screen tiles. A new preset starts afresh from its defaults |
+| `GET`/`PUT /api/members/{id}/kid` `{preset?, modules?, features?, home?, big?, pictures?}` | a parent (`/api/admin/members/{id}/kid` for admins) | A child's (or grandparent's) settings: preset `younger` or `older`; each module (`thereabouts`, `chat`, `calendar`, `todos`, `chores`, `meals`) `off`, `view`, `add` or `full`; features (`sos`, `checkin`, `requests`, `nudges`, `trips`, `pause`, `chat_start`, `chat_photos`, `chat_delete`, `chat_mute`) on or off; home tiles (`map:big`, `chat:half`…); bigger buttons and picture icons. Grandparents take only `home`, `big` and `pictures`. A new preset starts afresh |
+| `POST /api/members/{id}/unlock` `{minutes}` | a parent (`/api/admin/members/{id}/unlock` for admins) | Opens settings on that person's device for a while (default 10 minutes) |
+| `PATCH /api/chat/{id}` `{emoji, color}` | parents (family chat), people in a group | The chat's icon |
 
 Device tokens are stored only as SHA-256 hashes, and member passwords as PBKDF2-SHA256 hashes. The console cookie is HMAC-signed, `HttpOnly` and `SameSite=Strict`. Wrong passwords (console and app) are slowed down to stop guessing, and a member's username locks for 15 minutes after 5 wrong tries.
 

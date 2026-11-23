@@ -1,6 +1,6 @@
 # Pebble companion: design notes
 
-(Part of FamLogic's Thereabouts module. The watch apps are called "FamLogic" and "FamLogic Family" on the watch.)
+(Part of FamLogic's Thereabouts module. The watch apps are called "FamLogic" and "FamLogic Face" on the watch.)
 
 Status: **built in 0.12.0** (November 2026). Everything in "Feature ideas" below shipped. How to use it is in the README ("Pebble watches and the Index 01 ring").
 
@@ -10,6 +10,7 @@ Status: **built in 0.12.0** (November 2026). Everything in "Feature ideas" below
 - Messages use small integer keys (listed at the top of `PebbleBridge.kt` and `main.c`; keep them in sync).
 - The Index 01 ring calls the server directly (`POST /api/index/{token}/{sos|checkin|remind}`), so it works without the watchapp. Requests are checked with the HMAC signature when present, and repeats are ignored.
 - Tested in the Pebble emulators (basalt, gabbro). Still to try on real hardware: the phone↔watch bridge, fall detection tuning, heart rate.
+- 0.20.0 added: the watchface renamed **FamLogic Face**, with serif type (Liberation Serif, rasterised at build time from `pebble/face/resources/fonts`, OFL) and the app's colour themes (Default, Warm paper, Forest, Ocean, High contrast; black and white on monochrome watches; the phone sends the theme as `K_NUM`); more nudges from a person's menu (thumbs up, heart, wave, smile, come home, cowboy, alien, demon mask, and eggplant and peach between grown-ups, flagged per person with `F_ADULT`); a check-in pops up a reply menu on the watch when the app is open.
 - 0.14.0 added: protocol v2 (movement state, one-word labels, bearing and distance from you, fences, light/dark, miles), hold-Select SOS everywhere (an overlay layer moved onto whichever window is showing, timed by the clock rather than timer ticks), Quick Launch → SOS screen, the radar (log scale, far outliers pinned to the rim) and street maps (`pebble/PebbleMap.kt` renders the user's tiles, stretches their pale colours and converts them to the watch's 64 colours or dithered black and white; sent in pieces of about 2 KB), nudges, and the redesigned watchface (2-column grid, per-label layers so long names can scroll inside their slot).
 - Appstore listing: see [PEBBLE-APPSTORE.md](PEBBLE-APPSTORE.md) (draft).
 

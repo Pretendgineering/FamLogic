@@ -20,7 +20,7 @@ Plan: list the watchapp and watchface around the same time as the phone app goes
 
 | | Watchapp | Watchface |
 |---|---|---|
-| Name | FamLogic | FamLogic Family |
+| Name | FamLogic | FamLogic Face |
 | UUID | `6d3c9f4e-2b8a-4c71-9a35-7e1f0b2d4c88` | `a1f5e2c7-3d94-4b6e-8f02-5c9e7d1a3b64` |
 | Category | Tools & Utilities (or "Daily") | – |
 | Platforms | aplite, basalt, chalk, diorite, emery, flint, gabbro | same |
