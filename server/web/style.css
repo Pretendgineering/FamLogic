@@ -853,3 +853,4 @@ aside { padding: 12px 0 12px 12px; gap: 6px; }
 .subtabs { max-width: none; }
 .chat-page .panel { border-top: none; }
 .chat-page .chat-list { border-right: 1px solid var(--line); }
+.acc-head { box-shadow: none !important; border-radius: 0; }

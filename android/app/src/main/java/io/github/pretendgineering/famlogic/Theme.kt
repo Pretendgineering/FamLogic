@@ -48,6 +48,9 @@ enum class Palette(val id: String, val title: String, val description: String) {
     Contrast("contrast", "High contrast", "Black and white with strong accents, for bright rooms and easier reading."),
     ;
 
+    /** Its main colour, for the picker. */
+    val swatch: Long get() = tokens(this, false).accent
+
     companion object {
         fun byId(id: String) = entries.find { it.id == id } ?: Dracula
     }

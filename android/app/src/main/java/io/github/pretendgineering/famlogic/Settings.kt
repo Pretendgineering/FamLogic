@@ -1,5 +1,9 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import android.content.Intent
@@ -299,9 +303,9 @@ private fun ModulesCard(prefs: Prefs, features: Set<String>?, onOpenHomeEditor: 
         // How many tiles across.
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Tiles across", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-            listOf(0 to "Auto", 2 to "2", 3 to "3").forEach { (n, label) ->
+            listOf(3 to "3", 2 to "2").forEach { (n, label) ->
                 androidx.compose.material3.FilterChip(
-                    selected = prefs.homeColumns == n && (HomeLayout.columns == n || HomeLayout.columns == 0),
+                    selected = (if (HomeLayout.columns == 2) 2 else 3) == n,
                     onClick = { prefs.homeColumns = n; HomeLayout.columns = n },
                     label = { Text(label) },
                     modifier = Modifier.padding(start = 6.dp),
@@ -376,6 +380,12 @@ private fun ReadingVoiceCard(prefs: Prefs, current: String, onChanged: () -> Uni
             }
         }
     }
+}
+
+/** A small dot of a theme's main colour beside its name. */
+@Composable
+private fun ThemeSwatch(p: Palette) {
+    Box(Modifier.size(28.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Color(p.swatch)))
 }
 
 /** About → Advanced: things hardly anyone changes, folded away. */
@@ -896,23 +906,38 @@ private fun LookCards(prefs: Prefs) {
         }
     }
     SettingsCard("Colours") {
-        Hint("Only changes this device.")
-        Palette.entries.forEach { p ->
+        // A drop-down: the current theme with a preview, the rest one tap away.
+        var open by remember { mutableStateOf(false) }
+        Box {
             Row(
-                Modifier.fillMaxWidth().selectable(selected = ThemeState.palette == p) {
-                    if (ThemeState.palette != p) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    prefs.appTheme = p.id
-                    ThemeState.palette = p // the whole app recolours straight away
-                }.padding(vertical = 6.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f), RoundedCornerShape(12.dp))
+                    .clickable { open = true }.padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioButton(selected = ThemeState.palette == p, onClick = null)
-                Column(Modifier.padding(start = 12.dp)) {
-                    Text(p.title, style = MaterialTheme.typography.titleMedium)
-                    Hint(p.description)
+                ThemeSwatch(ThemeState.palette)
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(ThemeState.palette.title, style = MaterialTheme.typography.titleMedium)
+                    Hint(ThemeState.palette.description)
+                }
+                Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = "Choose colours")
+            }
+            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                Palette.entries.forEach { p ->
+                    androidx.compose.material3.DropdownMenuItem(
+                        leadingIcon = { ThemeSwatch(p) },
+                        text = { Text(p.title, fontWeight = if (p == ThemeState.palette) FontWeight.Bold else FontWeight.Normal) },
+                        onClick = {
+                            open = false
+                            if (ThemeState.palette != p) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            prefs.appTheme = p.id
+                            ThemeState.palette = p // the whole app recolours straight away
+                        },
+                    )
                 }
             }
         }
+        Hint("Only changes this device.")
     }
     SettingsCard("Light or Dark") {
         listOf("system" to "Same as this phone", "light" to "Light", "dark" to "Dark").forEach { (id, label) ->

@@ -60,7 +60,7 @@ func fakeVoice(t *testing.T) string {
 	os.WriteFile(filepath.Join(dir, "models", "kokoro", "model.onnx"), []byte("x"), 0o644)
 	os.WriteFile(filepath.Join(dir, "whisper", "whisper-cli"), []byte("#!/bin/sh\necho ' [BLANK_AUDIO] Can you pick me up?'\n"), 0o755)
 	// Like the real helper: "ready", then one "sid TAB out TAB text" per line, answering "ok".
-	os.WriteFile(filepath.Join(dir, "tts", "famlogic-tts"), []byte("#!/bin/sh\necho ready 54\nwhile IFS='\t' read -r sid out text; do printf 'RIFF%s' \"$sid\" > \"$out\"; echo ok; done\n"), 0o755)
+	os.WriteFile(filepath.Join(dir, "tts", "famlogic-tts"), []byte("#!/bin/sh\necho ready 54\nwhile IFS='\t' read -r sid speed out text; do printf 'RIFF%s' \"$sid\" > \"$out\"; echo ok; done\n"), 0o755)
 	return dir
 }
 

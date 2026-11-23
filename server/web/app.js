@@ -387,7 +387,7 @@ function renderInvites(invites) {
   }
 }
 
-async function refresh() {
+async function refresh(periodic = false) {
   try {
     const [data, invites] = isAdmin()
       ? await Promise.all([api("GET", "/api/admin/members"), api("GET", "/api/admin/invites")])
@@ -410,7 +410,13 @@ async function refresh() {
     setCount("#count-fences", places.length);
     setCount("#count-groups", circles.length > 1 ? circles.length : 0);
     if ((moduleInfo("chat") || {}).enabled && (moduleInfo("chat") || {}).available && view !== "chat") await loadChats();
-    if (view && view !== "thereabouts") renderView();
+    // The 10-second refresh redraws a page only if something on it changed: pages
+    // you fill in (Access & Control, Family) were being rebuilt under your hands.
+    if (view && view !== "thereabouts") {
+      const formPage = view === "access" || view === "family";
+      const typing = document.activeElement && document.activeElement.closest(".page") && document.activeElement.matches("input, select, textarea");
+      if (!(periodic && formPage && (drawnSig[view] === peopleSig() || typing))) renderView();
+    }
   } catch (err) {
     if (err.message !== "unauthorized") console.error(err);
   }
@@ -1047,6 +1053,7 @@ const ACCESS_LABELS = { admin: "Admin", parent: "Parent", grandparent: "Grandpar
 const displayName = (m) => plainNames ? (m.plain || m.name) : m.name;
 
 function renderFamily() {
+  drawnSig.family = peopleSig();
   const roles = serverFeatures.includes("roles");
   $("#family-list").replaceChildren(...lastMembers.map((m) => {
     const access = m.access || (m.role === "child" ? "younger_child" : m.role === "dependent" ? "dependent" : "parent");
@@ -1123,7 +1130,14 @@ const accessOpen = new Set();   // whose panels are open
 const accessData = new Map();   // id -> their settings from the server
 const caret = '<svg class="acc-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
+// What the Access and Family pages show about people, to tell when they need redrawing.
+const drawnSig = {};
+function peopleSig() {
+  return lastMembers.map((m) => [m.id, m.name, m.access, m.role, m.emoji, m.color, m.voice, m.username, m.hasPassword].join("|")).join(";");
+}
+
 function renderAccess() {
+  drawnSig.access = peopleSig();
   const focus = location.hash.split("/")[2];
   if (focus && !accessOpen.has(focus)) { accessOpen.add(focus); history.replaceState(null, "", "#/access"); }
   if (isAdmin()) loadPIN();
@@ -1656,7 +1670,7 @@ async function start() {
   showView(viewFromHash());
   if (map) map.invalidateSize();
   clearInterval(refreshTimer);
-  refreshTimer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+  refreshTimer = setInterval(() => { if (!document.hidden) refresh(true); }, REFRESH_MS);
 }
 
 api("GET", "/api/admin/session").then(start).catch(() => {});

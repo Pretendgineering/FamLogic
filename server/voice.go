@@ -202,10 +202,13 @@ var errBadAudio = errors.New("send 16 kHz mono 16-bit WAV audio")
 // "Heart" and "Michael", two of its warmest English voices.
 var voiceSpeakers = map[string]int{"": 3, "female": 3, "male": 16}
 
+// slowSpeed reads a little slower for young children: unhurried, not sleepy.
+const slowSpeed = 0.85
+
 func validVoice(v string) bool { _, ok := voiceSpeakers[v]; return ok }
 
 // Speak reads text aloud in a voice ("female", "male" or "" for the default): WAV audio.
-func (v *Voice) Speak(ctx context.Context, text, voice string) ([]byte, error) {
+func (v *Voice) Speak(ctx context.Context, text, voice string, slow bool) ([]byte, error) {
 	release, err := v.take(ctx)
 	if err != nil {
 		return nil, err
@@ -219,7 +222,11 @@ func (v *Voice) Speak(ctx context.Context, text, voice string) ([]byte, error) {
 	defer os.Remove(f.Name())
 	ctx, cancel := context.WithTimeout(ctx, voiceTimeout)
 	defer cancel()
-	if err := v.tts.say(ctx, voiceSpeakers[voice], text, f.Name()); err != nil {
+	speed := 1.0
+	if slow {
+		speed = slowSpeed
+	}
+	if err := v.tts.say(ctx, voiceSpeakers[voice], speed, text, f.Name()); err != nil {
 		log.Printf("voice: reading aloud: %v", err)
 		return nil, err
 	}
@@ -290,7 +297,7 @@ func (sp *speaker) readLine(timeout time.Duration) (string, error) {
 	}
 }
 
-func (sp *speaker) say(ctx context.Context, sid int, text, out string) error {
+func (sp *speaker) say(ctx context.Context, sid int, speed float64, text, out string) error {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	if sp.idle != nil {
@@ -306,7 +313,7 @@ func (sp *speaker) say(ctx context.Context, sid int, text, out string) error {
 	}
 	// One request per line; tabs and line breaks in the text would break that.
 	text = strings.Join(strings.Fields(text), " ")
-	if _, err := fmt.Fprintf(sp.in, "%d\t%s\t%s\n", sid, out, text); err != nil {
+	if _, err := fmt.Fprintf(sp.in, "%d\t%.2f\t%s\t%s\n", sid, speed, out, text); err != nil {
 		sp.stop()
 		return err
 	}
@@ -446,6 +453,7 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request, me *Member)
 	var body struct {
 		Text  string `json:"text"`
 		Voice string `json:"voice"` // "female", "male" or "" (the default)
+		Slow  bool   `json:"slow"`  // a little slower, for young children
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -462,7 +470,8 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request, me *Member)
 	if !validVoice(body.Voice) {
 		body.Voice = ""
 	}
-	wav, err := s.voice.Speak(r.Context(), text, body.Voice)
+	// Younger children always hear it a little slower.
+	wav, err := s.voice.Speak(r.Context(), text, body.Voice, body.Slow || me.access() == AccessYoungerChild)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "couldn't read that aloud right now")
 		return

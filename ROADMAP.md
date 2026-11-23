@@ -98,10 +98,21 @@ The map, chat and safety features are what families use every day. Next, each ge
 - "Where's my ride?": whoever is driving to you, and how far away.
 - Low-battery and quiet-phone alerts with a single tap to call.
 
-### ⏳ 4. Android widgets
+### ⏳ 4. Guided setup (the on-ramp)
+A walkthrough in the web console that sets everything up properly the first time, by asking questions rather than showing settings, and can be run again later (Settings → Run setup again) to revisit any step:
+- **About you and the server:** your name, the family's name, the admin password, and the **parent PIN** (what it's for, and why children's devices need it).
+- **Who's in your family?** Add each person with their role, in plain words: "a parent", "a grandparent", "a child", "someone who doesn't use the app (a baby)".
+- **For each child:** "Can they read yet?" (picks the younger or older preset and picture icons), "Do they have their own phone or tablet?", "Should they be able to start chats, send photos, pause their location?", "Male or female reading voice?". Each answer sets the matching switches, with a short line on what it does.
+- **Modules:** which parts the family wants (Thereabouts, Chitchat, and the ones coming), with a sentence each.
+- **Places and groups:** add Home and School as fences (address search), and whether anyone needs a separate group (grandparents, friends).
+- **Getting phones connected:** invites with QR codes for each person, in the order they were added, ticked off as each phone joins.
+- **A short tour** at the end: where each setting lives now, so they can find it again.
+- Setup can't be skipped on a new server, only paused and resumed; everything it sets can be changed later.
+
+### ⏳ 5. Android widgets
 - **Map snapshot,** **check in** in one tap, **SOS** (hold), **one person's card**, **latest chat message** with Reply, **talk to Mom** (for kids), **quick nudges**, **where's my ride?**. Module widgets come with each module.
 
-### ⏳ 5. Modules, one at a time
+### ⏳ 6. Modules, one at a time
 In this order (each is finished before the next starts):
 1. **Odds & Ends** (lists and to-dos) on the Markdown vault, with tags (`@Sam`, `#kids`) and time of day. The vault itself has started: its location setting, People notes and the agents' formatting guide.
 2. **Fair Share** (chores): who, what, how often; tick off anywhere; optional stars.

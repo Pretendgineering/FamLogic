@@ -3,7 +3,8 @@
 //
 //   famlogic-tts <model-dir> <threads>
 //
-// Reads one request per line on stdin:  <speaker id> TAB <output.wav> TAB <text>
+// Reads one request per line on stdin:  <speaker id> TAB <speed> TAB <output.wav> TAB <text>
+// (speed 1.0 is normal; 0.85 is a little slower, for young listeners)
 // and answers one line on stdout: "ok" or "error <reason>".
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,13 +51,18 @@ int main(int argc, char **argv) {
   while ((len = getline(&line, &cap, stdin)) > 0) {
     if (line[len - 1] == '\n') line[--len] = 0;
     char *sid = line;
-    char *out = strchr(sid, '\t');
+    char *speed = strchr(sid, '\t');
+    if (!speed) { printf("error bad request\n"); fflush(stdout); continue; }
+    *speed++ = 0;
+    char *out = strchr(speed, '\t');
     if (!out) { printf("error bad request\n"); fflush(stdout); continue; }
     *out++ = 0;
+    float rate = (float)atof(speed);
+    if (rate < 0.5f || rate > 2.0f) rate = 1.0f;
     char *text = strchr(out, '\t');
     if (!text) { printf("error bad request\n"); fflush(stdout); continue; }
     *text++ = 0;
-    const SherpaOnnxGeneratedAudio *audio = SherpaOnnxOfflineTtsGenerate(tts, text, atoi(sid), 1.0f);
+    const SherpaOnnxGeneratedAudio *audio = SherpaOnnxOfflineTtsGenerate(tts, text, atoi(sid), rate);
     if (!audio || audio->n == 0) {
       printf("error nothing to say\n");
     } else if (!SherpaOnnxWriteWave(audio->samples, audio->n, audio->sample_rate, out)) {

@@ -105,13 +105,16 @@ object Voice {
         warmUp(context)
         val say = speakable(text)
         if (say.isEmpty()) return false
+        // Younger children hear it a little slower: unhurried, not sleepy.
+        val slow = Access.younger
         return when (speaker(context, prefs.serverFeatures)) {
             Engine.Phone -> {
+                tts?.engine?.setSpeechRate(if (slow) 0.85f else 1f)
                 tts?.engine?.speak(say, TextToSpeech.QUEUE_FLUSH, null, "famlogic-${say.hashCode()}")
                 true
             }
             Engine.Server -> try {
-                val wav = Api(prefs.serverUrl, prefs.token).speak(say, voice)
+                val wav = Api(prefs.serverUrl, prefs.token).speak(say, voice, slow)
                 val f = File(context.cacheDir, "say.wav").apply { writeBytes(wav) }
                 withContext(Dispatchers.Main) { play { MediaPlayer().apply { setDataSource(f.path); prepare() } } }
                 true

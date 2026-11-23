@@ -1,5 +1,8 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -894,7 +897,11 @@ private fun Bubble(
         val bg = if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
         val fg = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
         val speaker: @Composable () -> Unit = {
-            if (onSpeak != null) {
+            if (onSpeak != null && (Access.younger || Access.big)) {
+                PressButton(onClick = onSpeak, modifier = Modifier.padding(horizontal = 6.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Read aloud", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                }
+            } else if (onSpeak != null) {
                 IconButton(onClick = onSpeak, modifier = Modifier.size(if (Access.big) 44.dp else 34.dp)) {
                     Icon(
                         Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Read aloud",
@@ -1041,5 +1048,35 @@ private fun StagedPhoto(uri: String, sizeDp: Int) {
         } else {
             CircularProgressIndicator(Modifier.size(28.dp))
         }
+    }
+}
+
+/**
+ * A chunky button that really presses in: a raised key with a darker edge under
+ * it; pressing pushes it down onto that edge, letting go pops it back. For small
+ * hands (the speaker beside messages for younger children).
+ */
+@Composable
+internal fun PressButton(onClick: () -> Unit, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 52.dp, content: @Composable () -> Unit) {
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val depth = 4.dp
+    val sink by androidx.compose.animation.core.animateDpAsState(if (pressed) depth else 0.dp, androidx.compose.animation.core.tween(70), label = "press")
+    val shape = RoundedCornerShape(16.dp)
+    Box(modifier.size(size, size + depth)) {
+        // The edge underneath.
+        Box(Modifier.align(Alignment.BottomCenter).size(size).clip(shape).background(MaterialTheme.colorScheme.primary.copy(alpha = .55f)))
+        // The key itself, which moves down when pressed.
+        Box(
+            Modifier.offset(y = sink).size(size).clip(shape)
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .border(2.dp, MaterialTheme.colorScheme.primary, shape)
+                .clickable(interactionSource = source, indication = null, onClickLabel = "Read aloud") {
+                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    onClick()
+                },
+            contentAlignment = Alignment.Center,
+        ) { content() }
     }
 }
