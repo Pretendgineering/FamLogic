@@ -111,16 +111,20 @@
           <a class="button secondary" href="/api/admin/backup" download title="The whole data file. It contains password hashes: keep it somewhere safe.">Download backup</a>
           <button id="logout-btn2" class="secondary">Log out</button>
         </div>
+        <h2>Notes vault</h2>
+        <dl class="facts" id="vault-facts"></dl>
+        <p class="muted small" id="vault-help"></p>
         <p class="muted small">Family name, admin password and other server options are set in <code>docker-compose.yml</code> (see the README).</p>
         <p class="muted small">FamLogic is free software under the <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPLv3</a>. <a href="https://github.com/Pretendgineering/FamLogic">Source code</a>.</p>
       </section>
       <section class="panel wide-panel" data-sub-panel="agents" hidden>
         <p><strong>Coming soon.</strong> API keys for AI agents and automations, such as a Hermes agent driven by a cloud model or a local Ollama container.</p>
         <ul class="plain">
-          <li>Chores, menus, to-dos and schedules will live as <strong>Markdown files</strong> in your data folder (an Obsidian-ready vault with links between people, chores and days), so you can browse them in Obsidian and agents can edit them.</li>
+          <li>Chores, menus, to-dos and schedules will live as <strong>Markdown files</strong> in your notes vault (an Obsidian-ready vault with links between people, chores and days), so you can browse them in Obsidian and agents can edit them.</li>
           <li>Each key gets limited permissions (read only, or edit lists and chores, or post in chat) and can be revoked here.</li>
           <li>A documented REST API, plus a ready-made skill file for agents.</li>
         </ul>
+        <p>Available now: the <strong>notes vault</strong> (see Server for where it is) and its <a href="/api/v1/vault/guide" target="_blank">formatting guide</a>, which agents can read at <code>/api/v1/vault/guide</code> or as <code>AGENTS.md</code> in the vault folder.</p>
       </section>
     </main>
 

@@ -4,7 +4,8 @@
 #   whisper  whisper.cpp's command-line tool, compiled for the target; it picks the
 #            best instructions for the CPU it finds itself on (any x86-64 or ARM64)
 #   voice    Piper (reading aloud) and the models, downloaded once
-#   final    a minimal image with glibc and no shell, running as a non-root user
+#   final    a minimal image with glibc and no shell. It starts as root only to hand
+#            its folders to PUID:PGID (65532 by default), then runs as that user.
 
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /src
@@ -46,7 +47,7 @@ RUN curl -fsSL -o /voice/models/whisper.bin https://huggingface.co/ggerganov/whi
  && curl -fsSL -o /voice/models/voice.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx \
  && curl -fsSL -o /voice/models/voice.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx.json
 
-FROM gcr.io/distroless/cc-debian12:nonroot
+FROM gcr.io/distroless/cc-debian12
 COPY --from=voice /voice /voice
 COPY --from=whisper /out /voice/whisper
 COPY --from=build /famlogic /famlogic

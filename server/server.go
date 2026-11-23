@@ -41,11 +41,15 @@ type Server struct {
 	indexSeen *indexDeliveries // Index 01 ring deliveries already handled
 	chat      *ChatStore       // nil if the chat database couldn't be opened
 	voice     *Voice           // speech to text and reading aloud, when the tools are there
+	vault     *Vault           // the family's Markdown notes (nil in tests that don't need it)
 }
 
 func NewServer(cfg Config, store *Store, static fs.FS) *Server {
 	s := &Server{cfg: cfg, store: store, static: static, limiter: newLoginLimiter(), geo: newGeocoder(cfg.GeocoderURL),
 		indexSeen: &indexDeliveries{seen: map[string]time.Time{}}}
+	if cfg.VaultDir != "" {
+		s.vault = openVault(cfg.VaultDir)
+	}
 	s.voice = openVoice(env("VOICE_DIR", "/voice"), filepath.Join(filepath.Dir(store.path), "tmp"))
 	if s.chat = openChatNextTo(store.path); s.chat != nil {
 		chat := s.chat
@@ -127,6 +131,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/pin/check", s.device(s.handleCheckPIN))
 	mux.HandleFunc("POST /api/voice/transcribe", s.device(s.handleTranscribe))
 	mux.HandleFunc("POST /api/voice/speak", s.device(s.handleSpeak))
+	mux.HandleFunc("GET /api/v1/vault/guide", s.handleVaultGuide)
+	mux.HandleFunc("GET /api/admin/vault", s.admin(s.handleAdminVault))
 	mux.HandleFunc("PUT /api/family/pin", s.device(s.handleFamilyPIN))
 	mux.HandleFunc("GET /api/admin/pin", s.admin(s.handleAdminPIN))
 	mux.HandleFunc("PUT /api/admin/pin", s.admin(s.handleAdminPIN))

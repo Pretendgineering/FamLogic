@@ -42,6 +42,7 @@ type Config struct {
 	InviteTTL       time.Duration
 	SilenceAfter    time.Duration // 0 = no "hasn't been in touch" alerts
 	BackupDays      int           // daily backups kept; 0 = none
+	VaultDir        string        // the family's Markdown notes (DATA_DIR/vault unless VAULT_DIR is set)
 }
 
 func env(key, def string) string {
@@ -77,6 +78,7 @@ func loadConfig() (Config, error) {
 		return c, errors.New("SILENCE_HOURS must be a whole number of hours (0 turns the alert off)")
 	}
 	c.SilenceAfter = time.Duration(silence) * time.Hour
+	c.VaultDir = filepath.Clean(env("VAULT_DIR", filepath.Join(c.DataDir, "vault")))
 	c.BackupDays, err = strconv.Atoi(env("BACKUP_DAYS", "7"))
 	if err != nil || c.BackupDays < 0 {
 		return c, errors.New("BACKUP_DAYS must be a whole number (0 turns backups off)")
@@ -99,6 +101,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+	// Started as root (the image's default): hand the folders to PUID:PGID and
+	// carry on as that user. Already someone else: nothing to do.
+	if err := dropPrivileges(cfg.DataDir, cfg.VaultDir); err != nil {
+		log.Fatalf("switching user: %v", err)
+	}
 	dataFile := filepath.Join(cfg.DataDir, "famlogic.json")
 	store, err := OpenStore(dataFile)
 	if err == nil {
@@ -113,9 +120,10 @@ func main() {
 	}
 
 	static, _ := fs.Sub(webFS, "web")
+	app := NewServer(cfg, store, static)
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           NewServer(cfg, store, static).Routes(),
+		Handler:           app.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -126,9 +134,12 @@ func main() {
 	defer stopBg()
 	go store.WatchSilence(bg, cfg.SilenceAfter)
 	go store.KeepBackups(bg, filepath.Join(cfg.DataDir, "backups"), cfg.BackupDays)
+	if app.vault != nil {
+		go app.vault.Keep(bg, store)
+	}
 
 	go func() {
-		log.Printf("FamLogic %s listening on %s (data in %s)", version, cfg.Listen, cfg.DataDir)
+		log.Printf("FamLogic %s listening on %s (data in %s, vault in %s, running as %d:%d)", version, cfg.Listen, cfg.DataDir, cfg.VaultDir, os.Getuid(), os.Getgid())
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}

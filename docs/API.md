@@ -33,6 +33,8 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `DELETE /api/chat/{id}/messages/{mid}` (or `POST …/delete`) | `Bearer <token>` | Delete your own message, or (parents) any message in a chat with a child in it |
 | `POST /api/voice/transcribe` (body: 16 kHz mono 16-bit WAV, up to a minute) | `Bearer <token>` | Speech to text on the server: `{text}` (`""` if nothing was understood). Feature `voice-stt` |
 | `POST /api/voice/speak` `{text}` | `Bearer <token>` | Reads text aloud: `audio/wav`. Feature `voice-tts` |
+| `GET /api/v1/vault/guide` | none | The notes vault's formatting guide for people and AI agents (`text/markdown`) |
+| `GET /api/admin/vault` | admin session | Where the vault is, whether FamLogic can write there, the user it writes as, and the number of notes |
 | `POST /api/pin/check` `{pin}` | `Bearer <token>` | Checks the family's parent PIN (204 or 403; locks after repeated wrong tries) |
 | `PUT /api/admin/pin` `{pin}` (or `PUT /api/family/pin` from an admin's phone) | admin | Sets the parent PIN (4–8 digits; `""` removes it). `GET /api/admin/pin` says whether one is set |
 | `GET`/`PUT /api/members/{id}/kid` `{preset?, modules?, features?, home?, big?, pictures?}` | a parent (`/api/admin/members/{id}/kid` for admins) | A child's (or grandparent's) settings: preset `younger` or `older`; each module (`thereabouts`, `chat`, `calendar`, `todos`, `chores`, `meals`) `off`, `view`, `add` or `full`; features (`sos`, `checkin`, `requests`, `nudges`, `trips`, `pause`, `chat_start`, `chat_photos`, `chat_delete`, `chat_mute`) on or off; home tiles (`map:big`, `chat:half`…); bigger buttons and picture icons. Grandparents take only `home`, `big` and `pictures`. A new preset starts afresh |

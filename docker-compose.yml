@@ -23,8 +23,18 @@ services:
       # Voice (talk to send messages, hear them read aloud) runs on this server, built in.
       # It uses about 400 MB of memory for a few seconds while someone talks. "off" switches it off.
       # VOICE: "off"
+      # Your family's notes (lists, chores, meals, people…) are Markdown files in a "vault"
+      # folder that Obsidian, Syncthing and AI agents can use too. By default it's inside the
+      # data volume (/data/vault). To keep it in a folder on this computer instead, uncomment
+      # the ./vault line under volumes, and set PUID/PGID to your user (run `id` to see them),
+      # so the files are yours and other apps can edit them.
+      # PUID: "1000"
+      # PGID: "1000"
+      # Or put the vault anywhere else inside the container (with its own volume):
+      # VAULT_DIR: "/vault"
     volumes:
       - famlogic-data:/data
+      # - ./vault:/data/vault
 
 volumes:
   famlogic-data:

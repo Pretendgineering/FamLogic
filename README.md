@@ -99,12 +99,23 @@ Set in `docker-compose.yml` (or your container's environment).
 | `BACKUP_DAYS` | `7` | Daily backups kept in `/data/backups`. `0` turns them off. |
 | `SILENCE_HOURS` | `6` | Tell people when a sharing phone has been quiet this long. `0` turns it off. |
 | `VOICE` | on | Talking and reading aloud, built into the image (about 400 MB of memory for a few seconds while someone talks). `off` turns it off. |
+| `PUID`, `PGID` | `65532` | The user and group FamLogic runs as and writes files as. Set them to yours (run `id` on the host) when the notes vault is a folder on the host, so the files are yours and other apps can edit them. |
+| `VAULT_DIR` | `/data/vault` | Where the notes vault is inside the container (see below). |
 | `DATA_DIR`, `LISTEN` | `/data`, `:8080` | Where data lives, and the port inside the container. |
+
+### The notes vault (Markdown)
+
+Your family's notes (people now; lists, to-dos, chores, meals, the calendar and routines as they arrive) are **Markdown files** in an Obsidian-compatible folder that other apps and AI agents can read and edit. FamLogic picks up changes made there.
+
+- **Inside the container (the default):** nothing to do. The vault is `/data/vault`, inside the data volume, and is backed up with it.
+- **A folder on the host:** in `docker-compose.yml`, uncomment `- ./vault:/data/vault` under `volumes` and set `PUID`/`PGID` to your user. Open that folder in Obsidian, sync it with Syncthing, or point an agent at it.
+- **How notes are written:** the formatting guide, for people and AI agents, is [docs/agents/famlogic-vault.md](docs/agents/famlogic-vault.md). The server also writes it into the vault as `AGENTS.md` and serves it at `/api/v1/vault/guide`.
+- The console's **Settings → Server** shows where the vault is and whether FamLogic can write there.
 
 ## Updating and backups
 
 - **Update the server:** `docker compose pull && docker compose up -d` (restarting alone doesn't fetch a newer image). The running version shows in the console's Settings → Server.
-- **Backups:** everything is in the data folder: `famlogic.json` (people and settings), `chat.db` (messages) and `media/` (photos). The server keeps daily copies of the first two in `backups/`, and **Settings → Server → Download backup** saves one now. To restore, stop the container, put the files back, and start it.
+- **Backups:** everything is in the data folder: `famlogic.json` (people and settings), `chat.db` (messages), `media/` (photos) and `vault/` (notes, unless you keep them elsewhere). The server keeps daily copies of the first two in `backups/`, and **Settings → Server → Download backup** saves one now. To restore, stop the container, put the files back, and start it.
 
 ## Building from source
 
@@ -122,6 +133,7 @@ Official APKs are signed with one project key and published by CI when the versi
 - [docs/CHAT.md](docs/CHAT.md): chat
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): modules, roles and devices, the Markdown vault, AI agents, CalDAV
 - [docs/API.md](docs/API.md): the HTTP API
+- [docs/agents/famlogic-vault.md](docs/agents/famlogic-vault.md): how the notes vault is written (for people and AI agents)
 - [docs/PEBBLE.md](docs/PEBBLE.md), [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md): Pebble design notes and store plans
 - [ROADMAP.md](ROADMAP.md)
 

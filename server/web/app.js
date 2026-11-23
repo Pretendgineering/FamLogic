@@ -1333,7 +1333,24 @@ function renderSettings() {
       ["Modules on", modules.filter((m) => m.enabled).map((m) => m.name + (m.available ? "" : " (soon)")).join(", ") || "none"],
       ["Address search", serverFeatures.includes("geocode") ? "on" : "off"], ["Quiet-phone alerts", serverFeatures.includes("silence") ? "on" : "off"]];
     $("#server-facts").replaceChildren(...facts.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]));
+    renderVault();
   }
+}
+
+// Where the family's Markdown notes are, and whether FamLogic can write there.
+async function renderVault() {
+  let v;
+  try { v = await api("GET", "/api/admin/vault"); } catch { return; }
+  const ok = v.writable;
+  const facts = [["Folder (in the container)", v.path || "not set up"],
+    ["Status", ok ? `working, ${v.notes} notes` : "can't write there"],
+    ["Files belong to user", v.user]];
+  if (v.error) facts.push(["Problem", v.error]);
+  $("#vault-facts").replaceChildren(...facts.flatMap(([k, val]) => [el("dt", {}, k), el("dd", {}, val)]));
+  $("#vault-help").replaceChildren(
+    "Lists, chores, meals and people as Markdown files, for Obsidian, Syncthing and AI agents. To keep them in a folder on the host, mount it at ",
+    el("code", {}, "/data/vault"), " in docker-compose.yml and set ", el("code", {}, "PUID"), "/", el("code", {}, "PGID"),
+    " to your user (see the README). How the notes are written: ", el("a", { href: "/api/v1/vault/guide", target: "_blank" }, "the formatting guide"), ".");
 }
 
 $("#modules-save").addEventListener("click", async () => {

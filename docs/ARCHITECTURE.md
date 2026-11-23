@@ -70,7 +70,9 @@ Parents and admins already log in to the console with their own accounts (0.16.0
 
 ## Vault: family content as Markdown (Phase 3 design)
 
-`/data/vault/` is an ordinary Obsidian-compatible folder. FamLogic reads and writes it, watches it for changes made elsewhere (Obsidian Sync/Syncthing, an agent, a text editor), and treats the files as the source of truth for chores, lists, menus and schedules. Chat and location stay in the database (too much, too fast).
+`/data/vault/` (or `VAULT_DIR`) is an ordinary Obsidian-compatible folder. It can be a folder on the host (a bind mount): the server starts as root only to hand its folders to `PUID:PGID` (65532 unless set), then runs as that user, so the files belong to the person who owns the folder. Without `PUID`, a mounted folder is never taken over; the console says if FamLogic can't write there. The format is in [agents/famlogic-vault.md](agents/famlogic-vault.md) (also written into the vault as `AGENTS.md` and served at `/api/v1/vault/guide`). Today the server keeps the folders, the home note, the guide and the **People** notes (front-matter fields it owns: `type`, `famlogic_id`, `role`, `color`, `emoji`); the modules move onto the other note types in Phase 4.
+
+ FamLogic reads and writes it, watches it for changes made elsewhere (Obsidian Sync/Syncthing, an agent, a text editor), and treats the files as the source of truth for chores, lists, menus and schedules. Chat and location stay in the database (too much, too fast).
 
 ```
 vault/

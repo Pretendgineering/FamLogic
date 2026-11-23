@@ -70,7 +70,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 
 ### 🔨 Phase 4: Tasks, tags and the Markdown vault
 - **Tags on everything:** to-dos, chores, routines, events and list items can be tagged to people (`@Sam`) and groups (`#kids`, `#parents`), so each person's screens show what's theirs.
-- The **vault** folder of Markdown files (Obsidian-friendly; see ARCHITECTURE.md → Vault), watched for edits made elsewhere.
+- The **vault** folder of Markdown files (Obsidian-friendly; see ARCHITECTURE.md → Vault), watched for edits made elsewhere. ✅ Started: the vault's location (inside the container, or a host folder with `PUID`/`PGID`), People notes, and the formatting guide for agents (`docs/agents/famlogic-vault.md`, `AGENTS.md` in the vault, `/api/v1/vault/guide`).
 - **To-dos and lists:** shared lists (shopping, packing) and personal to-dos with due dates and **time of day** (morning, after school, evening), so screens show what matters now. Quick add from the app, console, Pebble and Index 01.
 - **Chores:** who, what, how often; tick off anywhere; optional stars for children.
 - **Routines and daily rhythms:** checklists like *Morning*, *After school* or *Bedtime*, and a **daily rhythm** set in the console (mini schedules per day, per person or group: "07:00 Morning, 15:30 After school, 19:30 Bedtime", "13:00 Nap time" for the little one). Screens switch to the current routine on their own.
