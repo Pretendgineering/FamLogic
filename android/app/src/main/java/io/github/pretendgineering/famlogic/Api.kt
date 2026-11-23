@@ -22,6 +22,8 @@ data class MemberLocation(
     val watch: Int = 0,
     /** Speed at this fix (m/s), 0 if unknown. */
     val speed: Double = 0.0,
+    /** Direction of travel (1-360 degrees, 360 = north), 0 if unknown or still. */
+    val heading: Int = 0,
 )
 
 data class Member(
@@ -484,7 +486,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
     /** Sends a fix; the reply carries any alerts newer than [since]. */
     suspend fun sendLocation(
         lat: Double, lon: Double, accuracy: Float, speed: Float, time: Long, battery: Int, charging: Boolean,
-        since: Long, saving: Boolean = false, driving: Boolean = false, watchBattery: Int = 0,
+        since: Long, saving: Boolean = false, driving: Boolean = false, watchBattery: Int = 0, heading: Int = 0,
     ): EventBatch? {
         val body = JSONObject()
             .put("lat", lat).put("lon", lon)
@@ -493,6 +495,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
         if (saving) body.put("saving", true)
         if (driving) body.put("driving", true)
         if (watchBattery > 0) body.put("watch", watchBattery)
+        if (heading > 0) body.put("heading", heading)
         return parseEvents(request("POST", "/api/location?since=$since", body), since)
     }
 
@@ -839,6 +842,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
                     driving = it.optBoolean("driving", false),
                     watch = it.optInt("watch", 0),
                     speed = it.optDouble("speed", 0.0),
+                    heading = it.optInt("heading", 0),
                 )
             },
         )

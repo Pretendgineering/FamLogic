@@ -46,7 +46,11 @@ import java.io.IOException
 /** What the fence dialog is doing: adding (at a spot, or anywhere) or editing. */
 sealed class PlaceEdit {
     /** A new fence; lat/lon are null when it wasn't made from a spot on the map. */
-    data class Add(val lat: Double? = null, val lon: Double? = null) : PlaceEdit()
+    data class Add(
+        val lat: Double? = null, val lon: Double? = null,
+        /** Already chosen on the map, when "More…" was opened from the map editor. */
+        val name: String = "", val radius: Double? = null, val circleId: String? = null,
+    ) : PlaceEdit()
     data class Edit(val place: Place) : PlaceEdit()
 }
 
@@ -70,9 +74,10 @@ fun PlaceDialog(
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val existing = (edit as? PlaceEdit.Edit)?.place
-    var name by remember { mutableStateOf(existing?.name ?: "") }
-    var radius by remember { mutableDoubleStateOf(existing?.radius ?: 150.0) }
-    var circleId by remember { mutableStateOf(existing?.circleId ?: defaultCircle.ifEmpty { circles.firstOrNull()?.id ?: "" }) }
+    val adding = edit as? PlaceEdit.Add
+    var name by remember { mutableStateOf(existing?.name ?: adding?.name ?: "") }
+    var radius by remember { mutableDoubleStateOf(existing?.radius ?: adding?.radius ?: 150.0) }
+    var circleId by remember { mutableStateOf(existing?.circleId ?: adding?.circleId ?: defaultCircle.ifEmpty { circles.firstOrNull()?.id ?: "" }) }
     // Where the fence goes.
     val start = when (edit) {
         is PlaceEdit.Add -> if (edit.lat != null && edit.lon != null) edit.lat to edit.lon else null

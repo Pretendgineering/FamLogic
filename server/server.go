@@ -660,6 +660,9 @@ func cleanLocation(l *Location) bool {
 	if l.Speed < 0 || math.IsNaN(l.Speed) {
 		l.Speed = 0
 	}
+	if l.Heading < 0 || l.Heading > 360 {
+		l.Heading = 0
+	}
 	l.Received = now
 	return true
 }

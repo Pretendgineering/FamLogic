@@ -84,7 +84,15 @@ private class MapState {
     var onLongPress: (Double, Double) -> Unit = { _, _ -> }
     var onPlaceClick: (Place) -> Unit = {}
     var onMemberClick: (String) -> Unit = {}
+    var onGroupClick: (List<String>) -> Unit = {}
     var onMapTap: () -> Unit = {}
+    /** The people last drawn, so pins can regroup when the zoom changes. */
+    var located: List<Member> = emptyList()
+    var groupZoom = -1.0
+    val groups = mutableListOf<Marker>()
+    var pulse: SosPulseOverlay? = null
+    var inset = 0
+    var fence: FenceEditOverlay? = null
 }
 
 const val STALE_MS = 30 * 60 * 1000L
@@ -104,8 +112,15 @@ fun OsmMap(
     onPlaceClick: (Place) -> Unit = {},
     /** A person's pin was tapped (their id). */
     onMemberClick: (String) -> Unit = {},
+    /** A pin standing for several people in one spot was tapped, and they can't be spread out further. */
+    onGroupClick: (List<String>) -> Unit = {},
     /** The map itself was tapped (not a pin or fence). */
     onMapTap: () -> Unit = {},
+    /** Pixels at the bottom covered by something (the people sheet): fitting keeps people above it. */
+    bottomInset: Int = 0,
+    /** A fence being placed or changed on the map (drawn with handles), and its changes. */
+    fenceDraft: FenceDraft? = null,
+    onFenceDraft: (FenceDraft, done: Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val state = remember { MapState() }
@@ -113,7 +128,9 @@ fun OsmMap(
     state.onLongPress = onLongPress
     state.onPlaceClick = onPlaceClick
     state.onMemberClick = onMemberClick
+    state.onGroupClick = onGroupClick
     state.onMapTap = onMapTap
+    state.inset = bottomInset
     val mapView = remember {
         MapView(context).apply {
             setMultiTouchControls(true)
@@ -136,6 +153,14 @@ fun OsmMap(
                 }),
             )
             overlays.add(CopyrightOverlay(context))
+            // Zooming changes who is "in the same spot": regroup the pins.
+            addMapListener(object : org.osmdroid.events.MapListener {
+                override fun onScroll(event: org.osmdroid.events.ScrollEvent?) = false
+                override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
+                    if (kotlin.math.abs(zoomLevelDouble - state.groupZoom) > 0.25) drawPeople(this@apply, state)
+                    return false
+                }
+            })
         }
     }
 
@@ -191,6 +216,14 @@ fun OsmMap(
             state.drawnPlaces = null // redraw fences in the other style
         }
 
+        // The fence being edited, on top of everything so its handles get the touch first.
+        val fence = state.fence ?: FenceEditOverlay(context.resources.displayMetrics.density).also { state.fence = it }
+        fence.accent = if (dark) Color.rgb(189, 147, 249) else Color.rgb(110, 72, 214)
+        fence.onChange = onFenceDraft
+        if (!fence.dragging) fence.draft = fenceDraft
+        map.overlays.remove(fence)
+        if (fenceDraft != null) map.overlays.add(fence)
+
         if (state.drawnPlaces != places) {
             drawPlaces(map, state, places, dark)
             state.drawnPlaces = places
@@ -214,26 +247,8 @@ fun OsmMap(
         }
 
         val located = members.filter { it.loc != null && !it.paused }
-        val keep = located.map { it.id }.toSet()
-        state.markers.keys.filter { it !in keep }.forEach { id ->
-            map.overlays.remove(state.markers.remove(id))
-        }
-        for (m in located) {
-            val loc = m.loc!!
-            val marker = state.markers.getOrPut(m.id) {
-                Marker(map).also {
-                    it.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    map.overlays.add(it)
-                }
-            }
-            val stale = System.currentTimeMillis() - loc.time > STALE_MS
-            marker.position = GeoPoint(loc.lat, loc.lon)
-            marker.icon = BitmapDrawable(context.resources, avatarBitmap(context, m.name, m.color, stale, sos = m.sosSince > 0, emoji = m.emoji, driving = isDriving(m)))
-            // No osmdroid pop-up: the app shows its own card for the person.
-            marker.setInfoWindow(null)
-            val id = m.id
-            marker.setOnMarkerClickListener { _, _ -> state.onMemberClick(id); true }
-        }
+        state.located = located
+        drawPeople(map, state)
 
         if (camera != null && camera.seq != state.appliedSeq) {
             state.appliedSeq = camera.seq
@@ -243,37 +258,37 @@ fun OsmMap(
             val apply: () -> Unit = {
                 if (jump) {
                     when (camera) {
-                        is CameraCommand.Center -> { map.controller.setZoom(16.0); map.controller.setCenter(GeoPoint(camera.lat, camera.lon)) }
+                        is CameraCommand.Center -> { map.controller.setZoom(16.0); map.controller.setCenter(aboveInset(GeoPoint(camera.lat, camera.lon), 16.0, state.inset)) }
                         is CameraCommand.FitPoints -> camera.points.map { GeoPoint(it.lat, it.lon) }.takeIf { it.size >= 2 }?.let {
-                            map.zoomToBoundingBox(boxAround(it, 1.25f), false, (56 * context.resources.displayMetrics.density).toInt(), 17.0, null)
+                            map.zoomToBoundingBox(clearOfInset(boxAround(it, 1.25f), map, state.inset), false, (56 * context.resources.displayMetrics.density).toInt(), 17.0, null)
                         }
                         is CameraCommand.FitAll -> {
                             val pts = located.map { GeoPoint(it.loc!!.lat, it.loc.lon) }
                             when {
-                                pts.size == 1 -> { map.controller.setZoom(15.0); map.controller.setCenter(pts[0]) }
-                                pts.size > 1 -> map.zoomToBoundingBox(boxAround(pts, 1.3f), false, 80, 16.0, null)
+                                pts.size == 1 -> { map.controller.setZoom(15.0); map.controller.setCenter(aboveInset(pts[0], 15.0, state.inset)) }
+                                pts.size > 1 -> map.zoomToBoundingBox(clearOfInset(boxAround(pts, 1.3f), map, state.inset), false, 80, 16.0, null)
                             }
                         }
                     }
                 } else when (camera) {
                     is CameraCommand.Center -> {
                         // One smooth glide (pan and zoom together).
-                        map.controller.animateTo(GeoPoint(camera.lat, camera.lon), maxOf(map.zoomLevelDouble, 16.0), 700L)
+                        maxOf(map.zoomLevelDouble, 16.0).let { z -> map.controller.animateTo(aboveInset(GeoPoint(camera.lat, camera.lon), z, state.inset), z, 700L) }
                     }
                     is CameraCommand.FitPoints -> {
                         val pts = camera.points.map { GeoPoint(it.lat, it.lon) }
                         if (pts.size >= 2) {
                             val box = boxAround(pts, 1.25f)
                             // Room around the route for the pins and the trip summary on top.
-                            map.zoomToBoundingBox(box, true, (56 * context.resources.displayMetrics.density).toInt(), 17.0, 700L)
+                            map.zoomToBoundingBox(clearOfInset(box, map, state.inset), true, (56 * context.resources.displayMetrics.density).toInt(), 17.0, 700L)
                         }
                     }
                     is CameraCommand.FitAll -> {
                         val pts = located.map { GeoPoint(it.loc!!.lat, it.loc.lon) }
                         when {
-                            pts.size == 1 -> map.controller.animateTo(pts[0], 15.0, 700L)
+                            pts.size == 1 -> map.controller.animateTo(aboveInset(pts[0], 15.0, state.inset), 15.0, 700L)
                             pts.size > 1 -> {
-                                map.zoomToBoundingBox(boxAround(pts, 1.3f), true, 80, 16.0, null)
+                                map.zoomToBoundingBox(clearOfInset(boxAround(pts, 1.3f), map, state.inset), true, 80, 16.0, null)
                             }
                         }
                     }
@@ -281,6 +296,7 @@ fun OsmMap(
                 if (located.isNotEmpty() || camera !is CameraCommand.FitAll) state.placed = true
                 MapMemory.center = map.mapCenter as? GeoPoint ?: GeoPoint(map.mapCenter.latitude, map.mapCenter.longitude)
                 MapMemory.zoom = map.zoomLevelDouble
+                drawPeople(map, state)
             }
             // Before its first layout the map has no size to fit anything into.
             if (map.width > 0 && map.height > 0) map.post(apply) else map.addOnFirstLayoutListener { _, _, _, _, _ -> apply() }
@@ -492,4 +508,219 @@ private fun drawPlaces(map: MapView, state: MapState, places: List<Place>, dark:
         map.overlays.add(2 + 2 * i, label)
         state.places[p.id] = poly to label
     }
+}
+
+
+/**
+ * People's pins. Anyone within a pin's width of someone else (at this zoom) shares
+ * one pin with their faces stacked; a tap on it zooms in to spread them out. Each
+ * pin has a small "how long ago" tag, an arrow for the way they're heading, and
+ * a pulsing red halo during an SOS.
+ */
+private fun drawPeople(map: MapView, state: MapState) {
+    val context = map.context
+    val d = context.resources.displayMetrics.density
+    val located = state.located
+    state.groupZoom = map.zoomLevelDouble
+    // Group by distance on screen at the current zoom.
+    val proj = map.projection
+    val pts = located.associate { it.id to proj.toPixels(GeoPoint(it.loc!!.lat, it.loc.lon), null) }
+    val reach = 34 * d
+    val groups = mutableListOf<MutableList<Member>>()
+    for (m in located.sortedByDescending { it.sosSince > 0 }) {
+        val p = pts.getValue(m.id)
+        val g = groups.firstOrNull { grp ->
+            val q = pts.getValue(grp[0].id)
+            val dx = (p.x - q.x).toFloat()
+            val dy = (p.y - q.y).toFloat()
+            dx * dx + dy * dy < reach * reach
+        }
+        if (g != null) g += m else groups += mutableListOf(m)
+    }
+    val singles = groups.filter { it.size == 1 }.map { it[0] }
+    val keep = singles.map { it.id }.toSet()
+    state.markers.keys.filter { it !in keep }.forEach { id -> map.overlays.remove(state.markers.remove(id)) }
+    state.groups.forEach { map.overlays.remove(it) }
+    state.groups.clear()
+    val now = System.currentTimeMillis()
+    for (m in singles) {
+        val loc = m.loc!!
+        val marker = state.markers.getOrPut(m.id) {
+            Marker(map).also { map.overlays.add(it) }
+        }
+        val stale = now - loc.time > STALE_MS
+        val pin = pinBitmap(context, m.name, m.color, stale, sos = m.sosSince > 0, emoji = m.emoji,
+            driving = isDriving(m), heading = if (now - loc.time < 10 * 60_000) loc.heading else 0, age = shortAgo(loc.time, now))
+        marker.icon = BitmapDrawable(context.resources, pin.bitmap)
+        marker.setAnchor(Marker.ANCHOR_CENTER, pin.anchorY)
+        marker.position = GeoPoint(loc.lat, loc.lon)
+        marker.setInfoWindow(null) // the app shows its own card for the person
+        val id = m.id
+        marker.setOnMarkerClickListener { _, _ -> state.onMemberClick(id); true }
+    }
+    for (g in groups.filter { it.size > 1 }) {
+        val lat = g.map { it.loc!!.lat }.average()
+        val lon = g.map { it.loc!!.lon }.average()
+        val marker = Marker(map)
+        val newest = g.maxOf { it.loc!!.time }
+        val pin = groupBitmap(context, g, shortAgo(newest, now))
+        marker.icon = BitmapDrawable(context.resources, pin.bitmap)
+        marker.setAnchor(Marker.ANCHOR_CENTER, pin.anchorY)
+        marker.position = GeoPoint(lat, lon)
+        marker.setInfoWindow(null)
+        val ids = g.map { it.id }
+        marker.setOnMarkerClickListener { _, mv ->
+            val box = BoundingBox.fromGeoPoints(g.map { GeoPoint(it.loc!!.lat, it.loc.lon) })
+            val spreadable = box.latitudeSpan > 0.00005 || box.longitudeSpanWithDateLine > 0.00005
+            if (spreadable && mv.zoomLevelDouble < mv.maxZoomLevel - 0.5) {
+                mv.controller.animateTo(GeoPoint(lat, lon), (mv.zoomLevelDouble + 2.5).coerceAtMost(mv.maxZoomLevel), 500L)
+            } else {
+                state.onGroupClick(ids) // same spot: say who's there
+            }
+            true
+        }
+        map.overlays.add(marker)
+        state.groups += marker
+    }
+    // SOS halos pulse under the pins.
+    val sos = located.filter { it.sosSince > 0 }.map { GeoPoint(it.loc!!.lat, it.loc.lon) }
+    val pulse = state.pulse ?: SosPulseOverlay(d).also { state.pulse = it }
+    pulse.points = sos
+    // Just under the first person's pin (above fences and trails).
+    map.overlays.remove(pulse)
+    val people = state.markers.values.toSet() + state.groups
+    val at = map.overlays.indexOfFirst { it in people }
+    if (at >= 0) map.overlays.add(at, pulse) else map.overlays.add(pulse)
+    map.invalidate()
+}
+
+/** "now", "5m", "2h", "3d": short enough to sit under a pin. */
+internal fun shortAgo(time: Long, now: Long = System.currentTimeMillis()): String {
+    val min = ((now - time) / 60_000).coerceAtLeast(0)
+    return when {
+        min < 1 -> "now"
+        min < 60 -> "${min}m"
+        min < 48 * 60 -> "${min / 60}h"
+        else -> "${min / (24 * 60)}d"
+    }
+}
+
+/** A pin's picture and where its point is (the face's centre, as a fraction of the height). */
+internal class Pin(val bitmap: Bitmap, val anchorY: Float)
+
+/** One person's pin: their face, a direction arrow, an SOS ring, a driving badge and a time tag. */
+internal fun pinBitmap(
+    context: Context, name: String, color: String, faded: Boolean, sos: Boolean = false, emoji: String = "",
+    driving: Boolean = false, heading: Int = 0, age: String = "",
+): Pin {
+    val d = context.resources.displayMetrics.density
+    val margin = 9 * d // room for the arrow or the SOS ring
+    val face = avatarBitmap(context, name, color, faded, sos = sos, emoji = emoji, driving = driving)
+    val w = (40 * d + 2 * margin).toInt()
+    val tagH = if (age.isNotEmpty()) (15 * d).toInt() else 0
+    val bmp = Bitmap.createBitmap(w, w + tagH, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val cx = w / 2f
+    val cy = w / 2f
+    if (heading > 0) {
+        // A small arrow just outside the circle, pointing the way they're going.
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = parseColor(color)
+            setShadowLayer(1.5f * d, 0f, 0.5f * d, Color.argb(110, 0, 0, 0))
+        }
+        val r = 20 * d
+        val path = android.graphics.Path().apply {
+            moveTo(cx, cy - r - 8 * d)
+            lineTo(cx - 6 * d, cy - r + 1 * d)
+            lineTo(cx + 6 * d, cy - r + 1 * d)
+            close()
+        }
+        c.save()
+        c.rotate(heading.toFloat(), cx, cy)
+        c.drawPath(path, p)
+        c.restore()
+    }
+    c.drawBitmap(face, cx - face.width / 2f, cy - face.height / 2f, null)
+    if (age.isNotEmpty()) drawTag(c, age, cx, w - 4 * d, d, faded)
+    return Pin(bmp, cy / bmp.height)
+}
+
+/** Several people in one spot: up to three faces fanned out, and "+n" for more. */
+internal fun groupBitmap(context: Context, people: List<Member>, age: String): Pin {
+    val d = context.resources.displayMetrics.density
+    val shown = people.sortedByDescending { it.sosSince > 0 }.take(3)
+    val step = 18 * d
+    val faceW = 40 * d
+    val w = (faceW + step * (shown.size - 1) + (if (people.size > 3) 22 * d else 0f) + 8 * d).toInt()
+    val faceH = (faceW + 14 * d).toInt()
+    val tagH = (15 * d).toInt()
+    val bmp = Bitmap.createBitmap(w, faceH + tagH, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val now = System.currentTimeMillis()
+    shown.forEachIndexed { i, m ->
+        val face = avatarBitmap(context, m.name, m.color, now - m.loc!!.time > STALE_MS, sos = m.sosSince > 0, emoji = m.emoji)
+        c.drawBitmap(face, 4 * d + i * step - (face.width - faceW) / 2f, faceH / 2f - face.height / 2f, null)
+    }
+    if (people.size > 3) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = Color.rgb(43, 36, 64); textSize = 13 * d; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
+        val bx = w - 13 * d
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = Color.WHITE; setShadowLayer(1.5f * d, 0f, 0.5f * d, Color.argb(90, 0, 0, 0)) }
+        c.drawCircle(bx, faceH / 2f, 11 * d, bg)
+        c.drawText("+${people.size - 3}", bx, faceH / 2f - (p.descent() + p.ascent()) / 2, p)
+    }
+    drawTag(c, age, w / 2f, faceH - 2 * d, d, false)
+    return Pin(bmp, (faceH / 2f) / bmp.height)
+}
+
+/** The small rounded "5m" tag under a pin. */
+private fun drawTag(c: Canvas, text: String, cx: Float, top: Float, d: Float, faded: Boolean) {
+    val t = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (faded) Color.rgb(150, 110, 30) else Color.rgb(43, 36, 64)
+        textSize = 10.5f * d
+        typeface = Typeface.DEFAULT_BOLD
+        textAlign = Paint.Align.CENTER
+    }
+    val tw = t.measureText(text) + 10 * d
+    val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; setShadowLayer(1.5f * d, 0f, 0.5f * d, Color.argb(90, 0, 0, 0)) }
+    val rect = android.graphics.RectF(cx - tw / 2, top, cx + tw / 2, top + 14 * d)
+    c.drawRoundRect(rect, 7 * d, 7 * d, bg)
+    c.drawText(text, cx, rect.centerY() - (t.descent() + t.ascent()) / 2, t)
+}
+
+/** Pulsing red rings under anyone with an active SOS, so they can't be missed. */
+internal class SosPulseOverlay(private val d: Float) : org.osmdroid.views.overlay.Overlay() {
+    var points: List<GeoPoint> = emptyList()
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val p = android.graphics.Point()
+
+    override fun draw(c: Canvas, map: MapView, shadow: Boolean) {
+        if (shadow || points.isEmpty()) return
+        val t = (android.os.SystemClock.uptimeMillis() % 1400L) / 1400f
+        for (g in points) {
+            map.projection.toPixels(g, p)
+            // Two rings, half a beat apart, growing and fading.
+            for (phase in floatArrayOf(t, (t + .5f) % 1f)) {
+                paint.color = Color.argb((150 * (1 - phase)).toInt(), 224, 64, 80)
+                c.drawCircle(p.x.toFloat(), p.y.toFloat(), 22 * d + phase * 34 * d, paint)
+            }
+        }
+        map.postInvalidateDelayed(33)
+    }
+}
+
+
+/** A point moved south so that, centred on it, the real point sits in the middle of the part of the map not covered. */
+private fun aboveInset(p: GeoPoint, zoom: Double, inset: Int): GeoPoint {
+    if (inset <= 0) return p
+    val ts = MapView.getTileSystem()
+    val y = ts.getY01FromLatitude(p.latitude, true) + (inset / 2.0) / org.osmdroid.util.TileSystem.MapSize(zoom)
+    return GeoPoint(ts.getLatitudeFromY01(y.coerceIn(0.0, 1.0), true), p.longitude)
+}
+
+/** A box stretched south by the covered share of the map, so what it holds lands above the cover. */
+private fun clearOfInset(box: BoundingBox, map: MapView, inset: Int): BoundingBox {
+    val h = map.height
+    if (inset <= 0 || h <= 0 || inset >= h * 0.8) return box
+    val extra = box.latitudeSpan * inset / (h - inset).toDouble()
+    return BoundingBox(box.latNorth, box.lonEast, (box.latSouth - extra).coerceAtLeast(-85.0), box.lonWest)
 }

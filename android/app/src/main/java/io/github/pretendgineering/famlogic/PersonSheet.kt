@@ -1,5 +1,8 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.sp
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
@@ -146,40 +149,111 @@ fun PersonSheet(
                     error != null -> Text(error!!, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     list == null -> Text("Loading…", style = MaterialTheme.typography.bodyMedium)
                     list.isEmpty() -> Text("No trips yet.", style = MaterialTheme.typography.bodyMedium)
-                    else -> LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(list, key = { it.start }) { t -> TripRow(t) { onShowTrip(t) } }
-                    }
+                    else -> TripTimeline(list, onShowTrip)
                 }
             }
         }
     }
 }
 
+/** "🚗", "🚲" or "🚶", from how fast the trip went on average. */
+fun Trip.mode(): String = when {
+    avgSpeed >= 6.5 -> "🚗"
+    avgSpeed >= 2.2 -> "🚲"
+    else -> "🚶"
+}
+
+/** A trip as one line of text, for sharing: "🚗 Home → School · 8:05–8:27 · 6.2 km". */
+fun Trip.shareText(context: android.content.Context, who: String): String {
+    val times = DateUtils.formatDateTime(context, start, DateUtils.FORMAT_SHOW_TIME) +
+        if (ongoing) " (still going)" else "–" + DateUtils.formatDateTime(context, end, DateUtils.FORMAT_SHOW_TIME)
+    return "${mode()} $who: ${title()} · $times · ${Units.distance(distance)} in ${Units.duration(end - start)}"
+}
+
+/**
+ * Someone's day as a timeline: where they stopped (and for how long) and the trips
+ * between, newest first, one day at a time. Tap a trip to see its route on the map.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun TripRow(t: Trip, onClick: () -> Unit) {
+private fun TripTimeline(trips: List<Trip>, onShowTrip: (Trip) -> Unit) {
     val context = LocalContext.current
-    val day = when {
-        DateUtils.isToday(t.start) -> "Today"
-        DateUtils.isToday(t.start + DateUtils.DAY_IN_MILLIS) -> "Yesterday"
-        else -> DateUtils.formatDateTime(context, t.start, DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_ABBREV_WEEKDAY)
+    val zone = java.util.TimeZone.getDefault()
+    fun dayOf(t: Long): Long { val cal = java.util.Calendar.getInstance(zone).apply { timeInMillis = t; set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }; return cal.timeInMillis }
+    val days = trips.map { dayOf(it.start) }.distinct().sortedDescending()
+    var day by remember(trips) { mutableStateOf(days.first()) }
+    fun dayName(d: Long) = when {
+        DateUtils.isToday(d) -> "Today"
+        DateUtils.isToday(d + DateUtils.DAY_IN_MILLIS) -> "Yesterday"
+        else -> DateUtils.formatDateTime(context, d, DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_ABBREV_WEEKDAY or DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH)
     }
-    val times = DateUtils.formatDateTime(context, t.start, DateUtils.FORMAT_SHOW_TIME) +
-        if (t.ongoing) "" else "–" + DateUtils.formatDateTime(context, t.end, DateUtils.FORMAT_SHOW_TIME)
-    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(t.title(), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                if (t.ongoing) Text("Under way", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            }
-            Text(
-                "$day $times · ${Units.duration(t.end - t.start)} · ${Units.distance(t.distance)}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                "Average ${Units.speed(t.avgSpeed)} · top ${Units.speed(t.topSpeed)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        days.take(7).forEach { d ->
+            androidx.compose.material3.FilterChip(selected = d == day, onClick = { day = d }, label = { Text(dayName(d)) })
         }
+    }
+    val today = trips.filter { dayOf(it.start) == day }.sortedByDescending { it.start }
+    val line = MaterialTheme.colorScheme.outlineVariant
+    fun time(t: Long) = DateUtils.formatDateTime(context, t, DateUtils.FORMAT_SHOW_TIME)
+    LazyColumn(Modifier.heightIn(max = 420.dp)) {
+        today.forEachIndexed { i, t ->
+            // The stop after this trip (until the next trip, or now).
+            val next = today.getOrNull(i - 1)
+            if (!t.ongoing) item(key = "stop${t.start}") {
+                val until = next?.start
+                TimelineRow(dot = true, line = line) {
+                    Text(t.to.ifEmpty { t.toNear.let { if (it.isNotEmpty()) "Near $it" else "A stop" } }, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (until != null) "${time(t.end)}–${time(until)} · ${Units.duration(until - t.end)}" else "Since ${time(t.end)}",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            item(key = "trip${t.start}") {
+                TimelineRow(dot = false, line = line, onClick = { onShowTrip(t) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(t.mode(), modifier = Modifier.padding(end = 6.dp))
+                        Text(t.title(), fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        if (t.ongoing) Text("Under way", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Text(
+                        "${time(t.start)}${if (t.ongoing) "" else "–" + time(t.end)} · ${Units.distance(t.distance)} · ${Units.duration(t.end - t.start)} · top ${Units.speed(t.topSpeed)}",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        // Where the day started.
+        today.lastOrNull()?.let { first ->
+            item(key = "start") {
+                TimelineRow(dot = true, line = line, last = true) {
+                    Text(first.from.ifEmpty { first.fromNear.let { if (it.isNotEmpty()) "Near $it" else "Start" } }, fontWeight = FontWeight.SemiBold)
+                    Text("Until ${time(first.start)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** One step of the timeline: a dot (a stop) or a stretch of line (a trip), with its text beside it. */
+@Composable
+private fun TimelineRow(dot: Boolean, line: androidx.compose.ui.graphics.Color, last: Boolean = false, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Show on the map", onClick = onClick) else Modifier),
+    ) {
+        androidx.compose.foundation.Canvas(Modifier.width(28.dp).fillMaxHeight()) {
+            val x = size.width / 2
+            if (dot) {
+                drawLine(line, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, if (last) size.height / 2 else size.height), 3.dp.toPx())
+                drawCircle(accent, 7.dp.toPx(), androidx.compose.ui.geometry.Offset(x, size.height / 2))
+                drawCircle(androidx.compose.ui.graphics.Color.White, 3.dp.toPx(), androidx.compose.ui.geometry.Offset(x, size.height / 2))
+            } else {
+                drawLine(accent.copy(alpha = .7f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), 4.dp.toPx(),
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
+            }
+        }
+        Column(Modifier.weight(1f).padding(start = 8.dp, top = 8.dp, bottom = 8.dp)) { content() }
     }
 }

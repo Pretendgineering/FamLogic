@@ -22,10 +22,12 @@ type Location struct {
 	Lon      float64 `json:"lon"`
 	Accuracy float64 `json:"acc"`             // metres
 	Speed    float64 `json:"speed,omitempty"` // metres per second
-	Battery  int     `json:"battery"`         // 0-100, -1 if unknown
-	Charging bool    `json:"charging"`
-	Time     int64   `json:"time"`     // when the fix was taken (unix ms, from the phone)
-	Received int64   `json:"received"` // when the server got it (unix ms)
+	// Direction of travel in degrees (1-360, 360 = north), 0 if unknown or standing still.
+	Heading  int   `json:"heading,omitempty"`
+	Battery  int   `json:"battery"` // 0-100, -1 if unknown
+	Charging bool  `json:"charging"`
+	Time     int64 `json:"time"`     // when the fix was taken (unix ms, from the phone)
+	Received int64 `json:"received"` // when the server got it (unix ms)
 	// The phone is updating less often to save its low battery.
 	Saving bool `json:"saving,omitempty"`
 	// The phone thinks its person is driving (sustained speed; see the app).

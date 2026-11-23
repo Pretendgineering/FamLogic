@@ -3,8 +3,8 @@ package main
 import (
 	"net/http/httptest"
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 

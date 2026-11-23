@@ -365,15 +365,7 @@ object PebbleBridge {
         return "$where · ${ago(loc.time)}"
     }
 
-    private fun ago(t: Long): String {
-        val min = (System.currentTimeMillis() - t) / 60_000
-        return when {
-            min < 1 -> "now"
-            min < 60 -> "${min}m ago"
-            min < 48 * 60 -> "${min / 60}h ago"
-            else -> "${min / 1440}d ago"
-        }
-    }
+    private fun ago(t: Long): String = io.github.pretendgineering.famlogic.Seen.short(t).let { if (it == "now") it else "$it ago" }
 
     private fun statusOf(m: Member): String {
         val loc = m.loc

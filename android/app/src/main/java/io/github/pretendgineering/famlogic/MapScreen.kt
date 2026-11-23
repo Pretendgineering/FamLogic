@@ -1,5 +1,7 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.filled.Warning
@@ -194,6 +196,15 @@ fun MapScreen(
     // The person whose sheet (directions, alerts, trips) is open, and a trip drawn on the map.
     var sheetFor by remember { mutableStateOf<String?>(null) }
     var shownTrip by remember { mutableStateOf<Trip?>(null) }
+    // How much of the map the people sheet covers (px), so fitting keeps everyone above it.
+    var mapCovered by remember { mutableIntStateOf(0) }
+    // Several people in one spot, after tapping their shared pin.
+    var groupBubble by remember { mutableStateOf<List<String>?>(null) }
+    // A trip being shared to a chat.
+    var sharingTrip by remember { mutableStateOf<Trip?>(null) }
+    // A fence being placed or changed right on the map.
+    var fenceDraft by remember { mutableStateOf<FenceDraft?>(null) }
+    if (fenceDraft != null) BackHandler { fenceDraft = null }
     // A short-lived card at the top of the map for the pin you tapped.
     var bubbleFor by remember { mutableStateOf<String?>(null) }
     var bubbleSeq by remember { mutableIntStateOf(0) }
@@ -581,6 +592,11 @@ fun MapScreen(
         )
     }
 
+    sharingTrip?.let { t ->
+        val who = members.find { it.id == selected }?.name ?: ""
+        ShareToChatDialog(prefs, t.shareText(context, who), onDone = { sharingTrip = null })
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -667,7 +683,8 @@ fun MapScreen(
                 )
             }
 
-            if (circles.size > 1) {
+            // Group filter chips, floating over the top of the map.
+            val chips: @Composable () -> Unit = { if (circles.size > 1) {
                 LazyRow(
                     Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -684,30 +701,32 @@ fun MapScreen(
                                 camera = CameraCommand.FitAll(++cameraSeq)
                             },
                             label = { Text(name) },
+                            colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = FilterChipDefaults.filterChipElevation(elevation = 3.dp),
                         )
                     }
                 }
-            }
+            } }
 
-            // Phones and portrait tablets: the map above the people. Landscape tablets: side by side.
+            // Phones and portrait tablets: the map fills the screen, the people in a sheet over it.
+            // Landscape tablets: the people beside the map.
             val config = LocalConfiguration.current
             val wide = config.screenWidthDp >= 720 && config.screenWidthDp > config.screenHeightDp
-            // The map, as a raised card.
+            // The map, edge to edge.
             val mapCard: @Composable (Modifier) -> Unit = { mapMod ->
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                shadowElevation = 3.dp,
-                modifier = mapMod,
-            ) {
+            Box(mapMod) {
                 OsmMap(
                     members = shown,
-                    places = if (circleFilter.isEmpty()) places else places.filter { it.circleId == circleFilter },
+                    places = (if (circleFilter.isEmpty()) places else places.filter { it.circleId == circleFilter }).filter { it.id != fenceDraft?.id },
+                    // Long-press: a new fence right there, sized and named on the map.
                     onLongPress = { lat, lon ->
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        if (supports("places")) placeEdit = PlaceEdit.Add(lat, lon)
-                        else Toast.makeText(context, OUTDATED_SERVER, Toast.LENGTH_LONG).show()
+                        if (!supports("places")) Toast.makeText(context, OUTDATED_SERVER, Toast.LENGTH_LONG).show()
+                        else if (fenceDraft == null) fenceDraft = FenceDraft(null, "", lat, lon, 150.0, circleFilter.ifEmpty { circles.firstOrNull()?.id ?: "" })
                     },
-                    onPlaceClick = { p -> placeEdit = PlaceEdit.Edit(p) },
+                    onPlaceClick = { p -> if (fenceDraft == null) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); fenceDraft = FenceDraft.of(p) } },
+                    fenceDraft = fenceDraft,
+                    onFenceDraft = { f, done -> fenceDraft = f; if (done) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) },
                     onMemberClick = { id ->
                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         shownTrip = null
@@ -722,7 +741,9 @@ fun MapScreen(
                             }
                         }
                     },
-                    onMapTap = { bubbleFor = null },
+                    onGroupClick = { ids -> haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); bubbleFor = null; groupBubble = ids },
+                    onMapTap = { bubbleFor = null; groupBubble = null },
+                    bottomInset = mapCovered,
                     trail = shownTrip?.points ?: trail,
                     trailColor = members.find { it.id == selected }?.color ?: "#4363d8",
                     tiles = MapStyles.resolve(mapStyle, LocalDarkTheme.current, tileUrl, tileUrlDark, attribution, dimMap),
@@ -730,8 +751,42 @@ fun MapScreen(
                     statusOf = statusOf,
                     modifier = Modifier.fillMaxSize(),
                 )
+                Box(Modifier.fillMaxWidth().padding(top = 4.dp)) { chips() }
+                fenceDraft?.let { f ->
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                        FenceEditBar(
+                            prefs, f, circles, canSchedule = features?.contains("schedules") == true,
+                            onChange = { fenceDraft = it },
+                            onMore = {
+                                placeEdit = if (f.id == null) PlaceEdit.Add(f.lat, f.lon, f.name, f.radius, f.circleId) else PlaceEdit.Edit(f.asPlace())
+                                fenceDraft = null
+                            },
+                            onDone = { changed -> fenceDraft = null; if (changed) scope.launch { refresh() } },
+                        )
+                    }
+                }
+                val bubbleTop = if (circles.size > 1) 56.dp else 10.dp
+                // Several people in one spot: who's there, each face opens them.
+                groupBubble?.let { ids ->
+                    Box(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = bubbleTop), contentAlignment = Alignment.TopCenter) {
+                        Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp, shadowElevation = 4.dp) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                Text("Together", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 8.dp))
+                                ids.mapNotNull { id -> members.find { it.id == id } }.forEach { m ->
+                                    Column(
+                                        Modifier.clip(RoundedCornerShape(12.dp)).clickable { groupBubble = null; sheetFor = m.id }.padding(4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        Avatar(m.name, m.emoji, m.color, 36)
+                                        Text(m.name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 members.find { it.id == bubbleFor }?.takeIf { shownTrip == null }?.let { m ->
-                    Box(Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.TopCenter) {
+                    Box(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = bubbleTop), contentAlignment = Alignment.TopCenter) {
                         Surface(
                             shape = RoundedCornerShape(24.dp),
                             tonalElevation = 6.dp,
@@ -749,7 +804,7 @@ fun MapScreen(
                     }
                 }
                 shownTrip?.let { t ->
-                    Box(Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.TopCenter) {
+                    Box(Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = bubbleTop), contentAlignment = Alignment.TopCenter) {
                         Surface(shape = RoundedCornerShape(50), tonalElevation = 6.dp, shadowElevation = 4.dp) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp)) {
                                 Text(
@@ -759,6 +814,9 @@ fun MapScreen(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
+                                if (Modules.has(features, Modules.CHAT) && Access.can("chat")) {
+                                    TextButton(onClick = { sharingTrip = t }) { Text("Share") }
+                                }
                                 TextButton(onClick = { shownTrip = null }) { Text("Close") }
                             }
                         }
@@ -767,8 +825,8 @@ fun MapScreen(
             }
 
             }
-            val sidePanel: @Composable ColumnScope.() -> Unit = {
-            // Actions, all in one row under the map.
+            // Actions, all in one row.
+            val actions: @Composable () -> Unit = {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -793,21 +851,23 @@ fun MapScreen(
                     Text("Show everyone", Modifier.padding(start = 8.dp))
                 }
             }
+            }
 
-            // Everyone, edge to edge under the map. A list only just too long for its space
-            // tightens its rows to fit instead of scrolling a few pixels.
+            // Everyone. A list only just too long for its space tightens its rows to fit
+            // instead of scrolling a few pixels.
             val peopleState = androidx.compose.foundation.lazy.rememberLazyListState()
+            // (In the pull-up sheet the list's height changes as it's dragged, so it simply
+            // scrolls there; squeezing is for the fixed side panel.)
+            val peopleList: @Composable (Modifier, Boolean) -> Unit = { listMod, fit ->
             var peopleViewport by remember { mutableIntStateOf(0) }
-            // Portrait: the list's room is fixed (it shrinks to fit when short), so measure against that.
-            val listRoom = if (wide) peopleViewport else with(androidx.compose.ui.platform.LocalDensity.current) { 260.dp.roundToPx() }
-            val squeeze = rememberSqueeze(shown.size, listRoom) { peopleState.overflowPx() }
-            Column(Modifier.fillMaxWidth().then(if (wide) Modifier.weight(1f) else Modifier).padding(top = 8.dp)) {
+            val squeeze = rememberSqueeze(shown.size, if (fit) peopleViewport else 0) { peopleState.overflowPx() }
+            Column(listMod.fillMaxWidth()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 androidx.compose.runtime.CompositionLocalProvider(LocalSqueeze provides squeeze.factor) {
                 LazyColumn(
-                    Modifier.fillMaxWidth().heightIn(max = if (wide) androidx.compose.ui.unit.Dp.Infinity else 260.dp)
+                    Modifier.fillMaxWidth().weight(1f)
                         .onSizeChanged { peopleViewport = it.height }
-                        .graphicsLayer { alpha = if (squeeze.ready) 1f else 0f },
+                        .graphicsLayer { alpha = if (squeeze.ready || !fit) 1f else 0f },
                     state = peopleState,
                 ) {
                     if (shown.isEmpty()) {
@@ -842,24 +902,39 @@ fun MapScreen(
                 }
             }
 
+            }
+            val sosBar: @Composable () -> Unit = {
             if (prefs.showSosButton && !sosActive && supports("sos") && Access.can("sos") && !Access.isDisplay) {
                 HoldForSosBar(
                     onTriggered = { sendSos(end = false) },
                     modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
                 )
             } else {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
             }
             }
             if (wide) {
-                // The people on the left, the map on the right.
+                // The people on the left, the map on the right, edge to edge.
                 Row(Modifier.weight(1f).fillMaxWidth()) {
-                    Column(Modifier.width(400.dp).fillMaxHeight().padding(top = 4.dp)) { sidePanel() }
-                    mapCard(Modifier.weight(1f).fillMaxHeight().padding(end = 12.dp, top = 4.dp, bottom = 12.dp))
+                    Column(Modifier.width(400.dp).fillMaxHeight().padding(top = 4.dp)) {
+                        actions()
+                        peopleList(Modifier.weight(1f).padding(top = 8.dp), true)
+                        sosBar()
+                    }
+                    VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    mapCard(Modifier.weight(1f).fillMaxHeight())
                 }
             } else {
-                mapCard(Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp))
-                sidePanel()
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    mapCard(Modifier.fillMaxSize())
+                    if (fenceDraft == null) PullUpSheet(
+                        // Peeking: the first couple of people under the buttons.
+                        peekExtra = (62 * (if (shown.size >= 2) 2 else 1) + 10).dp,
+                        onCovered = { mapCovered = it },
+                        header = { actions() },
+                        footer = { sosBar() },
+                    ) { peopleList(Modifier.weight(1f).padding(top = 8.dp), false) }
+                }
             }
         }
     }
@@ -922,10 +997,7 @@ private fun statusLine(m: Member, me: Member?, tick: Int): String {
     }
     if (m.paused) return "Location sharing paused"
     val loc = m.loc ?: return "No location yet"
-    val parts = mutableListOf<String>()
-    val age = System.currentTimeMillis() - loc.time
-    if (isDriving(m)) parts += "Driving" else if (m.place.isNotEmpty()) parts += "At ${m.place}"
-    parts += if (age < 60_000) "Just now" else DateUtils.getRelativeTimeSpanString(loc.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+    val parts = mutableListOf(Seen.where(m))
     if (loc.battery >= 0) parts += "${loc.battery}%" + when {
         loc.charging -> " charging"
         loc.saving -> " (saving battery)"
@@ -985,12 +1057,8 @@ data class PermissionState(
 }
 
 
-/** "just now", "5 minutes ago"... */
-fun ago(time: Long): String {
-    val now = System.currentTimeMillis()
-    return if (now - time < 60_000) "just now"
-    else DateUtils.getRelativeTimeSpanString(time, now, DateUtils.MINUTE_IN_MILLIS).toString()
-}
+/** "just now", "5 min ago"... (see [Seen]). */
+fun ago(time: Long): String = Seen.ago(time)
 
 /** A red strip across the top of the map, for SOS. */
 @Composable
@@ -1250,3 +1318,43 @@ fun JoinCircleDialog(prefs: Prefs, initialCode: String, onDone: (joined: Boolean
     )
 }
 
+
+/** Pick a chat and send it [text] (a trip, for now), after showing what will be sent. */
+@Composable
+private fun ShareToChatDialog(prefs: Prefs, text: String, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var chats by remember { mutableStateOf<List<ChatConversation>?>(null) }
+    LaunchedEffect(Unit) {
+        chats = runCatching { Api(prefs.serverUrl, prefs.token).chats() }.getOrDefault(emptyList()).filter { !it.oversight }
+    }
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("Share to a chat") },
+        text = {
+            Column {
+                Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 10.dp))
+                val list = chats
+                if (list == null) Text("Loading…")
+                else Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                    list.forEach { c ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                scope.launch {
+                                    val ok = runCatching { Api(prefs.serverUrl, prefs.token).chatSend(c.id, text) }.isSuccess
+                                    Toast.makeText(context, if (ok) "Shared in ${c.title}" else "Couldn't share", Toast.LENGTH_SHORT).show()
+                                    onDone()
+                                }
+                            }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(c.title, style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
+    )
+}

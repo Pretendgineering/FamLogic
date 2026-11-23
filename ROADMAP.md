@@ -72,12 +72,12 @@ Status: ✅ done · 🔨 next · ⏳ queued
 
 The map, chat and safety features are what families use every day. Next, each gets a round of real-use polish before any new module starts. After that, modules come **one at a time**, each finished (app, console, watch, docs) before the next.
 
-### 🔨 1. Map (Thereabouts)
-- The people list as a pull-up sheet over a full-height map (drag it up for everyone, down for more map); tap a face to follow them.
-- Clearer pins: a small "how long ago" on each, a soft halo for SOS, grouped pins when people are together.
-- Place (fence) editing on the map itself: drag the circle's edge to resize.
-- Trips: a cleaner day view (stops and drives on a timeline), share a trip to chat.
-- Battery and accuracy: smarter update timing when someone's still, honest "last seen" wording everywhere.
+### ✅ 1. Map (Thereabouts), 0.24.0
+- The map fills the screen; the people are in a **pull-up sheet** (peek, half, full) that you drag or scroll; landscape tablets keep them beside the map.
+- **Pins:** a "how long ago" tag, an arrow for the way someone's heading, a pulsing halo during an SOS, and one shared pin (stacked faces) for people in the same spot.
+- **Fences edited on the map:** long-press to drop one, drag inside to move, drag the edge dot to resize, name and save in a bar at the bottom.
+- **Trips** as a day **timeline** of stops and drives; **Share** a trip to a chat.
+- **Resting** phones update less often and wake on movement (the significant-motion sensor); "last seen" worded the same everywhere, and honest about old locations.
 
 ### 🔨 2. Chat (Chitchat)
 - "Message" from a person's card on the map; reply to a specific message; reactions with the nudge set.
@@ -107,15 +107,17 @@ In this order (each is finished before the next starts):
 7. **Corkboard / Front Room** (Control Deck round two and the Android TV launcher, its own APK).
 
 ### ⏳ Later and parked
-- **iPhone app** (see below).
 - **Voice, beyond chat:** the Pebble (hold to talk), the TV and Control Deck, read-aloud with quiet hours.
 - **Devices page** in the console (several devices per person, last seen, Revoke); pairing displays with a code.
 - **Pebble App Store listing** (draft in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md)), and **F-Droid / IzzyOnDroid** for the app; a shareable invite message with a download link once the app is in a store.
 - **Profile pictures** (emoji icons stay as the fallback).
-- **Google Find Hub trackers** (parked, Nov 2026): no official API. Alternative: family phones listening for the family's own cheap Bluetooth tags.
 - **Home Assistant** integration (presence, chores done, a dashboard).
 
-### iPhone: how feasible?
+### 🧊 Tabled (bottom of the list until further notice)
+- **Google Find Hub trackers:** no official API. Alternative: family phones listening for the family's own cheap Bluetooth tags.
+- **iPhone app:** notes below.
+
+#### iPhone: how feasible?
 Possible, with real limits. The server and its API already work for any client, so an iPhone app is "only" a second app (SwiftUI, or Kotlin Multiplatform sharing the app's logic). The hard parts are Apple's rules, not the code:
 - **Background location** works (significant-change and region monitoring, plus fences via iOS geofences), but iOS decides when the app runs; updates are less regular than Android's always-on service.
 - **Instant alerts** need Apple's push service (APNs). FamLogic avoids Google push on Android with its own always-on connection; iOS doesn't allow that, so the server would need to send pushes through Apple, which needs an Apple developer account ($99/year) and the server reaching Apple's servers.

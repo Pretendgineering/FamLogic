@@ -798,10 +798,7 @@ private fun MapTile(
 private fun whereShort(m: Member): String {
     if (m.sosSince > 0) return "SOS"
     if (m.paused) return "paused"
-    val loc = m.loc ?: return "no location yet"
-    val ago = if (System.currentTimeMillis() - loc.time < 60_000) "just now"
-    else DateUtils.getRelativeTimeSpanString(loc.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
-    return if (m.place.isNotEmpty()) "at ${m.place} · $ago" else ago
+    return Seen.where(m)
 }
 
 /**

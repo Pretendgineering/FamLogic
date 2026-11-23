@@ -61,6 +61,49 @@ class LocationService : Service() {
     private var lastSentElapsed = 0L // SystemClock.elapsedRealtime() of the last successful upload
     private var lastSent: Location? = null
     private var lastFix: Location? = null // newest fix seen, sent or not
+
+    // ---- resting: staying put saves battery ----
+    // After [REST_AFTER_MS] within [REST_RADIUS_M] of one spot (not driving, no SOS), the phone
+    // updates less often. Android's "significant motion" sensor (a tiny, always-on chip) wakes it
+    // back up the moment it's carried off; phones without one simply rest a little less.
+    private var restAnchor: Location? = null
+    private var restSince = 0L
+    private var resting = false
+    private val sensors by lazy { getSystemService(SENSOR_SERVICE) as android.hardware.SensorManager }
+    private val moveSensor by lazy { sensors.getDefaultSensor(android.hardware.Sensor.TYPE_SIGNIFICANT_MOTION) }
+    private val onMoved = object : android.hardware.TriggerEventListener() {
+        override fun onTrigger(event: android.hardware.TriggerEvent?) {
+            if (!resting) return
+            Log.i(TAG, "Moving again: normal updates")
+            resting = false
+            restSince = SystemClock.elapsedRealtime()
+            restAnchor = null
+            if (locating) startUpdates(sendNow = false)
+        }
+    }
+
+    /** Notes where we are; returns true when resting started or stopped (so the interval changes). */
+    private fun updateResting(loc: Location): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        val anchor = restAnchor
+        if (prefs.sosActive || drive.driving || drive.candidate || anchor == null || anchor.distanceTo(loc) > REST_RADIUS_M) {
+            restAnchor = loc
+            restSince = now
+            if (resting) { resting = false; cancelMoveSensor(); return true }
+            return false
+        }
+        if (!resting && now - restSince > REST_AFTER_MS) {
+            resting = true
+            Log.i(TAG, "Staying put: resting (updates less often)")
+            moveSensor?.let { runCatching { sensors.requestTriggerSensor(onMoved, it) } }
+            return true
+        }
+        return false
+    }
+
+    private fun cancelMoveSensor() {
+        moveSensor?.let { runCatching { sensors.cancelTriggerSensor(onMoved, it) } }
+    }
     private var lastBattery = -1
     private var locating = false
     private var alertsJob: Job? = null
@@ -151,6 +194,9 @@ class LocationService : Service() {
         // While (maybe) driving: every minute so others can follow; less if the battery is low.
         drive.driving || drive.candidate -> if (saving) 5 * 60_000L else minOf(prefs.intervalMinutes * 60_000L, DRIVING_INTERVAL_MS)
         saving -> maxOf(prefs.intervalMinutes, SAVER_INTERVAL_MIN) * 60_000L
+        // Resting: up to three times longer (twice without a motion sensor to wake us), at most
+        // 20 minutes, so a resting phone never looks "last seen" to the family.
+        resting -> maxOf(prefs.intervalMinutes * 60_000L, minOf(prefs.intervalMinutes * 60_000L * (if (moveSensor != null) 3 else 2), REST_MAX_INTERVAL_MS))
         else -> prefs.intervalMinutes * 60_000L
     }
 
@@ -238,6 +284,9 @@ class LocationService : Service() {
         usingFused = false
         stopMotion()
         drive.reset()
+        if (resting) cancelMoveSensor()
+        resting = false
+        restAnchor = null
         if (!locating) return
         locating = false
         runCatching { LocationManagerCompat.removeUpdates(lm, listener) }
@@ -283,6 +332,8 @@ class LocationService : Service() {
 
     private fun onFix(loc: Location, force: Boolean = false) {
         if (lastFix.let { it == null || loc.time >= it.time }) lastFix = loc
+        // Only fairly precise fixes count for resting (a rough network fix can jump about).
+        if (loc.accuracy < 150 && updateResting(loc) && locating) restartForNewInterval()
         if (drive.onFix(loc)) {
             Log.i(TAG, "Driving: ${drive.driving} (checking: ${drive.candidate})")
             if (locating) restartForNewInterval()
@@ -307,6 +358,8 @@ class LocationService : Service() {
                 loc.latitude, loc.longitude, loc.accuracy, loc.speed, loc.time, battery, charging,
                 since = prefs.eventCursor, saving = saving, driving = drive.driving,
                 watchBattery = prefs.watchBattery.takeIf { System.currentTimeMillis() - prefs.watchBatteryAt < 3 * 3_600_000L } ?: 0,
+                // Which way they're heading, when actually moving (walking pace or faster).
+                heading = if (loc.hasBearing() && loc.speed > 1.2f) (loc.bearing.toInt().mod(360)).let { if (it == 0) 360 else it } else 0,
             )
             Alerts.handle(this@LocationService, alerts)
             lastSentElapsed = SystemClock.elapsedRealtime()
@@ -527,6 +580,9 @@ class LocationService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val EXTRA_FROM_BACKGROUND = "from_background"
         const val DRIVING_INTERVAL_MS = 60_000L
+        const val REST_AFTER_MS = 15 * 60_000L
+        const val REST_RADIUS_M = 120f
+        const val REST_MAX_INTERVAL_MS = 20 * 60_000L
         const val SAVER_LEVEL = 20
         const val SAVER_INTERVAL_MIN = 15
         private const val SOS_INTERVAL_MS = 15_000L

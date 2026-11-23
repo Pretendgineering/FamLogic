@@ -23,7 +23,7 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `GET /api/events/wait?since=<cursor>&wait=50` | `Bearer <token>` | Waits until there's a new alert (or `wait` seconds), then returns `{events, cursor}`. The app keeps one open for instant alerts |
 | `POST /api/sos` `{loc?}`, `POST /api/sos/end` | `Bearer <token>` | Raise or end an SOS |
 | `POST /api/checkin` `{note, loc?}` | `Bearer <token>` | Check in |
-| `POST /api/location?since=<cursor>` `{lat, lon, acc, speed, battery, charging, time}` | `Bearer <token>` | Report a fix; the reply carries new alerts `{events, cursor}` |
+| `POST /api/location?since=<cursor>` `{lat, lon, acc, speed, heading?, battery, charging, time}` (heading: 1-360 degrees while moving) | `Bearer <token>` | Report a fix; the reply carries new alerts `{events, cursor}` |
 | `GET /api/members?since=<cursor>` | `Bearer <token>` | Everyone's latest position, map settings, your feature settings (including `kid`: what you may use, `home` and `pinSet`), and new alerts |
 | `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?, home?, big?, pictures?}` | `Bearer <token>` | Rename yourself / pause / feature switches / arrange your home screen (adults; parents arrange children's) |
 | `DELETE /api/me` | `Bearer <token>` | Leave |
