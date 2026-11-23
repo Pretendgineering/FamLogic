@@ -52,7 +52,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Nudges:** 👍 ❤️ 👋 😊 🏠 🤠 👽 👹 (and 🍆 🍑 between grown-ups), from the app, from 👍/❤️ buttons on check-in notifications, and from the watch, which also offers them as a reply to a check-in. **FamLogic Face** watchface: serif type and the app's colour themes.
 
 ### ✅ Voice for chat (0.21.0)
-- Built into the server image: Whisper (speech to text) and Piper (reading aloud), private and the same everywhere; the phone's own speech where it works better (Automatic: the Google edition uses it when present).
+- Built into the server image: Whisper (speech to text) and Piper (reading aloud; Kokoro since 0.25), private and the same everywhere; the phone's own speech where it works better (Automatic: the Google edition uses it when present).
 - Younger children: a big push-to-talk smiley that pops and glows while held, sends what they said and reads it back; new messages read aloud; "Oops, try again!" when nothing was understood. Everyone else: a small talk button that types into the message box. A per-child switch in Access & Control.
 - Next for voice: the Pebble (hold to talk on watches with a microphone), the TV and Control Deck, and talking to your own agent (Steward).
 
@@ -67,6 +67,11 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Map:** opens where it last was and jumps (rather than flies) to the family, so there's no jittery first load.
 - **Talking:** a wide talk bar above the message box for children and tablets; a friendlier, grinning smiley.
 - **Themes:** Hannah's Theme, Hobbit Door, Boring Blue, Lofi Cabin, Logic Noir, Suspicious Orange, And Chill, Night Shift, Gamer Mode, Grandma's Couch. More icon colours, a colour mixer and many more emoji.
+
+### ✅ Voices and layout (0.25.0)
+- **Reading aloud:** Kokoro voices on the server (warm female and male), each person's chosen **reading voice**, a small speaker beside every text message, emoji and stretched words tidied before reading; a plain microphone for grown-ups, a smiley with sound waves for children; a paper airplane for the children's Chitchat; "Sent!" instead of reading the whole message back.
+- **Home screen:** 2 or 3 tiles across (Look and Feel), tiles 1 to 3 columns wide and 1 or 2 rows tall.
+- **Console:** the same edge-to-edge design language as the app (flat sections, hairlines, the map to the edges).
 
 ## Focus: the core three, polished first
 

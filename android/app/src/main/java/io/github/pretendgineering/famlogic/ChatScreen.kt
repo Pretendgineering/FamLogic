@@ -1,5 +1,6 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Offset
@@ -438,6 +439,8 @@ private fun ConversationView(
     var confirmDelete by remember { mutableStateOf(false) }
     var iconPicking by remember { mutableStateOf(false) }
     val readAloud = Access.younger && Access.can("voice")
+    // Messages can be read aloud here (a speaker button beside each).
+    val canHear = Access.can("voice") && Voice.speaker(context, prefs.serverFeatures) != null
     LaunchedEffect(convId) { prefs.lastChat = convId }
     DisposableEffect(convId) { Voice.warmUp(context); onDispose { Voice.stop() } }
     var deleting by remember { mutableStateOf<ChatMessage?>(null) }
@@ -467,9 +470,9 @@ private fun ConversationView(
                     listState.animateScrollToItem(0)
                     // Younger children hear new messages read aloud as they arrive.
                     if (!firstLoad && readAloud) {
-                        fresh.lastOrNull { it.sender != prefs.memberId && it.text.isNotBlank() }?.let { m ->
-                            val who = people.find { it.id == m.sender }?.name ?: "Someone"
-                            launch { Voice.speak(context, prefs, "$who says: ${m.text}") }
+                        fresh.lastOrNull { it.sender != prefs.memberId && Voice.hasWords(it.text) }?.let { m ->
+                            val who = people.find { it.id == m.sender }
+                            launch { Voice.speak(context, prefs, "${who?.name ?: "Someone"} says: ${m.text}", who?.voice.orEmpty()) }
                         }
                     }
                 }
@@ -678,10 +681,12 @@ private fun ConversationView(
                         seenBy = if (m.id == myLast?.id) seenBy else emptyList(),
                         showAvatar = newer == null || newer.sender != m.sender || !sameDay(newer.time, m.time),
                         onLongPress = if ((m.sender == prefs.memberId && Access.can("chat_delete")) || moderator) ({ deleting = m }) else null,
-                        // Tap a message to hear it (younger children, and anyone using picture icons).
-                        onTap = if (readAloud || (Access.pictures && Access.can("voice"))) ({
-                            val who = if (m.sender == prefs.memberId) "You" else people.find { it.id == m.sender }?.name ?: "Someone"
-                            scope.launch { if (m.text.isNotBlank() && !Voice.speak(context, prefs, "$who said: ${m.text}")) Voice.oops(context) }
+                        // A small speaker beside every message with words in it: tap to hear it,
+                        // in the sender's own voice (male or female, as they chose).
+                        onSpeak = if (canHear && Voice.hasWords(m.text)) ({
+                            val who = people.find { it.id == m.sender }
+                            val name = if (m.sender == prefs.memberId) "You" else who?.name ?: "Someone"
+                            scope.launch { if (!Voice.speak(context, prefs, "$name said: ${m.text}", who?.voice.orEmpty())) Voice.oops(context) }
                         }) else null,
                     )
                     if (older == null || !sameDay(older.time, m.time)) DayHeader(m.time)
@@ -715,8 +720,8 @@ private fun ConversationView(
                         when {
                             said.isEmpty() -> Voice.oops(context)
                             Access.younger -> sendText(said) {
-                                // Read back what went, so they know it was right.
-                                scope.launch { Voice.speak(context, prefs, "Sent! $said") }
+                                // A cheerful "Sent!", so they know it went (not the whole message again).
+                                Voice.sent(context)
                             }
                             else -> text = (text.trimEnd() + " " + said).trim().take(4000)
                         }
@@ -871,7 +876,7 @@ private val STATUS_LABELS = mapOf("pending" to "Needs OK", "paused" to "Paused",
 @Composable
 private fun Bubble(
     prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boolean, showName: Boolean, seenBy: List<String>,
-    showAvatar: Boolean = true, onLongPress: (() -> Unit)? = null, onTap: (() -> Unit)? = null,
+    showAvatar: Boolean = true, onLongPress: (() -> Unit)? = null, onSpeak: (() -> Unit)? = null,
 ) {
     val sender = people.find { it.id == m.sender }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
@@ -888,15 +893,28 @@ private fun Bubble(
         }
         val bg = if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
         val fg = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        val speaker: @Composable () -> Unit = {
+            if (onSpeak != null) {
+                IconButton(onClick = onSpeak, modifier = Modifier.size(if (Access.big) 44.dp else 34.dp)) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Read aloud",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .8f),
+                        modifier = Modifier.size(if (Access.big) 26.dp else 20.dp),
+                    )
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (mine) speaker()
         Column(
             Modifier.widthIn(max = 300.dp)
                 .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (mine) 18.dp else 6.dp, bottomEnd = if (mine) 6.dp else 18.dp))
                 .background(bg)
                 .then(
-                    if (onLongPress != null || onTap != null) {
+                    if (onLongPress != null) {
                         Modifier.combinedClickable(
-                            onClickLabel = if (onTap != null) "Read aloud" else null, onClick = { onTap?.invoke() },
-                            onLongClickLabel = if (onLongPress != null) "Delete" else null, onLongClick = onLongPress,
+                            onClick = {},
+                            onLongClickLabel = "Delete", onLongClick = onLongPress,
                         )
                     } else Modifier,
                 )
@@ -904,6 +922,8 @@ private fun Bubble(
         ) {
             if (m.photo.isNotEmpty()) ChatPhoto(prefs, m.photo)
             if (m.text.isNotEmpty()) Text(m.text, color = fg, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        }
+        if (!mine) speaker()
         }
         Text(
             DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(m.time)) + if (seenBy.isNotEmpty()) " · Seen by ${seenBy.joinToString(", ")}" else "",

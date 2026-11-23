@@ -92,7 +92,8 @@ var kidFeatures = []kidSwitch{
 var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward"}
 
 var convoTile = regexp.MustCompile(`^convo\.[A-Za-z0-9_-]{1,64}$`)
-var tileSizes = []string{"half", "wide", "big"}
+// Tile sizes: "WxH" (1-3 columns wide, 1-2 rows tall), and the older half/wide/big.
+var tileSizes = []string{"1x1", "2x1", "3x1", "1x2", "2x2", "3x2", "half", "wide", "big"}
 
 const maxHomeTiles = 24
 

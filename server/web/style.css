@@ -825,3 +825,31 @@ button.danger { background: var(--danger); color: #fff; }
 .seg input[type="radio"] { margin: 0; }
 .acc-list { margin-top: 6px; }
 .wide-panel:has(#access-list) { max-width: 880px; }
+
+/* ---- Edge to edge (0.25): the same design language as the app. Sections sit
+   flat on the page, divided by hairlines, not in raised cards; the map runs to
+   the edges. Pop-ups (dialogs, menus) keep their rounded cards. Keep this in step
+   with the app (Settings, home tiles, map sheet) when either changes. ---- */
+.panel { background: none; border-radius: 0; box-shadow: none; padding: 6px 0; border-top: 1px solid var(--line); }
+.panel h2 { margin: .9rem .4rem .3rem; }
+.list li { border-radius: 0; padding: .65rem .5rem; border-bottom: 1px solid var(--line); }
+.list li + li { margin-top: 0; }
+.list li:last-child { border-bottom: none; }
+.list.compact li { padding: 6px 4px; }
+.cards { gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); max-width: 1100px; }
+.card-link { border-radius: 0; box-shadow: none; background: none; padding: 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.card-link:hover { box-shadow: none; background: var(--surface-2); }
+.card-link.sos { background: var(--sos); }
+#map { margin: 0; border-radius: 0; box-shadow: none; border-left: 1px solid var(--line); }
+aside { padding: 12px 0 12px 12px; gap: 6px; }
+.page { padding: 18px 0 32px 0; }
+.page-head { margin: 4px 20px 14px; }
+.page > .panel, .page > section, .page > .cards, .page > .tabs { margin-left: 20px; margin-right: 20px; }
+.tabs { background: none; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; gap: 0; }
+.tabs button { border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { background: none; box-shadow: none; color: var(--accent); border-bottom-color: var(--accent); }
+.rail { border-right: 1px solid var(--line); }
+.tabs + .panel, .tabs + section { border-top: none; }
+.subtabs { max-width: none; }
+.chat-page .panel { border-top: none; }
+.chat-page .chat-list { border-right: 1px solid var(--line); }

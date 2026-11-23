@@ -26,7 +26,7 @@ jobs:
 
   image:
     # Publishes ghcr.io/<owner>/famlogic for amd64 and arm64 (e.g. Raspberry Pi 4/5),
-    # with voice (whisper.cpp, Piper and their models) built in.
+    # with voice (whisper.cpp, Kokoro through sherpa-onnx, and their models) built in.
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest

@@ -247,6 +247,10 @@ class Prefs(context: Context) {
         set(v) = sp.edit { putBoolean("plain_names", v) }
 
     /** Voice engine: "auto", "phone" (Android's own speech) or "server" (the family's server). */
+    /** Tiles across the home screen: 2, 3, or 0 for automatic (2 on phones, 3 on tablets). */
+    var homeColumns: Int
+        get() = sp.getInt("home_columns", 0)
+        set(v) = sp.edit { putInt("home_columns", v) }
     /** The chat last opened on this phone (the chat tile's quick button). */
     var lastChat: String
         get() = sp.getString("last_chat", "") ?: ""

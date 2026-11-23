@@ -50,16 +50,17 @@ func TestWavAndTranscripts(t *testing.T) {
 	}
 }
 
-// fakeVoice puts stand-in whisper and piper programs in place.
+// fakeVoice puts stand-in whisper and reading-aloud programs in place.
 func fakeVoice(t *testing.T) string {
 	dir := t.TempDir()
-	for _, d := range []string{"whisper", "piper", "models"} {
+	for _, d := range []string{"whisper", "tts", "models/kokoro"} {
 		os.MkdirAll(filepath.Join(dir, d), 0o755)
 	}
 	os.WriteFile(filepath.Join(dir, "models", "whisper.bin"), []byte("x"), 0o644)
-	os.WriteFile(filepath.Join(dir, "models", "voice.onnx"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(dir, "models", "kokoro", "model.onnx"), []byte("x"), 0o644)
 	os.WriteFile(filepath.Join(dir, "whisper", "whisper-cli"), []byte("#!/bin/sh\necho ' [BLANK_AUDIO] Can you pick me up?'\n"), 0o755)
-	os.WriteFile(filepath.Join(dir, "piper", "piper"), []byte("#!/bin/sh\nwhile [ \"$1\" != --output_file ]; do shift; done\ncat > /dev/null\nprintf 'RIFFfake' > \"$2\"\n"), 0o755)
+	// Like the real helper: "ready", then one "sid TAB out TAB text" per line, answering "ok".
+	os.WriteFile(filepath.Join(dir, "tts", "famlogic-tts"), []byte("#!/bin/sh\necho ready 54\nwhile IFS='\t' read -r sid out text; do printf 'RIFF%s' \"$sid\" > \"$out\"; echo ok; done\n"), 0o755)
 	return dir
 }
 
@@ -105,10 +106,41 @@ func TestVoiceEndpoints(t *testing.T) {
 	if st != 200 || !bytes.HasPrefix(b, []byte("RIFF")) {
 		t.Fatalf("speak: %d %q", st, b[:min(len(b), 20)])
 	}
+	if real := os.Getenv("FAMLOGIC_VOICE_DIR"); real != "" {
+		os.WriteFile(filepath.Join(t.TempDir(), "spoken.wav"), b, 0o644)
+	} else if string(b) != "RIFF3" {
+		t.Fatalf("default voice: %q", b)
+	}
+	// A male voice, and the helper stays running between requests.
+	st, b = post("/api/voice/speak", f.kid, "application/json", []byte(`{"text":"I'll pick you up","voice":"male"}`))
+	if st != 200 || (os.Getenv("FAMLOGIC_VOICE_DIR") == "" && string(b) != "RIFF16") {
+		t.Fatalf("male voice: %d %q", st, b[:min(len(b), 20)])
+	}
+	if st, _ := post("/api/voice/speak", f.kid, "application/json", []byte(`{"text":"😂😂👍"}`)); st != 422 {
+		t.Fatalf("emoji only: %d", st)
+	}
 	// A parent can switch talking off for a child.
 	e.do("PUT", "/api/members/"+f.kidID+"/kid", f.mom, map[string]any{"features": map[string]bool{"voice": false}})
 	if st, _ := post("/api/voice/transcribe", f.kid, "audio/wav", rec); st != 403 {
 		t.Fatalf("voice off: %d", st)
+	}
+}
+
+func TestSpeakable(t *testing.T) {
+	for in, want := range map[string]string{
+		"Hellooooooo mom!!!! 😂😂":          "Hello mom!",
+		"Dinner is ready 🍕🍕":              "Dinner is ready",
+		"😂👍❤️":                            "",
+		"look https://example.com/x cool": "look a link cool",
+		"hahahaha that's funny":           "ha ha that's funny",
+		"asdfghjklqwertyuiop ok":          "ok",
+		"Can we gooooo to the park??":     "Can we go to the park?",
+		"see you at 3:30":                 "see you at 3:30",
+		"👨‍👩‍👧 family time":               "family time",
+	} {
+		if got := speakable(in); got != want {
+			t.Errorf("speakable(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
@@ -120,4 +152,24 @@ func containsAny(list any, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestMemberVoice(t *testing.T) {
+	f := newChatFamily(t)
+	if st, _ := f.e.status("PATCH", "/api/me", f.mom, map[string]any{"voice": "female"}); st != 200 {
+		t.Fatalf("set voice: %d", st)
+	}
+	if st, _ := f.e.status("PATCH", "/api/me", f.mom, map[string]any{"voice": "robot"}); st != 400 {
+		t.Fatalf("bad voice: %d", st)
+	}
+	_, res := f.e.do("GET", "/api/members", f.kid, nil)
+	found := false
+	for _, m := range res["members"].([]any) {
+		if mm := m.(map[string]any); mm["voice"] == "female" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("voice not shared with the family")
+	}
 }

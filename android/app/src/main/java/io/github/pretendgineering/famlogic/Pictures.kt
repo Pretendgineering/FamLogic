@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Picture icons: literal, colourful drawings for people who can't read yet (or
- * prefer pictures): a tiny map instead of a pin, a talking face instead of an
+ * prefer pictures): a tiny map instead of a pin, a paper airplane instead of an
  * envelope, a red alarm for SOS. On by default for younger children, an option for
  * grandparents (Customize → Easier to Use, or Access & Control in the console).
  */
@@ -26,7 +26,8 @@ object Pictures {
     fun Map(size: Dp = 40.dp, modifier: Modifier = Modifier) = Canvas(modifier.size(size)) { tinyMap() }
 
     @Composable
-    fun Talk(size: Dp = 40.dp, modifier: Modifier = Modifier) = Canvas(modifier.size(size)) { talkingFace() }
+    /** Chitchat: a paper airplane carrying a message (not a face, so it can't be mixed up with the talk button). */
+    fun Talk(size: Dp = 40.dp, modifier: Modifier = Modifier) = Canvas(modifier.size(size)) { paperPlane() }
 
     @Composable
     fun Sos(size: Dp = 40.dp, modifier: Modifier = Modifier) = Canvas(modifier.size(size)) { alarm() }
@@ -62,6 +63,23 @@ private fun DrawScope.tinyMap() {
 }
 
 /** A round yellow face with an open mouth and sound lines: talking. */
+/** A bright paper airplane flying up and to the right, with a dotted trail behind it. */
+private fun DrawScope.paperPlane() {
+    val s = size.minDimension
+    fun p(x: Float, y: Float) = androidx.compose.ui.geometry.Offset(x * s, y * s)
+    fun tri(a: androidx.compose.ui.geometry.Offset, b: androidx.compose.ui.geometry.Offset, c: androidx.compose.ui.geometry.Offset, color: Color) =
+        drawPath(androidx.compose.ui.graphics.Path().apply { moveTo(a.x, a.y); lineTo(b.x, b.y); lineTo(c.x, c.y); close() }, color)
+    // The dotted trail, curving in from the bottom left.
+    listOf(.06f to .9f, .13f to .84f, .2f to .77f, .27f to .71f).forEachIndexed { i, (x, y) ->
+        drawCircle(Color(0xFF90A4AE).copy(alpha = .5f + i * .12f), s * (.028f + i * .004f), p(x, y))
+    }
+    tri(p(.18f, .5f), p(.92f, .14f), p(.46f, .62f), Color(0xFF4FC3F7)) // top wing
+    tri(p(.46f, .62f), p(.92f, .14f), p(.58f, .86f), Color(0xFF0288D1)) // lower wing
+    tri(p(.46f, .62f), p(.58f, .86f), p(.47f, .78f), Color(0xFF01579B)) // the fold underneath
+    // A crisp edge between the wings.
+    drawLine(Color.White.copy(alpha = .85f), p(.46f, .62f), p(.92f, .14f), s * .025f)
+}
+
 private fun DrawScope.talkingFace() {
     val s = size.minDimension
     val c = Offset(s * .42f, s * .52f)

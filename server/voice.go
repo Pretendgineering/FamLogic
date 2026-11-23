@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -15,11 +17,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
-// Voice: speech to text (whisper.cpp) and text to speech (Piper), both baked into
+// Voice: speech to text (whisper.cpp) and text to speech (Kokoro, through sherpa-onnx), both baked into
 // the container under /voice and run on demand on this server, so nothing leaves
 // the house. Apps send short recordings (16 kHz mono WAV) and get text back, and
 // send text to hear it read aloud. Phones whose own speech services work well may
@@ -27,7 +31,11 @@ import (
 //
 // Layout under VOICE_DIR (default /voice):
 //   whisper/whisper-cli (plus its libraries), models/whisper.bin
-//   piper/piper (plus its libraries and espeak-ng-data), models/voice.onnx(.json)
+//   tts/famlogic-tts (plus its libraries), models/kokoro/ (model.onnx, voices.bin,
+//   tokens.txt, lexicon-us-en.txt, espeak-ng-data/)
+//
+// Reading aloud keeps the voice model loaded in a helper process (tts/famlogic-tts.c)
+// between messages, and stops it after a while with nothing to say.
 
 const (
 	maxVoiceBytes = 2 << 20 // ~60 s of 16 kHz mono 16-bit audio
@@ -37,7 +45,7 @@ const (
 
 type Voice struct {
 	whisper, whisperModel string
-	piper, piperModel     string
+	tts                   *speaker
 	tmp                   string
 	slot                  chan struct{} // one job at a time: these use every core
 }
@@ -52,18 +60,18 @@ func openVoice(dir, tmp string) *Voice {
 	if w, m := filepath.Join(dir, "whisper", "whisper-cli"), filepath.Join(dir, "models", "whisper.bin"); exists(w) && exists(m) {
 		v.whisper, v.whisperModel = w, m
 	}
-	if p, m := filepath.Join(dir, "piper", "piper"), filepath.Join(dir, "models", "voice.onnx"); exists(p) && exists(m) {
-		v.piper, v.piperModel = p, m
+	if p, m := filepath.Join(dir, "tts", "famlogic-tts"), filepath.Join(dir, "models", "kokoro"); exists(p) && exists(filepath.Join(m, "model.onnx")) {
+		v.tts = &speaker{bin: p, models: m}
 	}
-	if v.whisper != "" || v.piper != "" {
-		log.Printf("voice: speech to text %v, read aloud %v", v.whisper != "", v.piper != "")
+	if v.whisper != "" || v.tts != nil {
+		log.Printf("voice: speech to text %v, read aloud %v", v.whisper != "", v.tts != nil)
 	}
 	os.MkdirAll(tmp, 0o700)
 	return v
 }
 
 func (v *Voice) canListen() bool { return v != nil && v.whisper != "" }
-func (v *Voice) canSpeak() bool  { return v != nil && v.piper != "" }
+func (v *Voice) canSpeak() bool  { return v != nil && v.tts != nil }
 
 func (v *Voice) features() []string {
 	var f []string
@@ -190,8 +198,14 @@ func (v *Voice) Transcribe(ctx context.Context, wav []byte) (string, error) {
 
 var errBadAudio = errors.New("send 16 kHz mono 16-bit WAV audio")
 
-// Speak reads text aloud: WAV audio.
-func (v *Voice) Speak(ctx context.Context, text string) ([]byte, error) {
+// The voices people can choose (Settings → You, or a parent for a child): Kokoro's
+// "Heart" and "Michael", two of its warmest English voices.
+var voiceSpeakers = map[string]int{"": 3, "female": 3, "male": 16}
+
+func validVoice(v string) bool { _, ok := voiceSpeakers[v]; return ok }
+
+// Speak reads text aloud in a voice ("female", "male" or "" for the default): WAV audio.
+func (v *Voice) Speak(ctx context.Context, text, voice string) ([]byte, error) {
 	release, err := v.take(ctx)
 	if err != nil {
 		return nil, err
@@ -205,16 +219,186 @@ func (v *Voice) Speak(ctx context.Context, text string) ([]byte, error) {
 	defer os.Remove(f.Name())
 	ctx, cancel := context.WithTimeout(ctx, voiceTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, v.piper, "--model", v.piperModel, "--output_file", f.Name())
-	cmd.Dir = filepath.Dir(v.piper)
-	cmd.Stdin = strings.NewReader(text + "\n")
-	var errOut bytes.Buffer
-	cmd.Stderr = &errOut
-	if err := cmd.Run(); err != nil {
-		log.Printf("voice: piper: %v: %s", err, lastLine(errOut.String()))
+	if err := v.tts.say(ctx, voiceSpeakers[voice], text, f.Name()); err != nil {
+		log.Printf("voice: reading aloud: %v", err)
 		return nil, err
 	}
 	return os.ReadFile(f.Name())
+}
+
+// speaker is the reading-aloud helper: started on first use, kept running (the
+// model stays loaded, ~300 MB) until [speakerIdle] passes with nothing to say.
+type speaker struct {
+	bin, models string
+
+	mu   sync.Mutex
+	cmd  *exec.Cmd
+	in   io.WriteCloser
+	out  *bufio.Reader
+	idle *time.Timer
+}
+
+const speakerIdle = 10 * time.Minute
+
+func (sp *speaker) start() error {
+	cmd := exec.Command(sp.bin, sp.models, threads())
+	cmd.Dir = filepath.Dir(sp.bin)
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	sp.cmd, sp.in, sp.out = cmd, in, bufio.NewReader(out)
+	line, err := sp.readLine(60 * time.Second)
+	if err != nil || !strings.HasPrefix(line, "ready") {
+		sp.stop()
+		return fmt.Errorf("voice model didn't load: %v %q", err, line)
+	}
+	return nil
+}
+
+// stop ends the helper (callers hold mu).
+func (sp *speaker) stop() {
+	if sp.cmd == nil {
+		return
+	}
+	sp.in.Close()
+	sp.cmd.Process.Kill()
+	sp.cmd.Wait()
+	sp.cmd, sp.in, sp.out = nil, nil, nil
+}
+
+func (sp *speaker) readLine(timeout time.Duration) (string, error) {
+	type res struct {
+		s   string
+		err error
+	}
+	ch := make(chan res, 1)
+	r := sp.out
+	go func() { s, err := r.ReadString('\n'); ch <- res{strings.TrimSpace(s), err} }()
+	select {
+	case x := <-ch:
+		return x.s, x.err
+	case <-time.After(timeout):
+		return "", errors.New("timed out")
+	}
+}
+
+func (sp *speaker) say(ctx context.Context, sid int, text, out string) error {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	if sp.idle != nil {
+		sp.idle.Stop()
+	}
+	defer func() {
+		sp.idle = time.AfterFunc(speakerIdle, func() { sp.mu.Lock(); sp.stop(); sp.mu.Unlock() })
+	}()
+	if sp.cmd == nil {
+		if err := sp.start(); err != nil {
+			return err
+		}
+	}
+	// One request per line; tabs and line breaks in the text would break that.
+	text = strings.Join(strings.Fields(text), " ")
+	if _, err := fmt.Fprintf(sp.in, "%d\t%s\t%s\n", sid, out, text); err != nil {
+		sp.stop()
+		return err
+	}
+	wait := voiceTimeout
+	if d, ok := ctx.Deadline(); ok {
+		wait = time.Until(d)
+	}
+	line, err := sp.readLine(wait)
+	if err != nil {
+		sp.stop() // stuck or gone: start afresh next time
+		return err
+	}
+	if line != "ok" {
+		return errors.New(line)
+	}
+	return nil
+}
+
+// ---- making text good to listen to
+
+var (
+	urlRe   = regexp.MustCompile(`https?://\S+|www\.\S+`)
+	punctRe = regexp.MustCompile(`([!?.,])[!?.,]+`)
+	laughRe = regexp.MustCompile(`(?i)\b(?:ha){3,}h?\b|\b(?:he){3,}\b|\blo+l\b`)
+)
+
+// speakable turns a chat message into something good to hear: no emoji (they'd be
+// read as their names), "hellooooo" said as "hello", "!!!" as "!", links as "a
+// link", and keyboard mashes left out. "" when nothing is left worth saying.
+func speakable(text string) string {
+	text = urlRe.ReplaceAllString(text, " a link ")
+	var b strings.Builder
+	for _, r := range text {
+		if isEmojiRune(r) {
+			b.WriteRune(' ')
+			continue
+		}
+		b.WriteRune(r)
+	}
+	text = b.String()
+	text = laughRe.ReplaceAllStringFunc(text, func(string) string { return "ha ha" })
+	text = unstretch(text)
+	text = punctRe.ReplaceAllString(text, "$1")
+	words := strings.Fields(text)
+	keep := words[:0]
+	for _, w := range words {
+		letters := strings.TrimFunc(w, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+		if utf8.RuneCountInString(letters) > 18 || (utf8.RuneCountInString(letters) > 6 && !hasVowel(letters)) {
+			continue // "asdfghjklqwerty": a keyboard mash, not a word
+		}
+		keep = append(keep, w)
+	}
+	text = strings.Join(keep, " ")
+	if strings.IndexFunc(text, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) < 0 {
+		return ""
+	}
+	return text
+}
+
+// unstretch says "hellooooo" as "hello": a letter three or more times in a row counts once.
+func unstretch(s string) string {
+	rs := []rune(s)
+	var b strings.Builder
+	for i := 0; i < len(rs); {
+		j := i
+		for j < len(rs) && rs[j] == rs[i] {
+			j++
+		}
+		n := j - i
+		if n >= 3 && unicode.IsLetter(rs[i]) {
+			n = 1
+		}
+		for k := 0; k < n; k++ {
+			b.WriteRune(rs[i])
+		}
+		i = j
+	}
+	return b.String()
+}
+
+func hasVowel(s string) bool { return strings.ContainsAny(strings.ToLower(s), "aeiouy") }
+
+// isEmojiRune: pictographs, symbols, flags, skin tones and the joiners between them.
+func isEmojiRune(r rune) bool {
+	switch {
+	case r == 0x200D || r == 0xFE0F || r == 0xFE0E || r == 0x20E3:
+		return true
+	case r >= 0x1F000 && r <= 0x1FAFF, r >= 0x2600 && r <= 0x27BF, r >= 0x2300 && r <= 0x23FF,
+		r >= 0x2B00 && r <= 0x2BFF, r >= 0x1F1E6 && r <= 0x1F1FF, r >= 0xE0020 && r <= 0xE007F:
+		return true
+	}
+	return unicode.Is(unicode.So, r)
 }
 
 func lastLine(s string) string {
@@ -260,17 +444,25 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request, me *Member)
 		return
 	}
 	var body struct {
-		Text string `json:"text"`
+		Text  string `json:"text"`
+		Voice string `json:"voice"` // "female", "male" or "" (the default)
 	}
 	if !readJSON(w, r, &body) {
 		return
 	}
-	text := strings.Join(strings.Fields(body.Text), " ")
-	if text == "" || utf8.RuneCountInString(text) > maxSpeakRunes {
+	if utf8.RuneCountInString(body.Text) > maxSpeakRunes {
 		writeError(w, http.StatusBadRequest, "send 1 to 600 characters to read aloud")
 		return
 	}
-	wav, err := s.voice.Speak(r.Context(), text)
+	text := speakable(body.Text)
+	if text == "" {
+		writeError(w, http.StatusUnprocessableEntity, "nothing to read aloud there")
+		return
+	}
+	if !validVoice(body.Voice) {
+		body.Voice = ""
+	}
+	wav, err := s.voice.Speak(r.Context(), text, body.Voice)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "couldn't read that aloud right now")
 		return

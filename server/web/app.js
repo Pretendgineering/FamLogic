@@ -1116,7 +1116,9 @@ const TILE_NAMES = { map: ["Thereabouts", "Map"], chat: ["Chitchat", "Chat"], so
   routines: ["Rhythms", "Routines"], nudges: ["Nudges", "Nudges"], ride: ["Where's My Ride", "Where's my ride"], steward: ["Steward", "AI"] };
 const tileName = (t) => t.startsWith("convo.") ? "Chat shortcut" : (TILE_NAMES[t] || [t, t])[plainNames ? 1 : 0];
 const LEVEL_NAMES = { off: "Off", view: "View only", add: "Can add", full: "Full" };
-const SIZE_NAMES = { half: "Half width", wide: "Full width", big: "Big" };
+const SIZE_NAMES = { "1x1": "1 column", "2x1": "2 columns", "3x1": "3 columns (full on phones)", "1x2": "1 column, tall", "2x2": "2 columns, tall", "3x2": "3 columns, tall" };
+// Older sizes, shown as their new names.
+const OLD_SIZES = { half: "1x1", wide: "3x1", big: "3x2" };
 const accessOpen = new Set();   // whose panels are open
 const accessData = new Map();   // id -> their settings from the server
 const caret = '<svg class="acc-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
@@ -1222,10 +1224,20 @@ function drawAccess(m, body) {
   };
   parts.push(el("h3", {}, "Easier to use"), el("div", { class: "acc-opts" },
     opt("big", "Bigger buttons and text"),
-    opt("pictures", "Picture icons (a tiny map, a talking face) instead of the usual symbols")));
+    opt("pictures", "Picture icons (a tiny map, a paper airplane) instead of the usual symbols")));
+  // The voice their messages are read aloud in (they can change it themselves in the app too).
+  const voice = el("select", { "aria-label": `${m.name}'s reading voice` },
+    ...[["", "No preference"], ["female", "Female"], ["male", "Male"]].map(([v, t]) => el("option", { value: v }, t)));
+  voice.value = m.voice || "";
+  voice.addEventListener("change", async () => {
+    try { await api("PATCH", `/api/admin/members/${encodeURIComponent(m.id)}`, { voice: voice.value }); m.voice = voice.value; }
+    catch (err) { alert(err.message); voice.value = m.voice || ""; }
+  });
+  parts.push(el("h3", {}, "Reading voice"),
+    el("p", { class: "acc-note" }, "When someone has their messages read aloud, they hear this voice."), voice);
   // Home screen: drag to order, tick to show, choose a size
   parts.push(el("h3", {}, "Home screen"),
-    el("p", { class: "acc-note" }, "Drag ☰ to reorder, tick what to show and pick a size. Two half-width tiles sit side by side. Nothing ticked: the app's default."),
+    el("p", { class: "acc-note" }, "Drag ☰ to reorder, tick what to show and pick a size (in columns: phones show 2 or 3 across). Nothing ticked: the app's default."),
     homeEditor(d, (home) => saveAccess(m, body, { home })));
   // Their device
   parts.push(el("h3", {}, "Their device"), el("div", { class: "row" },
@@ -1238,7 +1250,7 @@ function drawAccess(m, body) {
 }
 
 function homeEditor(d, save) {
-  const parse = (t) => { const [id, size] = t.split(":"); return { id, size: size || (id === "map" || id === "chat" ? "wide" : "half") }; };
+  const parse = (t) => { const [id, size] = t.split(":"); const sz = size || (id === "map" || id === "chat" ? "wide" : "half"); return { id, size: OLD_SIZES[sz] || sz }; };
   let on = d.home.map(parse);
   const all = () => on.concat(d.tiles.filter((t) => !on.some((x) => x.id === t)).map((t) => ({ ...parse(t), off: true })));
   const commit = () => save(on.map((t) => `${t.id}:${t.size}`));

@@ -34,6 +34,8 @@ data class Member(
     val loc: MemberLocation?,
     /** Shown instead of their initial, if they picked one. */
     val emoji: String = "",
+    /** The voice their messages are read aloud in: "female", "male" or "" (the default). */
+    val voice: String = "",
     /** When this person's active SOS started (unix ms), or 0 if none. */
     val sosSince: Long = 0,
     /** Who has seen their SOS (names). */
@@ -340,8 +342,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
     }
 
     /** Reading aloud on the family's server: text → WAV audio. */
-    suspend fun speak(text: String): ByteArray {
-        val (code, bytes) = raw("POST", "/api/voice/speak", JSONObject().put("text", text).toString().toByteArray(), "application/json")
+    suspend fun speak(text: String, voice: String = ""): ByteArray {
+        val (code, bytes) = raw("POST", "/api/voice/speak", JSONObject().put("text", text).put("voice", voice).toString().toByteArray(), "application/json")
         if (code >= 400) throw ApiException(code, "Couldn't read that aloud ($code)")
         return bytes
     }
@@ -512,6 +514,11 @@ class Api(private val baseUrl: String, private val token: String = "") {
     }
 
     /** Your map pin: an emoji ("" = your initial) on a colour like #6e48d6. */
+    /** The voice your messages are read aloud in: "female", "male" or "". */
+    suspend fun setVoice(voice: String) {
+        request("POST", "/api/me", JSONObject().put("voice", voice))
+    }
+
     suspend fun setIcon(emoji: String, color: String) {
         request("POST", "/api/me", JSONObject().put("emoji", emoji).put("color", color))
     }
@@ -822,6 +829,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             color = o.optString("color", "#4363d8"),
             paused = o.optBoolean("paused", false),
             emoji = o.optString("emoji"),
+            voice = o.optString("voice"),
             sosSince = o.optLong("sosSince", 0),
             sosSeenBy = o.optJSONArray("sosSeenBy")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
             circles = o.optJSONArray("circles")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),

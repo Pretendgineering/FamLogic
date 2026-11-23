@@ -1,5 +1,7 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Favorite
@@ -194,6 +196,9 @@ fun HomeScreen(
     val mapBeside = landscape && !editing && tiles.any { it.id == "map" }
 
     val gate = rememberSettingsGate(prefs, onOpenSettings)
+    LaunchedEffect(Unit) { if (HomeLayout.columns == 0) HomeLayout.columns = prefs.homeColumns }
+    // Tiles across: the person's choice (Look and Feel), or 2 on phones and 3 on tablets.
+    val cols = if (landscape && tiles.any { it.id == "map" } && !editing) 2 else HomeLayout.columns(config.screenWidthDp)
 
     Scaffold(
         topBar = {
@@ -245,7 +250,7 @@ fun HomeScreen(
             val tile: @Composable (HomeTile, Dp) -> Unit = { t, h ->
                 when (t.id) {
                     "map" -> MapTile(prefs, members, tileUrl, tileUrlDark, attribution, cameraSeq, big, h) { onOpen(Tab.Map) }
-                    "chat" -> ChatTile(chats, members, prefs.memberId, big, h, t.size == "half", prefs.lastChat, onOpen = { onOpen(Tab.Chat) }, onOpenChat = onOpenChat)
+                    "chat" -> ChatTile(chats, members, prefs.memberId, big, h, t.w(cols) == 1, prefs.lastChat, onOpen = { onOpen(Tab.Chat) }, onOpenChat = onOpenChat)
                     // One-button tiles: the tile is the button.
                     "sos" -> HoldForSosBar(
                         onTriggered = { Sos.send(context, scope, end = false); sosActive = true },
@@ -260,17 +265,17 @@ fun HomeScreen(
                     }
                 }
             }
-            val unit = if (big) 176.dp else 148.dp
+            val unit = (if (big) 176.dp else 148.dp) * (if (cols == 3) .88f else 1f)
             if (mapBeside) {
                 Row(Modifier.fillMaxSize()) {
-                    TileBoard(tiles.filter { it.id != "map" }, unit, null, Modifier.weight(1f), tile)
+                    TileBoard(tiles.filter { it.id != "map" }, unit, cols, null, Modifier.weight(1f), tile)
                     Box(Modifier.weight(1.15f).fillMaxHeight().padding(top = 12.dp, end = 12.dp, bottom = 12.dp)) {
                         tile(tiles.first { it.id == "map" }, Dp.Unspecified)
                     }
                 }
             } else {
                 TileBoard(
-                    tiles, unit,
+                    tiles, unit, cols,
                     edit = draft?.let { d ->
                         TileEdit(
                             onChange = { draft = it },
@@ -344,9 +349,66 @@ object HomeEditor {
     var requested by mutableStateOf(false)
 }
 
-/** A home screen tile and its size: "half" (half the width), "wide" (the full width) or "big" (full width, twice as tall). */
+/**
+ * A home screen tile and its size: "WxH", W columns wide (1-3, never more than the
+ * home screen has) and H rows tall (1 or 2). Older sizes still read: "half" is one
+ * column, "wide" the full width, "big" the full width and two rows.
+ */
 data class HomeTile(val id: String, val size: String) {
     fun encode() = "$id:$size"
+
+    /** Columns wide, on a home screen [cols] columns across. */
+    fun w(cols: Int) = when (size) {
+        "half" -> 1
+        "wide", "big" -> cols
+        else -> size.substringBefore('x').toIntOrNull() ?: 1
+    }.coerceIn(1, cols)
+
+    /** Rows tall. */
+    fun h() = when (size) {
+        "big" -> 2
+        "half", "wide" -> 1
+        else -> size.substringAfter('x', "1").toIntOrNull() ?: 1
+    }.coerceIn(1, 2)
+
+    fun sized(w: Int, h: Int) = copy(size = "${w}x$h")
+}
+
+/** How many tiles fit across the home screen (Look and Feel), shared so a change shows at once. */
+object HomeLayout {
+    var columns by mutableStateOf(0) // 0 = automatic: 2 on phones, 3 on tablets
+
+    fun columns(screenWidthDp: Int) = when (columns) {
+        2, 3 -> columns
+        else -> if (screenWidthDp >= 600) 3 else 2
+    }
+}
+
+/** A tile's place on the grid. */
+private class Placed(val tile: HomeTile, val row: Int, val col: Int, val w: Int, val h: Int)
+
+/** Lays the tiles out in order, each in the first free spot it fits (so gaps fill up). */
+private fun placeTiles(tiles: List<HomeTile>, cols: Int): List<Placed> {
+    val taken = mutableListOf<BooleanArray>()
+    fun free(r: Int, c: Int) = r >= taken.size || !taken[r][c]
+    val out = mutableListOf<Placed>()
+    for (t in tiles) {
+        val w = t.w(cols)
+        val h = t.h()
+        var r = 0
+        search@ while (true) {
+            for (c in 0..cols - w) {
+                if ((r until r + h).all { rr -> (c until c + w).all { cc -> free(rr, cc) } }) {
+                    while (taken.size < r + h) taken += BooleanArray(cols)
+                    for (rr in r until r + h) for (cc in c until c + w) taken[rr][cc] = true
+                    out += Placed(t, r, c, w, h)
+                    break@search
+                }
+            }
+            r++
+        }
+    }
+    return out
 }
 
 /** "chat:half" → a tile; without a size, the map, chat and SOS are wide and the rest half. */
@@ -354,23 +416,6 @@ fun parseTiles(list: List<String>): List<HomeTile> = list.map {
     val id = it.substringBefore(':')
     val size = it.substringAfter(':', "").ifEmpty { if (id in setOf("map", "chat", "sos")) "wide" else "half" }
     HomeTile(id, size)
-}
-
-/** Rows: two half tiles side by side; a half tile alone keeps its half width (the rest of the row stays empty). */
-private fun rowsOf(tiles: List<HomeTile>): List<List<HomeTile>> {
-    val rows = mutableListOf<List<HomeTile>>()
-    var pending: HomeTile? = null
-    for (t in tiles) {
-        if (t.size == "half") {
-            val p = pending
-            if (p != null) { rows += listOf(p, t); pending = null } else pending = t
-        } else {
-            pending?.let { rows += listOf(it); pending = null }
-            rows += listOf(t)
-        }
-    }
-    pending?.let { rows += listOf(it) }
-    return rows
 }
 
 /** How the tiles are being arranged (null when they aren't). [onPickChat] asks which chat a new chat shortcut opens. */
@@ -451,7 +496,7 @@ private fun TileDrawer(ids: List<String>, modifier: Modifier, onBounds: (Rect) -
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier: Modifier, tile: @Composable (HomeTile, Dp) -> Unit) {
+private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit?, modifier: Modifier, tile: @Composable (HomeTile, Dp) -> Unit) {
     // Arranging: tiles become separate squares with gaps. Otherwise they sit edge to
     // edge, divided by hairlines, so the home screen reads as one surface.
     val gap = if (edit != null) 10.dp else 0.dp
@@ -517,15 +562,12 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
         val id = resizing ?: return
         val r = bounds[id] ?: return
         val unitPx = with(density) { unit.toPx() }
-        val full = boardSize.width - with(density) { (pad * 2).toPx() }
+        val gapPx = with(density) { gap.toPx() }
+        val colPx = (boardSize.width - with(density) { (pad * 2).toPx() } - gapPx * (cols - 1)) / cols
         val (l, rr) = span(r)
-        val w = rr - l
-        val h = finger.y - r.top
-        resize(id, when {
-            h > unitPx * 1.5f -> "big"
-            w < full * 0.7f -> "half"
-            else -> "wide"
-        })
+        val w = ((rr - l + gapPx) / (colPx + gapPx)).let { kotlin.math.round(it).toInt() }.coerceIn(1, cols)
+        val h = if (finger.y - r.top > unitPx * 1.5f) 2 else 1
+        resize(id, "${w}x$h")
     }
     // Near the top or bottom while dragging, the board scrolls by itself.
     LaunchedEffect(dragging) {
@@ -606,7 +648,16 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
                 if (!moved) {
                     // A tap: half → full width → big → half.
                     val t = current.firstOrNull { it.id == grip }
-                    if (t != null) resize(grip, when (t.size) { "half" -> "wide"; "wide" -> "big"; else -> "half" })
+                    // A tap: one column wider each time, then tall, then back to the smallest.
+                    if (t != null) {
+                        val w = t.w(cols)
+                        val h = t.h()
+                        resize(grip, when {
+                            w < cols -> "${w + 1}x$h"
+                            h == 1 -> "${cols}x2"
+                            else -> "1x1"
+                        })
+                    }
                 }
                 resizing = null
                 return@awaitEachGesture
@@ -640,19 +691,21 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
             Modifier.fillMaxSize().verticalScroll(scroll).padding(pad).padding(bottom = if (edit != null) DRAWER_HEIGHT else 0.dp),
             verticalArrangement = Arrangement.spacedBy(gap),
         ) {
-            rowsOf(tiles).forEachIndexed { r, row ->
-                if (edit == null && r > 0) HorizontalDivider(color = line)
-                // Tiles in a row share its height (a fixed size each), so the hairline between them spans it.
-                val rowH = row.maxOf { if (it.size == "big") unit * 2 + gap else unit }
-                Row(Modifier.fillMaxWidth().height(rowH), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    row.forEachIndexed { i, t ->
-                        if (edit == null && i > 0) VerticalDivider(color = line)
+            // The grid: columns of equal width, rows of [unit] height; each tile spans its size.
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val colW = (maxWidth - gap * (cols - 1)) / cols
+                val placed = placeTiles(tiles, cols)
+                val rowsN = placed.maxOfOrNull { it.row + it.h } ?: 0
+                Box(Modifier.fillMaxWidth().height(if (rowsN == 0) 0.dp else unit * rowsN + gap * (rowsN - 1))) {
+                    placed.forEach { p ->
+                        val t = p.tile
                         key(t.id) {
-                            val h = if (t.size == "big") unit * 2 + gap else unit
+                            val h = unit * p.h + gap * (p.h - 1)
                             val isDragged = dragging == t.id
                             DisposableEffect(t.id) { onDispose { bounds.remove(t.id); handles.remove(t.id); grips.remove(t.id); closes.remove(t.id) } }
                             Box(
-                                Modifier.weight(1f)
+                                Modifier.offset(x = (colW + gap) * p.col, y = (unit + gap) * p.row)
+                                    .size(colW * p.w + gap * (p.w - 1), h)
                                     .onGloballyPositioned { bounds[t.id] = it.boundsInRoot() }
                                     .zIndex(if (isDragged) 1f else 0f)
                                     .graphicsLayer {
@@ -666,25 +719,28 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, edit: TileEdit?, modifier
                                             scaleX = 1.05f; scaleY = 1.05f; shadowElevation = 28f
                                         }
                                     }
-                                    .then(if (edit != null) Modifier.clip(RoundedCornerShape(12.dp)) else Modifier),
+                                    .then(
+                                        if (edit != null) Modifier.clip(RoundedCornerShape(12.dp))
+                                        // Edge to edge: a hairline on the right (unless at the edge) and along the bottom.
+                                        else Modifier.drawWithContent {
+                                            drawContent()
+                                            val px = 1.dp.toPx()
+                                            if (p.col + p.w < cols) drawRect(line, Offset(size.width - px, 0f), androidx.compose.ui.geometry.Size(px, size.height))
+                                            drawRect(line, Offset(0f, size.height - px), androidx.compose.ui.geometry.Size(size.width, px))
+                                        },
+                                    ),
                             ) {
                                 tile(t, h)
                                 if (edit != null) EditChrome(t.id, isDragged || resizing == t.id, edit, tiles, handles, grips, closes)
                             }
                         }
                     }
-                    // A half-width tile on its own keeps its size; the rest of the row stays free.
-                    if (row.size == 1 && row[0].size == "half") {
-                        if (edit == null) VerticalDivider(color = line)
-                        Spacer(Modifier.weight(1f))
-                    }
                 }
             }
-            if (edit == null && tiles.isNotEmpty()) HorizontalDivider(color = line)
             if (edit != null) {
                 Text(
                     "Drag a tile up from the drawer below to add it. Press and hold a tile to move it, or drag it back down to the drawer to take it off. " +
-                        "Drag the corner grip to stretch a tile: narrow for half width, wide for the full width, or down for a big tile.",
+                        "Drag the corner grip to stretch a tile: 1 to $cols columns wide, and down to make it twice as tall (or tap the grip to step through the sizes).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),

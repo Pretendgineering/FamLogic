@@ -228,8 +228,9 @@ type publicMember struct {
 	Name   string    `json:"name"`
 	Color  string    `json:"color"`
 	Emoji  string    `json:"emoji,omitempty"`
-	Role   string    `json:"role"`   // "parent", "child" or "dependent"
-	Access string    `json:"access"` // admin, parent, older_child, younger_child, dependent
+	Voice  string    `json:"voice,omitempty"` // read aloud in: "female", "male" or "" (default)
+	Role   string    `json:"role"`            // "parent", "child" or "dependent"
+	Access string    `json:"access"`          // admin, parent, older_child, younger_child, dependent
 	Paused bool      `json:"paused"`
 	Loc    *Location `json:"loc"`
 	// When this person's active SOS started (unix ms); absent if no SOS.
@@ -248,7 +249,7 @@ type publicMember struct {
 func toPublic(ms []Member) []publicMember {
 	out := make([]publicMember, len(ms))
 	for i, m := range ms {
-		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Role: m.role(), Access: m.access(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
+		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Voice: m.Voice, Role: m.role(), Access: m.access(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
 		if out[i].Circles == nil {
 			out[i].Circles = []string{}
 		}
@@ -776,6 +777,7 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 		Paused          *bool    `json:"paused"`
 		Color           *string  `json:"color"`
 		Emoji           *string  `json:"emoji"`
+		Voice           *string  `json:"voice"`
 		ShareLowBattery *bool    `json:"shareLowBattery"`
 		ShareArrivals   *bool    `json:"shareArrivals"`
 		TrailHours      *int     `json:"trailHours"`
@@ -839,7 +841,11 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 			return
 		}
 	}
-	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, Emoji: req.Emoji, ShareLowBattery: req.ShareLowBattery, ShareArrivals: req.ShareArrivals})
+	if req.Voice != nil && !validVoice(*req.Voice) {
+		writeError(w, http.StatusBadRequest, `voice must be "female", "male" or ""`)
+		return
+	}
+	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, Emoji: req.Emoji, Voice: req.Voice, ShareLowBattery: req.ShareLowBattery, ShareArrivals: req.ShareArrivals})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
@@ -1217,6 +1223,7 @@ func (s *Server) handleAdminPatchMember(w http.ResponseWriter, r *http.Request) 
 		Name  *string `json:"name"`
 		Color *string `json:"color"`
 		Emoji *string `json:"emoji"`
+		Voice *string `json:"voice"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -1224,7 +1231,11 @@ func (s *Server) handleAdminPatchMember(w http.ResponseWriter, r *http.Request) 
 	if !s.validatePatch(w, req.Name, req.Color, req.Emoji) {
 		return
 	}
-	m, err := s.store.UpdateMember(r.PathValue("id"), MemberPatch{Name: req.Name, Color: req.Color, Emoji: req.Emoji})
+	if req.Voice != nil && !validVoice(*req.Voice) {
+		writeError(w, http.StatusBadRequest, `voice must be "female", "male" or ""`)
+		return
+	}
+	m, err := s.store.UpdateMember(r.PathValue("id"), MemberPatch{Name: req.Name, Color: req.Color, Emoji: req.Emoji, Voice: req.Voice})
 	if errors.Is(err, ErrNotFound) {
 		writeError(w, http.StatusNotFound, "no such member")
 		return

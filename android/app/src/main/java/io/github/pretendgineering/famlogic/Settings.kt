@@ -181,6 +181,7 @@ fun SettingsScreen(
                 }
                 SettingsPage.You -> {
                     IconCard(prefs, members.find { it.id == myId }, supports("emoji"), onProfileChanged)
+                    if (supports("voice-tts")) ReadingVoiceCard(prefs, members.find { it.id == myId }?.voice.orEmpty(), onProfileChanged)
                     AccountPage(prefs, username, hasPassword, onPasswordSaved)
                 }
                 SettingsPage.Look -> {
@@ -295,6 +296,18 @@ private fun ModulesCard(prefs: Prefs, features: Set<String>?, onOpenHomeEditor: 
     }
     SettingsCard("Home Screen and Modules") {
         OutlinedButton(onClick = onOpenHomeEditor, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("Arrange home screen") }
+        // How many tiles across.
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Tiles across", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            listOf(0 to "Auto", 2 to "2", 3 to "3").forEach { (n, label) ->
+                androidx.compose.material3.FilterChip(
+                    selected = prefs.homeColumns == n && (HomeLayout.columns == n || HomeLayout.columns == 0),
+                    onClick = { prefs.homeColumns = n; HomeLayout.columns = n },
+                    label = { Text(label) },
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            }
+        }
         Hint(
             if (admin) "As an admin, switching a module off here switches it off for the whole family."
             else "Hide the modules you don't use on this phone. Your family's admin chooses which modules the family has.",
@@ -325,6 +338,41 @@ private fun ModulesCard(prefs: Prefs, features: Set<String>?, onOpenHomeEditor: 
                         }
                     },
                 )
+            }
+        }
+    }
+}
+
+/** You → Reading Voice: the voice your messages are read aloud in, for everyone. */
+@Composable
+private fun ReadingVoiceCard(prefs: Prefs, current: String, onChanged: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    var choice by remember(current) { mutableStateOf(current) }
+    SettingsCard("Reading Voice") {
+        Hint("When someone has your messages read aloud, they hear this voice.")
+        listOf("female" to "Female", "male" to "Male", "" to "No preference").forEach { (id, label) ->
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = choice == id) {
+                    if (choice == id) return@selectable
+                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    val before = choice
+                    choice = id
+                    scope.launch {
+                        runCatching { Api(prefs.serverUrl, prefs.token).setVoice(id) }
+                            .onSuccess {
+                                onChanged()
+                                // A sample, in the new voice.
+                                Voice.speak(context, prefs, "Hi! This is how your messages will sound.", id)
+                            }
+                            .onFailure { choice = before; android.widget.Toast.makeText(context, "Couldn't save: ${it.message}", android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                }.padding(vertical = squeezed(6.dp)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = choice == id, onClick = null)
+                Text(label, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
             }
         }
     }

@@ -25,14 +25,14 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `POST /api/checkin` `{note, loc?}` | `Bearer <token>` | Check in |
 | `POST /api/location?since=<cursor>` `{lat, lon, acc, speed, heading?, battery, charging, time}` (heading: 1-360 degrees while moving) | `Bearer <token>` | Report a fix; the reply carries new alerts `{events, cursor}` |
 | `GET /api/members?since=<cursor>` | `Bearer <token>` | Everyone's latest position, map settings, your feature settings (including `kid`: what you may use, `home` and `pinSet`), and new alerts |
-| `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?, home?, big?, pictures?}` | `Bearer <token>` | Rename yourself / pause / feature switches / arrange your home screen (adults; parents arrange children's) |
+| `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?, home?, big?, pictures?, voice?}` | `Bearer <token>` | Rename yourself / pause / feature switches / arrange your home screen (adults; parents arrange children's) |
 | `DELETE /api/me` | `Bearer <token>` | Leave |
 | `/api/admin/*` | console login cookie | Admin pages (invites, members, roles, modules, backups). `GET /api/admin/session` says who's logged in |
 | `/api/chat`, `/api/chat/{id}/messages`, … | `Bearer <token>` or a parent's console session | Chat: see [ARCHITECTURE.md](ARCHITECTURE.md#chat-built-in-0160) |
 | `POST /api/chat/{id}/moderate` `{action}` | a parent | `approve`, `pause`, `resume`, `block`, `unblock` or `delete` a chat with a child in it (the main admin: `/api/admin/chat/{id}/moderate`, any chat but the family chat) |
 | `DELETE /api/chat/{id}/messages/{mid}` (or `POST …/delete`) | `Bearer <token>` | Delete your own message, or (parents) any message in a chat with a child in it |
 | `POST /api/voice/transcribe` (body: 16 kHz mono 16-bit WAV, up to a minute) | `Bearer <token>` | Speech to text on the server: `{text}` (`""` if nothing was understood). Feature `voice-stt` |
-| `POST /api/voice/speak` `{text}` | `Bearer <token>` | Reads text aloud: `audio/wav`. Feature `voice-tts` |
+| `POST /api/voice/speak` `{text, voice?}` | `Bearer <token>` | Reads text aloud (`voice`: `female`, `male` or empty): `audio/wav`; 422 if nothing's left to say once emoji and the like are removed. Feature `voice-tts` |
 | `GET /api/modules` | `Bearer <token>` | The family's modules: `{modules:[{id, name, plain, description, available, enabled}]}` |
 | `PUT` or `POST /api/modules` `{enabled:{id:bool}}` | `Bearer <token>` (an admin) | Switch modules on or off for the whole family, from the app |
 | `GET /api/v1/vault/guide` | none | The notes vault's formatting guide for people and AI agents (`text/markdown`) |

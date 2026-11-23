@@ -166,8 +166,8 @@ where: Smile Dental
 
 ## Voice (built in 0.21.0)
 
-- **In the image:** whisper.cpp's `whisper-cli` (x86-64 builds carry every CPU variant and pick at run time; ARM64 uses the ARMv8 baseline), the quantised Whisper *small.en* model, Piper with the LJSpeech voice (public domain) and espeak-ng's data, under `/voice`. The runtime image is distroless `cc` (glibc, no shell). About 700 MB in all.
-- **On request** (`server/voice.go`): one job at a time; the recording is written to `data/tmp`, transcribed with the listening window sized to the clip (much faster for short messages), tidied (`[BLANK_AUDIO]` and the like removed) and deleted. Reading aloud runs Piper on the text. Nothing is kept.
+- **In the image:** whisper.cpp's `whisper-cli` (x86-64 builds carry every CPU variant and pick at run time; ARM64 uses the ARMv8 baseline), the quantised Whisper *small.en* model, `famlogic-tts` (a small C helper over sherpa-onnx's C API, `server/tts/`) with the quantised Kokoro v1.0 model, its voices, an English dictionary and espeak-ng's data (for names and other words the dictionary lacks), under `/voice`. The runtime image is distroless `cc` (glibc, no shell). About 800 MB in all.
+- **On request** (`server/voice.go`): one job at a time; the recording is written to `data/tmp`, transcribed with the listening window sized to the clip (much faster for short messages), tidied (`[BLANK_AUDIO]` and the like removed) and deleted. Reading aloud first tidies the text (no emoji, stretched words shortened, keyboard mashes dropped), then hands it to `famlogic-tts`, which keeps the model loaded (~300 MB) between messages and exits after 10 idle minutes. Voices: Kokoro's "Heart" (female, the default) and "Michael" (male), chosen by each sender's `voice`. Nothing is kept.
 - **The app** (`Voice.kt`, `TalkButton.kt`): push to talk records 16 kHz mono audio for the server, or uses Android's `SpeechRecognizer`; reading aloud uses Android's `TextToSpeech` or the server's WAV. *Automatic* means the phone's own speech on the Google edition when it has it, the server everywhere else; the choice is in Settings → Look and Feel → Voice. "Oops, try again!" is a recording in the app, so it plays even offline.
 
 ## Parents' controls and the home screen (built in 0.19.0)
@@ -226,10 +226,10 @@ Press-to-talk and read-aloud are meant to be a main way of using FamLogic on eve
                           agent (Hermes / OpenClaw…) ◀── {who: Sam, role: child, device: kitchen-tv, text}
                                         │  uses FamLogic's API with a scoped key: tick chore, send message, read routine…
                                         ▼ reply text
- device ◀──audio or text── FamLogic ◀── text-to-speech (Piper container, optional)
+ device ◀──audio or text── FamLogic ◀── text-to-speech (Kokoro, built in)
 ```
 
-- **Speech, server first:** if Whisper (speech-to-text) and Piper (text-to-speech) containers are configured, FamLogic uses them: private, consistent, and available to devices without their own speech services (Android TV, FOSS phones). Otherwise each device uses Android's own speech recognition and text-to-speech, and sends text.
+- **Speech, server first:** Whisper (speech-to-text) and Kokoro (text-to-speech) are built into the server, so FamLogic uses them: private, consistent, and available to devices without their own speech services (Android TV, FOSS phones). Otherwise each device uses Android's own speech recognition and text-to-speech, and sends text.
 - **Who is talking** comes from the device's sign-in (a child's tablet, a parent's phone) or, on a shared TV, from a "Who's talking?" pick (or the agent asks). The agent gets the person, role and device, and a key limited to what that role may do (a child can tick their own chores and message family, not change settings).
 - **Agent connection** (Settings → AI & API): the agent's URL and type (webhook or OpenAI-compatible), a key for FamLogic's API, and per-role switches. FamLogic ships a skill file describing its API and Markdown conventions.
 - **Read aloud:** per device (kids' tablets, the TV), with quiet hours: new messages, the next chore, routine steps, and the agent's replies.

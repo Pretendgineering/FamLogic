@@ -45,11 +45,18 @@ object Voice {
         return pick(Prefs(context).voiceEngine, phone, server)
     }
 
-    /** Which engine reads aloud here, or null if neither can. */
+    /**
+     * Which engine reads aloud here, or null if neither can. Automatic prefers the
+     * family's server when it has a voice: its voices are warmer than most phones',
+     * and it reads each person in their chosen male or female voice.
+     */
     fun speaker(context: Context, features: Set<String>): Engine? {
         val phone = tts?.ready == true
         val server = "voice-tts" in features
-        return pick(Prefs(context).voiceEngine, phone, server)
+        return when (Prefs(context).voiceEngine) {
+            "phone" -> if (phone) Engine.Phone else if (server) Engine.Server else null
+            else -> if (server) Engine.Server else if (phone) Engine.Phone else null
+        }
     }
 
     private fun pick(choice: String, phone: Boolean, server: Boolean): Engine? = when (choice) {
@@ -89,16 +96,22 @@ object Voice {
         if (tts == null) tts = runCatching { Tts(context) }.getOrNull()
     }
 
-    /** Reads text aloud with the chosen engine. Returns false if it couldn't. */
-    suspend fun speak(context: Context, prefs: Prefs, text: String): Boolean {
+    /**
+     * Reads text aloud with the chosen engine, in [voice] ("female", "male" or ""
+     * for the default) where the engine can. Emoji and the like are left out (see
+     * [speakable]). Returns false if it couldn't (or there was nothing to say).
+     */
+    suspend fun speak(context: Context, prefs: Prefs, text: String, voice: String = ""): Boolean {
         warmUp(context)
+        val say = speakable(text)
+        if (say.isEmpty()) return false
         return when (speaker(context, prefs.serverFeatures)) {
             Engine.Phone -> {
-                tts?.engine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "famlogic-${text.hashCode()}")
+                tts?.engine?.speak(say, TextToSpeech.QUEUE_FLUSH, null, "famlogic-${say.hashCode()}")
                 true
             }
             Engine.Server -> try {
-                val wav = Api(prefs.serverUrl, prefs.token).speak(text)
+                val wav = Api(prefs.serverUrl, prefs.token).speak(say, voice)
                 val f = File(context.cacheDir, "say.wav").apply { writeBytes(wav) }
                 withContext(Dispatchers.Main) { play { MediaPlayer().apply { setDataSource(f.path); prepare() } } }
                 true
@@ -111,6 +124,41 @@ object Voice {
 
     /** "Oops, try again!" (a recording in the app, so it works even offline). */
     fun oops(context: Context) = play { MediaPlayer.create(context, R.raw.oops) }
+
+    /** "Sent!" after a younger child's message goes, in the same friendly voice. */
+    fun sent(context: Context) = play { MediaPlayer.create(context, R.raw.sent) }
+
+    /** Whether a message has words worth reading aloud (not just emoji or a photo). */
+    fun hasWords(text: String) = speakable(text).isNotEmpty()
+
+    /**
+     * A message made good to listen to (the same rules as the server's): no emoji
+     * (they'd be read out by name), "hellooooo" said as "hello", "!!!" as "!",
+     * links as "a link", keyboard mashes left out. "" if nothing is left.
+     */
+    fun speakable(text: String): String {
+        var t = text.replace(Regex("""https?://\S+|www\.\S+"""), " a link ")
+        t = buildString {
+            var i = 0
+            while (i < t.length) {
+                val cp = t.codePointAt(i)
+                append(if (isEmoji(cp)) " " else String(Character.toChars(cp)))
+                i += Character.charCount(cp)
+            }
+        }
+        t = t.replace(Regex("""(?i)\b(?:ha){3,}h?\b|\b(?:he){3,}\b|\blo+l\b"""), "ha ha")
+        t = t.replace(Regex("""(\p{L})\1{2,}"""), "$1")
+        t = t.replace(Regex("""([!?.,])[!?.,]+"""), "$1")
+        t = t.split(Regex("""\s+""")).filter { w ->
+            val letters = w.trim { !it.isLetterOrDigit() }
+            !(letters.length > 18 || (letters.length > 6 && letters.none { it.lowercaseChar() in "aeiouy" }))
+        }.joinToString(" ").trim()
+        return if (t.any { it.isLetterOrDigit() }) t else ""
+    }
+
+    private fun isEmoji(cp: Int): Boolean = cp == 0x200D || cp == 0xFE0F || cp == 0xFE0E || cp == 0x20E3 ||
+        cp in 0x1F000..0x1FAFF || cp in 0x2600..0x27BF || cp in 0x2300..0x23FF || cp in 0x2B00..0x2BFF ||
+        cp in 0xE0020..0xE007F || Character.getType(cp) == Character.OTHER_SYMBOL.toInt()
 
     private fun play(make: () -> MediaPlayer?) {
         player?.release()

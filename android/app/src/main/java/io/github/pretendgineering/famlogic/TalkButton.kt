@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
@@ -67,7 +70,11 @@ import kotlinx.coroutines.launch
  * above the message box. Otherwise a round button beside it.
  */
 @Composable
-fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modifier = Modifier, bar: Boolean = false, label: String = "Hold to talk") {
+fun TalkButton(
+    prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modifier = Modifier, bar: Boolean = false, label: String = "Hold to talk",
+    /** A plain microphone (grown-ups); otherwise the talking smiley (children). */
+    mic: Boolean = !Access.isChild,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -126,7 +133,8 @@ fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modif
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(size * 0.82f), contentAlignment = Alignment.Center) {
-                    Canvas(Modifier.fillMaxSize()) { smiley(mouth, listening) }
+                    if (mic) Icon(Icons.Filled.Mic, contentDescription = null, tint = if (glow > .5f) MaterialTheme.colorScheme.onPrimary else accent, modifier = Modifier.fillMaxSize(0.7f))
+                    else Canvas(Modifier.fillMaxSize()) { smiley(mouth, listening, waves = beat) }
                     if (thinking) CircularProgressIndicator(Modifier.fillMaxSize(), strokeWidth = 4.dp)
                 }
                 Text(
@@ -152,7 +160,17 @@ fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modif
                     radius = this.size.minDimension / 2,
                 )
             }
-            smiley(mouth, listening, scale = .78f)
+            if (!mic) smiley(mouth, listening, scale = .8f, waves = if (listening) beat else 0f)
+        }
+        if (mic) {
+            // Grown-ups: a plain microphone in a circle, filled while it listens.
+            Box(
+                Modifier.size(size * 0.82f).scale(pop).clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(lerp(MaterialTheme.colorScheme.secondaryContainer, accent, glow)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Mic, contentDescription = null, tint = if (glow > .5f) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(size * 0.46f))
+            }
         }
         if (thinking) CircularProgressIndicator(Modifier.size(size * 0.9f), strokeWidth = 5.dp)
     }
@@ -161,9 +179,19 @@ fun TalkButton(prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modif
 private val INK = Color(0xFF2B2440)
 
 /** A round yellow face with a big, happy, open-mouthed grin (it talks while listening). */
-private fun DrawScope.smiley(open: Float, listening: Boolean, scale: Float = .92f) {
-    val r = size.minDimension / 2 * scale
-    val c = center
+private fun DrawScope.smiley(open: Float, listening: Boolean, scale: Float = .92f, waves: Float = 0f) {
+    // The face sits a little left, with sound waves coming out to the right, so it
+    // reads as "talking", not just a smiley.
+    val r = size.minDimension / 2 * scale * .74f
+    val c = Offset(size.width / 2 - r * .34f, size.height / 2)
+    for (i in 0..2) {
+        val reach = r * (1.15f + i * .22f) + r * .06f * waves
+        drawArc(
+            Color(0xFF6F5AA8).copy(alpha = (if (listening) 1f else .85f) - i * .22f), -35f, 70f, false,
+            topLeft = Offset(c.x - reach, c.y - reach), size = Size(reach * 2, reach * 2),
+            style = Stroke(r * .12f, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+        )
+    }
     drawCircle(Color(0xFFFFCC3D), r, c)
     drawCircle(Color(0xFFE0A82E), r, c, style = Stroke(r * .06f))
     // Rosy cheeks.

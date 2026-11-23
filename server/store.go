@@ -38,10 +38,12 @@ type Location struct {
 
 // Member is one person (one phone) in the family.
 type Member struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Color     string    `json:"color"`
-	Emoji     string    `json:"emoji,omitempty"` // shown instead of the initial, if set
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+	Emoji string `json:"emoji,omitempty"` // shown instead of the initial, if set
+	// The voice their messages are read aloud in: "female", "male" or "" (the default).
+	Voice     string    `json:"voice,omitempty"`
 	TokenHash string    `json:"tokenHash"`
 	CreatedAt int64     `json:"createdAt"`
 	Paused    bool      `json:"paused"`
@@ -411,6 +413,7 @@ type MemberPatch struct {
 	Paused          *bool
 	Color           *string
 	Emoji           *string
+	Voice           *string
 	ShareLowBattery *bool
 	ShareArrivals   *bool
 }
@@ -429,6 +432,9 @@ func (s *Store) UpdateMember(id string, p MemberPatch) (*Member, error) {
 	}
 	if p.Color != nil {
 		m.Color = *p.Color
+	}
+	if p.Voice != nil {
+		m.Voice = *p.Voice
 	}
 	if p.Emoji != nil {
 		m.Emoji = *p.Emoji
