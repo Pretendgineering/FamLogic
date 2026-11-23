@@ -18,11 +18,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Talk to send a message (push to talk in chat) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- To find the Pebble phone app (PebbleKit 2) -->
     <queries>
         <intent>
             <action android:name="io.rebble.pebblekit2.SEND_DATA_TO_WATCH" />
+        </intent>
+        <!-- The phone's own speech recognition and text to speech, when it has them -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
     </queries>
 

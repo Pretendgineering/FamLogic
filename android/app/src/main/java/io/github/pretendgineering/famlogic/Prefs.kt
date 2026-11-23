@@ -246,6 +246,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("plain_names", false)
         set(v) = sp.edit { putBoolean("plain_names", v) }
 
+    /** Voice engine: "auto", "phone" (Android's own speech) or "server" (the family's server). */
+    var voiceEngine: String
+        get() = sp.getString("voice_engine", "auto") ?: "auto"
+        set(v) = sp.edit { putString("voice_engine", v) }
+
     /** How this device is used: "phone" or "display" (a Control Deck). This device only. */
     var deviceMode: String
         get() = sp.getString("device_mode", "phone") ?: "phone"

@@ -1,5 +1,7 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -189,6 +191,7 @@ fun SettingsScreen(
                 SettingsPage.Customize -> {
                     IconCard(prefs, members.find { it.id == myId }, supports("emoji"), onProfileChanged)
                     MapPage(prefs, onMapStyleChange, onDimMapChange)
+                    VoiceCard(prefs)
                 }
                 SettingsPage.Device -> DevicePage()
                 SettingsPage.Pebble -> PebblePage(prefs, supports("index01"))
@@ -231,6 +234,47 @@ private fun menuSummary(
         "Version ${BuildConfig.VERSION_NAME} · all set"
     } else {
         "Phone setup needs attention"
+    }
+}
+
+/** Which speech engine this device uses for talking and reading aloud. */
+@Composable
+private fun VoiceCard(prefs: Prefs) {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    var choice by remember { mutableStateOf(prefs.voiceEngine) }
+    LaunchedEffect(Unit) { Voice.warmUp(context) }
+    val features = prefs.serverFeatures
+    fun name(e: Voice.Engine?) = when (e) {
+        Voice.Engine.Phone -> "this phone's own speech"
+        Voice.Engine.Server -> "your family's server"
+        null -> "nothing (no speech service here, and the server has no voice)"
+    }
+    SettingsCard("Voice") {
+        Hint("Talking to send a message, and hearing messages read aloud. Only changes this device.")
+        listOf(
+            "auto" to ("Automatic" to if (BuildConfig.FLAVOR == "google") "The phone's own speech when it has it (usually quickest), otherwise your family's server." else "Your family's server: private, and the same on every device."),
+            "phone" to ("This phone's speech" to "Android's speech recognition and text to speech (often Google's, which may send audio to Google)."),
+            "server" to ("Your family's server" to "Everything stays on your server."),
+        ).forEach { (id, label) ->
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = choice == id) {
+                    if (choice != id) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    choice = id
+                    prefs.voiceEngine = id
+                }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = choice == id, onClick = null)
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(label.first, style = MaterialTheme.typography.titleMedium)
+                    Hint(label.second)
+                }
+            }
+        }
+        key(choice) {
+            Hint("Listening with ${name(Voice.listener(context, features))}; reading aloud with ${name(Voice.speaker(context, features))}.")
+        }
     }
 }
 

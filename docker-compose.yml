@@ -21,7 +21,7 @@ services:
       # How long an invite link works, in hours.
       # INVITE_HOURS: "72"
       # Voice (talk to send messages, hear them read aloud) runs on this server, built in.
-      # It needs about 1 GB of free memory while someone is talking. "off" switches it off.
+      # It uses about 400 MB of memory for a few seconds while someone talks. "off" switches it off.
       # VOICE: "off"
     volumes:
       - famlogic-data:/data

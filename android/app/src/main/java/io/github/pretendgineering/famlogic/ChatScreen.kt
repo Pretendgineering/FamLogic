@@ -417,6 +417,8 @@ private fun ConversationView(
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var iconPicking by remember { mutableStateOf(false) }
+    val readAloud = Access.younger && Access.can("voice")
+    DisposableEffect(convId) { Voice.warmUp(context); onDispose { Voice.stop() } }
     var deleting by remember { mutableStateOf<ChatMessage?>(null) }
     val listState = rememberLazyListState()
     val api = remember { Api(prefs.serverUrl, prefs.token) }
@@ -438,8 +440,17 @@ private fun ConversationView(
                 thread = t
                 if (full) messages.retainAll { m -> t.messages.any { it.id == m.id } || m.id < (t.messages.firstOrNull()?.id ?: 0) }
                 if (t.messages.isNotEmpty()) {
-                    messages += t.messages.filter { m -> messages.none { it.id == m.id } }
+                    val fresh = t.messages.filter { m -> messages.none { it.id == m.id } }
+                    val firstLoad = messages.isEmpty()
+                    messages += fresh
                     listState.animateScrollToItem(0)
+                    // Younger children hear new messages read aloud as they arrive.
+                    if (!firstLoad && readAloud) {
+                        fresh.lastOrNull { it.sender != prefs.memberId && it.text.isNotBlank() }?.let { m ->
+                            val who = people.find { it.id == m.sender }?.name ?: "Someone"
+                            launch { Voice.speak(context, prefs, "$who says: ${m.text}") }
+                        }
+                    }
                 }
                 val newest = messages.lastOrNull()?.id ?: 0
                 if (t.canPost && newest > 0) runCatching { api.chatRead(convId, newest) }
@@ -489,6 +500,22 @@ private fun ConversationView(
     var photoMenu by remember { mutableStateOf(false) }
     var muting by remember { mutableStateOf(false) }
     var mutedUntil by remember(convId) { mutableStateOf(prefs.chatMutedUntil(convId)) }
+    fun sendText(t: String, after: () -> Unit = {}) {
+        if (t.isEmpty() || sending) return
+        scope.launch {
+            sending = true
+            try {
+                val m = api.chatSend(convId, t)
+                after()
+                if (messages.none { it.id == m.id }) messages += m
+                listState.animateScrollToItem(0)
+            } catch (e: IOException) {
+                error = e.message
+            } finally {
+                sending = false
+            }
+        }
+    }
     fun send() {
         val t = text.trim()
         if (staged.isNotEmpty() && !sending) {
@@ -629,6 +656,11 @@ private fun ConversationView(
                         seenBy = if (m.id == myLast?.id) seenBy else emptyList(),
                         showAvatar = newer == null || newer.sender != m.sender || !sameDay(newer.time, m.time),
                         onLongPress = if ((m.sender == prefs.memberId && Access.can("chat_delete")) || moderator) ({ deleting = m }) else null,
+                        // Tap a message to hear it (younger children, and anyone using picture icons).
+                        onTap = if (readAloud || (Access.pictures && Access.can("voice"))) ({
+                            val who = if (m.sender == prefs.memberId) "You" else people.find { it.id == m.sender }?.name ?: "Someone"
+                            scope.launch { if (m.text.isNotBlank() && !Voice.speak(context, prefs, "$who said: ${m.text}")) Voice.oops(context) }
+                        }) else null,
                     )
                     if (older == null || !sameDay(older.time, m.time)) DayHeader(m.time)
                 }
@@ -645,8 +677,32 @@ private fun ConversationView(
                     ) { Icon(Icons.Filled.Close, contentDescription = "Remove the photo", tint = MaterialTheme.colorScheme.inverseOnSurface) }
                 }
             }
+            // Talking: younger children get a big push-to-talk button that sends what they say;
+            // everyone else a small one that types it into the message box.
+            val canTalk = canPost && Access.can("voice") && Voice.listener(context, prefs.serverFeatures) != null
+            if (canTalk && Access.younger) {
+                Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    TalkButton(prefs, 132.dp, onText = { said ->
+                        if (said.isEmpty()) {
+                            Voice.oops(context)
+                        } else {
+                            sendText(said) {
+                                // Read back what went, so they know it was right.
+                                scope.launch { Voice.speak(context, prefs, "Sent! $said") }
+                            }
+                        }
+                    })
+                    Text("Hold to talk", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             if (canPost) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (canTalk && !Access.younger) {
+                        TalkButton(prefs, 48.dp, onText = { said ->
+                            if (said.isEmpty()) android.widget.Toast.makeText(context, "Didn't catch that. Hold, talk, then let go.", android.widget.Toast.LENGTH_SHORT).show()
+                            else text = (text.trimEnd() + " " + said).trim().take(4000)
+                        })
+                    }
                     if (Access.can("chat_photos")) Box {
                         IconButton(onClick = { photoMenu = true }, enabled = !sending, modifier = if (big) Modifier.size(64.dp) else Modifier) {
                             if (Access.pictures) Pictures.Camera(if (big) 44.dp else 32.dp)
@@ -787,7 +843,7 @@ private val STATUS_LABELS = mapOf("pending" to "Needs OK", "paused" to "Paused",
 @Composable
 private fun Bubble(
     prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boolean, showName: Boolean, seenBy: List<String>,
-    showAvatar: Boolean = true, onLongPress: (() -> Unit)? = null,
+    showAvatar: Boolean = true, onLongPress: (() -> Unit)? = null, onTap: (() -> Unit)? = null,
 ) {
     val sender = people.find { it.id == m.sender }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
@@ -808,7 +864,14 @@ private fun Bubble(
             Modifier.widthIn(max = 300.dp)
                 .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (mine) 18.dp else 6.dp, bottomEnd = if (mine) 6.dp else 18.dp))
                 .background(bg)
-                .then(if (onLongPress != null) Modifier.combinedClickable(onLongClickLabel = "Delete", onLongClick = onLongPress, onClick = {}) else Modifier)
+                .then(
+                    if (onLongPress != null || onTap != null) {
+                        Modifier.combinedClickable(
+                            onClickLabel = if (onTap != null) "Read aloud" else null, onClick = { onTap?.invoke() },
+                            onLongClickLabel = if (onLongPress != null) "Delete" else null, onLongClick = onLongPress,
+                        )
+                    } else Modifier,
+                )
                 .padding(if (m.photo.isNotEmpty()) 4.dp else 0.dp),
         ) {
             if (m.photo.isNotEmpty()) ChatPhoto(prefs, m.photo)

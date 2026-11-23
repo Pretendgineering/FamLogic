@@ -162,6 +162,12 @@ where: Smile Dental
 - Backups: `VACUUM INTO backups/chat-<date>.db` daily.
 - Parents' controls (0.19.0, `server/kids.go`): `conversations.status` is `""`, `pending` (a child's group, until a parent approves), `paused` (read only) or `blocked` (hidden from the children in it). Parents moderate chats with a child in them; message deletion removes the photo file too.
 
+## Voice (built in 0.21.0)
+
+- **In the image:** whisper.cpp's `whisper-cli` (x86-64 builds carry every CPU variant and pick at run time; ARM64 uses the ARMv8 baseline), the quantised Whisper *small.en* model, Piper with the LJSpeech voice (public domain) and espeak-ng's data, under `/voice`. The runtime image is distroless `cc` (glibc, no shell). About 700 MB in all.
+- **On request** (`server/voice.go`): one job at a time; the recording is written to `data/tmp`, transcribed with the listening window sized to the clip (much faster for short messages), tidied (`[BLANK_AUDIO]` and the like removed) and deleted. Reading aloud runs Piper on the text. Nothing is kept.
+- **The app** (`Voice.kt`, `TalkButton.kt`): push to talk records 16 kHz mono audio for the server, or uses Android's `SpeechRecognizer`; reading aloud uses Android's `TextToSpeech` or the server's WAV. *Automatic* means the phone's own speech on the Google edition when it has it, the server everywhere else; the choice is in Customize → Voice. "Oops, try again!" is a recording in the app, so it plays even offline.
+
 ## Parents' controls and the home screen (built in 0.19.0)
 
 - **Parent PIN:** one per family, set by an admin, stored hashed like a password (`data.parentPin`). Children's devices and family displays ask for it before opening settings; it's checked by the server (`POST /api/pin/check`, rate-limited like sign-in).

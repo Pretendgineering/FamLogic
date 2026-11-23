@@ -6,7 +6,7 @@ A self-hosted family hub: location sharing (**Thereabouts**), chat (**Chitchat**
 - **Modular:** at first setup you choose what your family uses, and you can change it any time.
 - **Works without Google:** the default app has no Google code at all (an optional Google edition adds a few extras).
 - **For every age:** younger children sign in with a code from a parent, no password, and get a picture-first app with big buttons and no settings to stumble into. Parents choose exactly what each child can use (each module off, view only, can add, or full, plus single features), approve their group chats and can see, pause or delete their chats. **Grandparents** get the app without the parents' controls, with bigger buttons and picture icons as options.
-- **Voice first** *(coming)*: press and hold to talk, and hear things read out, on every device. It goes to an AI agent you host (such as Hermes or OpenClaw), so a child can say "I fed the cat" to tick off a chore, send a message, or hear what's next.
+- **Talk instead of typing:** hold the smiley to talk and your words become a message; messages can be read aloud. Built into the server (Whisper and Piper, nothing leaves your house), or the phone's own speech where that works better. Younger children can message a parent almost on their own. *Coming:* talking to your own AI agent (Hermes, OpenClaw…) to tick off chores or hear what's next.
 - **Looks like itself:** serif headings over clean sans text, in five colour themes (Default, Warm paper, Forest, Ocean, High contrast), light or dark, chosen per device, and the same on the watch. Prefer plain words? **Customize → Plain names** says Map, Chat, Calendar and Lists instead.
 - **Open source:** [AGPLv3](LICENSE). Use it, change it and share it freely; if you run a changed version for others (for example as a hosted service), you must offer them your changes too. For other licensing, contact the maintainer.
 
@@ -98,6 +98,7 @@ Set in `docker-compose.yml` (or your container's environment).
 | `INVITE_HOURS` | `72` | How long an invite works. |
 | `BACKUP_DAYS` | `7` | Daily backups kept in `/data/backups`. `0` turns them off. |
 | `SILENCE_HOURS` | `6` | Tell people when a sharing phone has been quiet this long. `0` turns it off. |
+| `VOICE` | on | Talking and reading aloud, built into the image (about 400 MB of memory for a few seconds while someone talks). `off` turns it off. |
 | `DATA_DIR`, `LISTEN` | `/data`, `:8080` | Where data lives, and the port inside the container. |
 
 ## Updating and backups
@@ -127,5 +128,7 @@ Official APKs are signed with one project key and published by CI when the versi
 ## License
 
 FamLogic is free software under the [GNU Affero General Public License v3.0](LICENSE) (versions up to 0.17.0 were released under GPLv3). Running a modified version as a service for others requires offering them its source; every FamLogic server links to its source in the web console and the app.
+
+Voice uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and OpenAI's Whisper *small.en* model (MIT), [Piper](https://github.com/rhasspy/piper) (MIT) with espeak-ng (GPLv3) and the LJSpeech voice (public domain), all inside the server image.
 
 Headings use [Liberation Serif](https://github.com/liberationfonts/liberation-fonts) (SIL Open Font License 1.1; see `server/web/fonts/OFL.txt`). The common-password list in `server/commonpasswords.txt` comes from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, © 2018 Daniel Miessler).

@@ -51,8 +51,10 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Settings:** Title Case, Customize (your icon, colours, names, map) third, Account second, **Control Deck** as a single switch; the app no longer draws under the status bar.
 - **Nudges:** 👍 ❤️ 👋 😊 🏠 🤠 👽 👹 (and 🍆 🍑 between grown-ups), from the app, from 👍/❤️ buttons on check-in notifications, and from the watch, which also offers them as a reply to a check-in. **FamLogic Face** watchface: serif type and the app's colour themes.
 
-### ⏳ Next: voice for younger children (waiting on a choice of speech engine)
-- A big push-to-talk button (a smiley with an open mouth and sound waves) that pops and glows while held; speech becomes a text message; replies are read aloud; a failed transcription says "Oops, try again!" out loud. Goal: a small child can message a parent almost on their own.
+### ✅ Voice for chat (0.21.0)
+- Built into the server image: Whisper (speech to text) and Piper (reading aloud), private and the same everywhere; the phone's own speech where it works better (Automatic: the Google edition uses it when present).
+- Younger children: a big push-to-talk smiley that pops and glows while held, sends what they said and reads it back; new messages read aloud; "Oops, try again!" when nothing was understood. Everyone else: a small talk button that types into the message box. A per-child switch in Access & Control.
+- Next for voice: the Pebble (hold to talk on watches with a microphone), the TV and Control Deck, and talking to your own agent (Phase 5).
 
 ### ⏳ Android widgets
 - **Map snapshot** of who's where; **check in** in one tap; **SOS** (hold); **one person's card** (where, battery, last seen); **latest chat message** with Reply; **talk to Mom** (a face that opens a direct chat or push-to-talk, for kids); **quick nudges** (send ❤️ to someone); **where's my ride?** (whoever is driving to you, and how far away).

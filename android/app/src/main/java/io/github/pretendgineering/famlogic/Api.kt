@@ -329,6 +329,21 @@ class Api(private val baseUrl: String, private val token: String = "") {
         )
     }
 
+    /** Speech to text on the family's server: a 16 kHz mono WAV recording → the words ("" if none). */
+    suspend fun transcribe(wav: ByteArray): String {
+        val (code, bytes) = raw("POST", "/api/voice/transcribe", wav, "audio/wav")
+        val text = String(bytes)
+        if (code >= 400) throw ApiException(code, runCatching { JSONObject(text).getString("error") }.getOrNull() ?: "Couldn't understand that ($code)")
+        return JSONObject(text).optString("text")
+    }
+
+    /** Reading aloud on the family's server: text → WAV audio. */
+    suspend fun speak(text: String): ByteArray {
+        val (code, bytes) = raw("POST", "/api/voice/speak", JSONObject().put("text", text).toString().toByteArray(), "application/json")
+        if (code >= 400) throw ApiException(code, "Couldn't read that aloud ($code)")
+        return bytes
+    }
+
     /** Checks the family's parent PIN (wrong guesses lock it for a while). */
     suspend fun checkPin(pin: String) {
         request("POST", "/api/pin/check", JSONObject().put("pin", pin))
