@@ -112,6 +112,9 @@ type Member struct {
 	// person's home screen (nil = the app's default).
 	Kid  *KidSettings `json:"kid,omitempty"`
 	Home []string     `json:"home,omitempty"`
+	// Larger buttons and text, and picture icons (nil = the default for their role).
+	Big      *bool `json:"big,omitempty"`
+	Pictures *bool `json:"pictures,omitempty"`
 }
 
 // SharesLowBattery reports whether others get told when this person's battery is low.

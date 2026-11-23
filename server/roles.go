@@ -15,6 +15,7 @@ import (
 //     parent and stay signed in on their device;
 //   - a non-user ("dependent"): a family member who doesn't use the app, such as a
 //     baby, so events and reminders can still be about them.
+//
 // On top of that, Admin gives a person the web console's admin pages (modules,
 // devices, invites, server). Only the main admin (the admin password) grants it.
 // People from before roles existed are parents.
@@ -22,6 +23,10 @@ const (
 	RoleParent    = "parent"
 	RoleChild     = "child"
 	RoleDependent = "dependent"
+	// A grandparent: the whole app for themselves (chat, the map, nudges), but no
+	// admin pages and no view of the children's chats. Larger buttons and picture
+	// icons are an option.
+	RoleGrandparent = "grandparent"
 )
 
 // The console's single choice per person.
@@ -31,13 +36,14 @@ const (
 	AccessOlderChild   = "older_child"
 	AccessYoungerChild = "younger_child"
 	AccessDependent    = "dependent"
+	AccessGrandparent  = "grandparent"
 )
 
 var ErrNeedsOwner = errors.New("only the main admin can change who is an admin")
 
 func (m *Member) role() string {
 	switch m.Role {
-	case RoleChild, RoleDependent:
+	case RoleChild, RoleDependent, RoleGrandparent:
 		return m.Role
 	}
 	return RoleParent
@@ -48,6 +54,8 @@ func (m *Member) access() string {
 	switch {
 	case m.role() == RoleDependent:
 		return AccessDependent
+	case m.role() == RoleGrandparent:
+		return AccessGrandparent
 	case m.role() == RoleChild && m.PasswordAllowed:
 		return AccessOlderChild
 	case m.role() == RoleChild:
@@ -62,7 +70,7 @@ func (m *Member) access() string {
 // children and non-users don't.
 func (m *Member) canUsePassword() bool {
 	switch m.role() {
-	case RoleParent:
+	case RoleParent, RoleGrandparent:
 		return true
 	case RoleChild:
 		return m.PasswordAllowed
@@ -95,6 +103,8 @@ func (s *Store) SetAccess(id, access string, byOwner bool) error {
 		m.Role, m.Admin, m.PasswordAllowed = RoleChild, false, true
 	case AccessYoungerChild:
 		m.Role, m.Admin, m.PasswordAllowed = RoleChild, false, false
+	case AccessGrandparent:
+		m.Role, m.Admin, m.PasswordAllowed = RoleGrandparent, false, false
 	case AccessDependent:
 		return nil
 	default:
@@ -148,7 +158,7 @@ func inviteAccess(a string) (string, bool) {
 	switch a {
 	case "", AccessParent:
 		return AccessParent, true
-	case AccessOlderChild, AccessYoungerChild:
+	case AccessOlderChild, AccessYoungerChild, AccessGrandparent:
 		return a, true
 	}
 	return "", false // admins are made from parents; non-users aren't invited
@@ -161,6 +171,8 @@ func applyInviteAccess(m *Member, inv *Invite) {
 		m.Role, m.PasswordAllowed = RoleChild, true
 	case AccessYoungerChild:
 		m.Role = RoleChild
+	case AccessGrandparent:
+		m.Role = RoleGrandparent
 	default:
 		m.Role = RoleParent
 	}

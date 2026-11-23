@@ -45,7 +45,8 @@ func access(me *Member, conv *Conversation, people map[string]Member) (post, rea
 		if conv.Status == ChatBlocked && me.role() == RoleChild {
 			return false, false
 		}
-		return conv.Status == "", true
+		// A child whose parents set Chitchat to "view only" reads but doesn't post.
+		return conv.Status == "" && levelAtLeast(me.level("chat"), LevelAdd), true
 	}
 	if me.role() == RoleParent {
 		for _, id := range conv.Members {

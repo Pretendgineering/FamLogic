@@ -57,7 +57,20 @@ func (s *Store) sosSeenNamesLocked(m *Member) []string {
 // RequestKinds are what one person can send another: requests ("pick me up",
 // "call me") and nudges ("where are you?", a heart, a thumbs up, and "here I am",
 // the answer to "where are you?").
-var RequestKinds = map[string]bool{"pickup": true, "call": true, "where": true, "heart": true, "thumbs": true, "here": true}
+var RequestKinds = map[string]bool{"pickup": true, "call": true, "where": true, "heart": true, "thumbs": true, "here": true,
+	// More nudges (0.20): a wave, a smile, "come home", and a few for fun.
+	"wave": true, "smile": true, "comehome": true, "cowboy": true, "alien": true, "ogre": true,
+	// Between adults only.
+	"eggplant": true, "peach": true}
+
+// adultNudges go only from one adult (a parent or grandparent) to another.
+var adultNudges = map[string]bool{"eggplant": true, "peach": true}
+
+// nudgeKinds are the friendly ones a parent can switch off for a child.
+var nudgeKinds = map[string]bool{"where": true, "heart": true, "thumbs": true, "here": true, "wave": true, "smile": true,
+	"comehome": true, "cowboy": true, "alien": true, "ogre": true, "eggplant": true, "peach": true}
+
+func isAdult(m *Member) bool { return m.role() == RoleParent || m.role() == RoleGrandparent }
 
 // Request sends one person a request or nudge. It carries the sender's last
 // location, so the other person knows where they are.
@@ -71,6 +84,12 @@ func (s *Store) Request(fromID, toID, kind string, loc *Location) error {
 	to, ok2 := s.d.Members[toID]
 	if !ok1 || !ok2 || fromID == toID || len(sharedCircles(from, to)) == 0 {
 		return ErrNotFound
+	}
+	if adultNudges[kind] && !(isAdult(from) && isAdult(to)) {
+		return ErrBadRequest
+	}
+	if (nudgeKinds[kind] && !from.can("nudges")) || (!nudgeKinds[kind] && !from.can("requests")) {
+		return ErrNotAllowed
 	}
 	s.applyFixLocked(from, loc)
 	e := Event{Type: EventRequest, MemberID: from.ID, Name: from.Name, To: to.ID, Kind: kind}

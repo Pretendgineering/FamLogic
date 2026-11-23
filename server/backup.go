@@ -64,7 +64,9 @@ func (s *Store) DailyBackup(dir string, keep int) error {
 }
 
 // AddBackupHook adds another daily backup (e.g. the chat database).
-func (s *Store) AddBackupHook(h func(dir string, keep int) error) { s.backupHooks = append(s.backupHooks, h) }
+func (s *Store) AddBackupHook(h func(dir string, keep int) error) {
+	s.backupHooks = append(s.backupHooks, h)
+}
 
 // keepDaily makes prefix-<date><ext> in dir once a day with write, and keeps the newest `keep`.
 func keepDaily(dir, prefix, ext string, keep int, write func(path string) error) error {

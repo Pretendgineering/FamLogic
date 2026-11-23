@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Parents' controls for children:
@@ -19,38 +20,74 @@ import (
 //   - chat moderation: a child's new group waits for a parent's OK, and parents
 //     can pause, block or delete any chat with a child in it, and delete messages.
 
-// KidSettings are a child's switches. Nil maps (or missing keys) follow the preset.
+// KidSettings are a child's switches. Missing keys follow the preset.
 type KidSettings struct {
-	Preset   string          `json:"preset"` // "younger" or "older"
+	Preset string `json:"preset"` // "younger" or "older"
+	// Each module's access level: off, view, add or full (see levels).
+	Modules map[string]string `json:"modules,omitempty"`
+	// Before 0.20: "map" and "chat" on or off (read as the Thereabouts and Chitchat modules).
 	Sections map[string]bool `json:"sections,omitempty"`
 	Features map[string]bool `json:"features,omitempty"`
+}
+
+// Access levels for a module, least to most.
+const (
+	LevelOff  = "off"  // hidden
+	LevelView = "view" // can look, not change (e.g. recipes a child is learning)
+	LevelAdd  = "add"  // can add their own things, not change or delete others'
+	LevelFull = "full" // everything
+)
+
+var levels = []string{LevelOff, LevelView, LevelAdd, LevelFull}
+
+func levelAtLeast(have, want string) bool {
+	return slices.Index(levels, have) >= slices.Index(levels, want)
+}
+
+type kidModule struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Plain   string `json:"plain"` // the plain-wording name
+	Younger string `json:"younger"`
+	Older   string `json:"older"`
+}
+
+// Modules parents set a level for, per child. Keep ids stable: they're stored.
+var kidModules = []kidModule{
+	{"thereabouts", "Thereabouts", "Map", LevelFull, LevelFull},
+	{"chat", "Chitchat", "Chat", LevelFull, LevelFull},
+	{"calendar", "Datebook", "Calendar", LevelOff, LevelFull},
+	{"todos", "Odds & Ends", "Lists", LevelOff, LevelFull},
+	{"chores", "Fair Share", "Chores", LevelOff, LevelFull},
+	{"meals", "Pantry", "Meals", LevelOff, LevelFull},
 }
 
 type kidSwitch struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
-	Younger bool   `json:"younger"` // on in the "younger" preset
+	Module  string `json:"module,omitempty"` // shown under this module
+	Younger bool   `json:"younger"`          // on in the "younger" preset
 	Older   bool   `json:"older"`
 }
 
-// The parts of the app parents can switch per child. Keep ids stable: they're stored.
-var kidSections = []kidSwitch{
-	{"map", "Map: where everyone is", false, true},
-	{"chat", "Chat", true, true},
-}
-
+// Single features parents switch per child. Keep ids stable: they're stored.
 var kidFeatures = []kidSwitch{
-	{"sos", "SOS button", true, true},
-	{"checkin", "Check in (\"I'm here\")", true, true},
-	{"requests", "Ask for a pick-up or a call", true, true},
-	{"chat_start", "Start new chats and groups (groups with a child need a parent's OK)", true, true},
-	{"chat_photos", "Send photos in chat", true, true},
-	{"trips", "See other people's trips", false, true},
-	{"pause", "Pause sharing their location", false, false},
+	{"sos", "SOS button", "thereabouts", true, true},
+	{"checkin", "Check in (\"I'm here\")", "thereabouts", true, true},
+	{"requests", "Ask for a pick-up or a call", "thereabouts", true, true},
+	{"nudges", "Send nudges (👍 ❤️ 👋 …)", "thereabouts", true, true},
+	{"trips", "See other people's trips", "thereabouts", false, true},
+	{"pause", "Pause sharing their location", "thereabouts", false, false},
+	{"chat_start", "Start new chats and groups (groups with a child need a parent's OK)", "chat", true, true},
+	{"chat_photos", "Send photos", "chat", true, true},
+	{"chat_delete", "Delete their own messages", "chat", false, false},
+	{"chat_mute", "Mute chats", "chat", false, false},
 }
 
 // Home screen tiles. Module tiles show once the module is available and on.
+// Each can carry a size: "chat:half", "map:big" (half, wide or big; the map is never half).
 var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals"}
+var tileSizes = []string{"half", "wide", "big"}
 
 const maxHomeTiles = 12
 
@@ -66,44 +103,77 @@ func presetFor(m *Member) string {
 
 // kidView is a child's effective settings: the preset with the parents' changes on top.
 type kidView struct {
-	Preset   string          `json:"preset"`
+	Preset  string            `json:"preset"`
+	Modules map[string]string `json:"modules"`
+	// Sections is the pre-0.20 view (map, chat on or off), for older apps.
 	Sections map[string]bool `json:"sections"`
 	Features map[string]bool `json:"features"`
 }
 
 func (m *Member) kidSettings() kidView {
-	v := kidView{Preset: presetFor(m), Sections: map[string]bool{}, Features: map[string]bool{}}
-	fill := func(dst map[string]bool, list []kidSwitch, stored map[string]bool) {
-		for _, sw := range list {
-			on := sw.Older
-			if v.Preset == "younger" {
-				on = sw.Younger
-			}
-			if m.role() != RoleChild {
-				on = true
-			} else if val, ok := stored[sw.ID]; ok {
-				on = val
-			}
-			dst[sw.ID] = on
-		}
-	}
-	var sec, feat map[string]bool
+	v := kidView{Preset: presetFor(m), Modules: map[string]string{}, Sections: map[string]bool{}, Features: map[string]bool{}}
+	child := m.role() == RoleChild
+	var k KidSettings
 	if m.Kid != nil {
-		sec, feat = m.Kid.Sections, m.Kid.Features
+		k = *m.Kid
 	}
-	fill(v.Sections, kidSections, sec)
-	fill(v.Features, kidFeatures, feat)
+	for _, mod := range kidModules {
+		lvl := mod.Older
+		if v.Preset == "younger" {
+			lvl = mod.Younger
+		}
+		// Settings from before levels: map/chat on or off.
+		old := map[string]string{"thereabouts": "map", "chat": "chat"}[mod.ID]
+		if on, ok := k.Sections[old]; ok && old != "" {
+			lvl = map[bool]string{true: LevelFull, false: LevelOff}[on]
+		}
+		if val, ok := k.Modules[mod.ID]; ok {
+			lvl = val
+		}
+		if !child {
+			lvl = LevelFull
+		}
+		v.Modules[mod.ID] = lvl
+	}
+	v.Sections["map"] = v.Modules["thereabouts"] != LevelOff
+	v.Sections["chat"] = v.Modules["chat"] != LevelOff
+	for _, sw := range kidFeatures {
+		on := sw.Older
+		if v.Preset == "younger" {
+			on = sw.Younger
+		}
+		if val, ok := k.Features[sw.ID]; ok {
+			on = val
+		}
+		v.Features[sw.ID] = on || !child
+	}
 	return v
 }
 
-// can says whether this person may use a section or feature. Adults can use everything.
+// level is this person's access to a module ("full" for adults).
+func (m *Member) level(module string) string {
+	if m.role() != RoleChild {
+		return LevelFull
+	}
+	if l, ok := m.kidSettings().Modules[module]; ok {
+		return l
+	}
+	return LevelFull
+}
+
+// can says whether this person may use a module ("map" and "chat" are the
+// Thereabouts and Chitchat modules) or a feature. Adults can use everything.
 func (m *Member) can(id string) bool {
 	if m.role() != RoleChild {
 		return true
 	}
 	v := m.kidSettings()
-	if on, ok := v.Sections[id]; ok {
-		return on
+	switch id {
+	case "map":
+		id = "thereabouts"
+	}
+	if l, ok := v.Modules[id]; ok {
+		return l != LevelOff
 	}
 	return v.Features[id]
 }
@@ -112,24 +182,34 @@ func knownSwitch(list []kidSwitch, id string) bool {
 	return slices.ContainsFunc(list, func(s kidSwitch) bool { return s.ID == id })
 }
 
+func knownModule(id string) bool {
+	return slices.ContainsFunc(kidModules, func(m kidModule) bool { return m.ID == id })
+}
+
 func cleanHome(tiles []string) ([]string, bool) {
 	out := []string{}
+	seen := []string{}
 	for _, t := range tiles {
-		if !slices.Contains(homeTiles, t) {
+		id, size, sized := strings.Cut(t, ":")
+		if !slices.Contains(homeTiles, id) || (sized && !slices.Contains(tileSizes, size)) || (id == "map" && size == "half") {
 			return nil, false
 		}
-		if !slices.Contains(out, t) {
+		if !slices.Contains(seen, id) {
+			seen = append(seen, id)
 			out = append(out, t)
 		}
 	}
 	return out, len(out) <= maxHomeTiles
 }
 
-var ErrNotChild = errors.New("these settings are for children")
+var (
+	ErrNotChild   = errors.New("these settings are for children")
+	ErrNotAllowed = errors.New("a parent has switched that off")
+)
 
 // SetKidSettings stores a child's settings. A new preset starts them afresh from
 // it; switches given alongside apply on top. home nil leaves it as is.
-func (s *Store) SetKidSettings(id string, preset string, sections, features map[string]bool, home []string) (*Member, error) {
+func (s *Store) SetKidSettings(id string, preset string, modules map[string]string, features map[string]bool, home []string) (*Member, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, ok := s.d.Members[id]
@@ -156,7 +236,16 @@ func (s *Store) SetKidSettings(id string, preset string, sections, features map[
 			(*dst)[k] = v
 		}
 	}
-	set(&m.Kid.Sections, sections)
+	if len(modules) > 0 {
+		if m.Kid.Modules == nil {
+			m.Kid.Modules = map[string]string{}
+		}
+		for k, v := range modules {
+			m.Kid.Modules[k] = v
+		}
+		// Levels replace the older on/off sections.
+		m.Kid.Sections = nil
+	}
 	set(&m.Kid.Features, features)
 	if home != nil {
 		m.Home = home
@@ -265,16 +354,21 @@ func (s *Server) handleCheckPIN(w http.ResponseWriter, r *http.Request, me *Memb
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- a child's settings, for parents (app or console) and admins
+// ---- a child's (or grandparent's) settings, for parents (app or console) and admins
 
 type kidResponse struct {
 	ID       string      `json:"id"`
 	Name     string      `json:"name"`
-	Settings kidView     `json:"settings"`
+	Access   string      `json:"access"`
+	Settings *kidView    `json:"settings,omitempty"` // children only
 	Home     []string    `json:"home"`
-	Sections []kidSwitch `json:"sections"` // the catalogue, with each preset's defaults
+	Big      bool        `json:"big"`      // larger buttons and text
+	Pictures bool        `json:"pictures"` // picture icons instead of the usual ones
+	Modules  []kidModule `json:"modules"`  // the catalogue, with each preset's defaults
 	Features []kidSwitch `json:"features"`
+	Levels   []string    `json:"levels"`
 	Tiles    []string    `json:"tiles"`
+	Sizes    []string    `json:"sizes"`
 }
 
 func kidResponseFor(m *Member) kidResponse {
@@ -282,8 +376,47 @@ func kidResponseFor(m *Member) kidResponse {
 	if home == nil {
 		home = []string{}
 	}
-	return kidResponse{ID: m.ID, Name: m.Name, Settings: m.kidSettings(), Home: home,
-		Sections: kidSections, Features: kidFeatures, Tiles: homeTiles}
+	out := kidResponse{ID: m.ID, Name: m.Name, Access: m.access(), Home: home, Big: m.big(), Pictures: m.pictures(),
+		Modules: kidModules, Features: kidFeatures, Levels: levels, Tiles: homeTiles, Sizes: tileSizes}
+	if m.role() == RoleChild {
+		v := m.kidSettings()
+		out.Settings = &v
+	}
+	return out
+}
+
+// big and pictures: on by default for younger children, off for everyone else.
+func (m *Member) big() bool {
+	if m.Big != nil {
+		return *m.Big
+	}
+	return m.access() == AccessYoungerChild
+}
+
+func (m *Member) pictures() bool {
+	if m.Pictures != nil {
+		return *m.Pictures
+	}
+	return m.access() == AccessYoungerChild
+}
+
+// SetAssist sets someone's larger buttons and picture icons (nil leaves one as is).
+func (s *Store) SetAssist(id string, big, pictures *bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, ok := s.d.Members[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if big != nil {
+		v := *big
+		m.Big = &v
+	}
+	if pictures != nil {
+		v := *pictures
+		m.Pictures = &v
+	}
+	return s.saveLocked()
 }
 
 func (s *Server) kidSettingsHTTP(w http.ResponseWriter, r *http.Request) {
@@ -292,8 +425,9 @@ func (s *Server) kidSettingsHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such person")
 		return
 	}
-	if m.role() != RoleChild {
-		writeError(w, http.StatusBadRequest, "these settings are for children")
+	child := m.role() == RoleChild
+	if !child && m.role() != RoleGrandparent {
+		writeError(w, http.StatusBadRequest, "these settings are for children and grandparents")
 		return
 	}
 	if r.Method == http.MethodGet {
@@ -301,10 +435,13 @@ func (s *Server) kidSettingsHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Preset   string          `json:"preset"`
-		Sections map[string]bool `json:"sections"`
-		Features map[string]bool `json:"features"`
-		Home     []string        `json:"home"`
+		Preset   string            `json:"preset"`
+		Modules  map[string]string `json:"modules"`
+		Sections map[string]bool   `json:"sections"` // before 0.20
+		Features map[string]bool   `json:"features"`
+		Home     []string          `json:"home"`
+		Big      *bool             `json:"big"`
+		Pictures *bool             `json:"pictures"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -313,9 +450,20 @@ func (s *Server) kidSettingsHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, `preset is "younger" or "older"`)
 		return
 	}
-	for id := range body.Sections {
-		if !knownSwitch(kidSections, id) {
+	if body.Modules == nil {
+		body.Modules = map[string]string{}
+	}
+	for id, on := range body.Sections {
+		mod := map[string]string{"map": "thereabouts", "chat": "chat"}[id]
+		if mod == "" {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown section %q", id))
+			return
+		}
+		body.Modules[mod] = map[bool]string{true: LevelFull, false: LevelOff}[on]
+	}
+	for id, lvl := range body.Modules {
+		if !knownModule(id) || !slices.Contains(levels, lvl) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown module %q or level %q (off, view, add or full)", id, lvl))
 			return
 		}
 	}
@@ -329,24 +477,79 @@ func (s *Server) kidSettingsHTTP(w http.ResponseWriter, r *http.Request) {
 	if body.Home != nil {
 		var ok bool
 		if home, ok = cleanHome(body.Home); !ok {
-			writeError(w, http.StatusBadRequest, "unknown home tile, or too many")
+			writeError(w, http.StatusBadRequest, "unknown home tile or size, or too many")
 			return
 		}
 	}
-	m, err := s.store.SetKidSettings(m.ID, body.Preset, body.Sections, body.Features, home)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "could not save")
-		return
+	if child && (body.Preset != "" || len(body.Modules) > 0 || len(body.Features) > 0) {
+		if _, err := s.store.SetKidSettings(m.ID, body.Preset, body.Modules, body.Features, nil); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not save")
+			return
+		}
 	}
+	if home != nil {
+		s.store.SetHome(m.ID, home)
+	}
+	if body.Big != nil || body.Pictures != nil {
+		s.store.SetAssist(m.ID, body.Big, body.Pictures)
+	}
+	m, _ = s.store.MemberByID(m.ID)
 	writeJSON(w, http.StatusOK, kidResponseFor(m))
 }
 
 func (s *Server) handleKidSettings(w http.ResponseWriter, r *http.Request, me *Member) {
 	if me.role() != RoleParent {
-		writeError(w, http.StatusForbidden, "only parents can change a child's settings")
+		writeError(w, http.StatusForbidden, "only parents can change these settings")
 		return
 	}
 	s.kidSettingsHTTP(w, r)
+}
+
+// ---- opening settings on a child's device from afar
+
+const EventUnlock = "unlock" // to one device's person: settings may open for Duration ms
+
+func (s *Server) unlockHTTP(w http.ResponseWriter, r *http.Request, by string) {
+	m, ok := s.store.MemberByID(r.PathValue("id"))
+	if !ok || m.role() == RoleDependent {
+		writeError(w, http.StatusNotFound, "no such person")
+		return
+	}
+	var body struct {
+		Minutes int `json:"minutes"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	if body.Minutes <= 0 || body.Minutes > 60 {
+		body.Minutes = 10
+	}
+	s.store.Unlock(m.ID, by, time.Duration(body.Minutes)*time.Minute)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Unlock lets settings open on someone's device for a while.
+func (s *Store) Unlock(id, byName string, d time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.addEventLocked(Event{Type: EventUnlock, To: id, MemberID: id, Name: byName, Duration: d.Milliseconds()})
+	_ = s.saveLocked()
+}
+
+func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request, me *Member) {
+	if me.role() != RoleParent {
+		writeError(w, http.StatusForbidden, "only parents can do that")
+		return
+	}
+	s.unlockHTTP(w, r, me.Name)
+}
+
+func (s *Server) handleAdminUnlock(w http.ResponseWriter, r *http.Request) {
+	name := "A parent"
+	if m := s.session(r).Member; m != nil {
+		name = m.Name
+	}
+	s.unlockHTTP(w, r, name)
 }
 
 // ---- chat moderation
@@ -497,7 +700,7 @@ func (s *Server) deleteMessage(w http.ResponseWriter, r *http.Request, me *Membe
 			return
 		}
 		_, read := access(me, conv, people)
-		own := msg.SenderID == me.ID
+		own := msg.SenderID == me.ID && me.can("chat_delete")
 		oversee := me.role() == RoleParent && hasChild(conv, people)
 		if !read || !(own || oversee) {
 			writeError(w, http.StatusForbidden, "you can delete your own messages; parents can delete messages in children's chats")

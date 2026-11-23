@@ -128,6 +128,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/members/{id}/kid", s.device(s.handleKidSettings))
 	mux.HandleFunc("PUT /api/members/{id}/kid", s.device(s.handleKidSettings))
 	mux.HandleFunc("POST /api/members/{id}/kid", s.device(s.handleKidSettings)) // for clients that can't send PUT
+	mux.HandleFunc("POST /api/members/{id}/unlock", s.device(s.handleUnlock))
+	mux.HandleFunc("POST /api/admin/members/{id}/unlock", s.admin(s.handleAdminUnlock))
 	mux.HandleFunc("GET /api/admin/members/{id}/kid", s.admin(s.kidSettingsHTTP))
 	mux.HandleFunc("PUT /api/admin/members/{id}/kid", s.admin(s.kidSettingsHTTP))
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
@@ -244,7 +246,7 @@ func toPublic(ms []Member) []publicMember {
 // an older server can hide what won't work instead of failing.
 var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails",
 	"emoji", "status", "schedules", "trips", "driving", "sos-seen", "requests", "nudges", "reminders", "index01",
-	"modules", "roles", "kids", "chat-moderation"}
+	"modules", "roles", "kids", "chat-moderation", "access-levels", "grandparents", "unlock", "nudges2"}
 
 func (s *Server) serverInfo() map[string]any {
 	features := slices.Clone(serverFeatures)
@@ -613,6 +615,8 @@ func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Membe
 			"kid":             me.kidSettings(), // what this person may use (all on for adults)
 			"home":            me.Home,
 			"pinSet":          s.store.ParentPINHash() != "",
+			"big":             me.big(),
+			"pictures":        me.pictures(),
 		},
 	}
 	if since, ok := sinceParam(r); ok {
@@ -759,9 +763,21 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 		TrailHours      *int     `json:"trailHours"`
 		TripDays        *int     `json:"tripDays"`
 		Home            []string `json:"home"`
+		Big             *bool    `json:"big"`
+		Pictures        *bool    `json:"pictures"`
 	}
 	if !readJSON(w, r, &req) {
 		return
+	}
+	if req.Big != nil || req.Pictures != nil {
+		if me.access() == AccessYoungerChild {
+			writeError(w, http.StatusForbidden, "a parent sets this for you")
+			return
+		}
+		if err := s.store.SetAssist(me.ID, req.Big, req.Pictures); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not save")
+			return
+		}
 	}
 	if req.Paused != nil && *req.Paused && !me.can("pause") {
 		writeError(w, http.StatusForbidden, "a parent has to switch on pausing for you")
@@ -860,6 +876,8 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request, me *Membe
 	switch err := s.store.Request(me.ID, req.To, req.Kind, optionalLocation(req.Loc)); {
 	case errors.Is(err, ErrBadRequest):
 		writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+	case errors.Is(err, ErrNotAllowed):
+		writeError(w, http.StatusForbidden, "a parent has switched that off for you")
 	case err != nil:
 		writeError(w, http.StatusNotFound, "no such person")
 	default:
