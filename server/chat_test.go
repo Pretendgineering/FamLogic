@@ -122,6 +122,22 @@ func TestChat(t *testing.T) {
 		t.Fatalf("group: %d %v", st, g)
 	}
 	gID := g["id"].(string)
+	// A child's group waits for a parent: nobody can post, and parents are asked.
+	if g["status"] != "pending" {
+		t.Fatalf("a child's group should wait for a parent: %v", g)
+	}
+	if st, _ := e.status("POST", "/api/chat/"+gID+"/messages", f.teen, map[string]string{"text": "popcorn?"}); st != 403 {
+		t.Fatalf("posted in a pending group: %d", st)
+	}
+	if st, _ := e.status("POST", "/api/chat/"+gID+"/moderate", f.teen, map[string]string{"action": "approve"}); st != 403 {
+		t.Fatalf("a child approved: %d", st)
+	}
+	if st, ok := e.status("POST", "/api/chat/"+gID+"/moderate", f.dad, map[string]string{"action": "approve"}); st != 200 || ok["status"] != nil {
+		t.Fatalf("approve: %d %v", st, ok)
+	}
+	if st, _ := e.status("POST", "/api/chat/"+gID+"/messages", f.teen, map[string]string{"text": "popcorn?"}); st != 200 {
+		t.Fatalf("post after approval: %d", st)
+	}
 	if st, _ := e.status("PATCH", "/api/chat/"+gID, f.kid, map[string]any{"remove": []string{f.momID}}); st != 403 {
 		t.Fatalf("kid removed someone: %d", st)
 	}
@@ -130,6 +146,12 @@ func TestChat(t *testing.T) {
 	}
 	if st, _ := e.status("PATCH", "/api/chat/"+gID, f.teen, map[string]any{"name": "Film club", "add": []string{f.dadID}}); st != 200 {
 		t.Fatalf("rename/add: %d", st)
+	}
+	// A child adding people sends it back to the parents; Mom says yes.
+	e.do("POST", "/api/chat/"+gID+"/moderate", f.mom, map[string]string{"action": "approve"})
+	// A parents-only group starts right away.
+	if _, pg := e.do("POST", "/api/chat/groups", f.mom, map[string]any{"name": "Gifts", "members": []string{f.dadID}}); pg["status"] != nil {
+		t.Fatalf("parents' group pending: %v", pg)
 	}
 
 	// Photos: shrunk, re-encoded, and only for people who can read the chat.

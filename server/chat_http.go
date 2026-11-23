@@ -39,9 +39,13 @@ func (s *Server) chatUsers() ([]string, map[string]Member) {
 }
 
 // access says whether someone can post in a conversation, or (parents) only read it.
+// Pending and paused chats are read only for everyone; blocked ones are hidden from the children in them.
 func access(me *Member, conv *Conversation, people map[string]Member) (post, read bool) {
 	if slices.Contains(conv.Members, me.ID) {
-		return true, true
+		if conv.Status == ChatBlocked && me.role() == RoleChild {
+			return false, false
+		}
+		return conv.Status == "", true
 	}
 	if me.role() == RoleParent {
 		for _, id := range conv.Members {
@@ -124,6 +128,9 @@ func (s *Server) handleChatList(w http.ResponseWriter, r *http.Request, me *Memb
 		writeError(w, http.StatusForbidden, "not a chat user")
 		return
 	}
+	if !kidChatOK(w, me) {
+		return
+	}
 	users, people := s.chatUsers()
 	all, err := s.chat.allConversations(users)
 	if err != nil {
@@ -141,6 +148,9 @@ func (s *Server) handleChatList(w http.ResponseWriter, r *http.Request, me *Memb
 }
 
 func (s *Server) loadConv(w http.ResponseWriter, r *http.Request, me *Member) (*Conversation, map[string]Member, bool, bool) {
+	if !kidChatOK(w, me) {
+		return nil, nil, false, false
+	}
 	users, people := s.chatUsers()
 	conv, err := s.chat.conversation(r.PathValue("id"), users)
 	if err != nil {
@@ -186,7 +196,14 @@ func (s *Server) handleChatPost(w http.ResponseWriter, r *http.Request, me *Memb
 		return
 	}
 	if !post {
-		writeError(w, http.StatusForbidden, "you can read this chat, but not post in it")
+		switch {
+		case slices.Contains(conv.Members, me.ID) && conv.Status == ChatPending:
+			writeError(w, http.StatusForbidden, "this group is waiting for a parent to say yes")
+		case slices.Contains(conv.Members, me.ID) && conv.Status != "":
+			writeError(w, http.StatusForbidden, "a parent has paused this chat")
+		default:
+			writeError(w, http.StatusForbidden, "you can read this chat, but not post in it")
+		}
 		return
 	}
 	var text, photo string
@@ -198,6 +215,11 @@ func (s *Server) handleChatPost(w http.ResponseWriter, r *http.Request, me *Memb
 		}
 		text = r.FormValue("text")
 		if f, _, err := r.FormFile("photo"); err == nil {
+			if !me.can("chat_photos") {
+				f.Close()
+				writeError(w, http.StatusForbidden, "sending photos is switched off for you")
+				return
+			}
 			data, err := io.ReadAll(io.LimitReader(f, maxPhotoBytes+1))
 			f.Close()
 			if err != nil || len(data) > maxPhotoBytes {
@@ -289,6 +311,13 @@ func (s *Server) handleChatDirect(w http.ResponseWriter, r *http.Request, me *Me
 	if !readJSON(w, r, &body) {
 		return
 	}
+	if !kidChatOK(w, me) {
+		return
+	}
+	if !me.can("chat_start") {
+		writeError(w, http.StatusForbidden, "ask a parent to start a new chat")
+		return
+	}
 	_, people := s.chatUsers()
 	if _, ok := people[body.To]; !ok || body.To == me.ID {
 		writeError(w, http.StatusBadRequest, "choose someone in your family")
@@ -352,10 +381,28 @@ func (s *Server) handleChatCreateGroup(w http.ResponseWriter, r *http.Request, m
 		writeError(w, http.StatusBadRequest, "choose people in your family")
 		return
 	}
-	id, err := s.chat.CreateGroup(me.ID, name, members)
+	if !kidChatOK(w, me) {
+		return
+	}
+	if !me.can("chat_start") {
+		writeError(w, http.StatusForbidden, "ask a parent to start a new group")
+		return
+	}
+	// A group with a child in it starts once a parent says yes, unless a parent made it.
+	status := ""
+	if me.role() != RoleParent && hasChild(&Conversation{Members: append([]string{me.ID}, members...)}, people) {
+		status = ChatPending
+	}
+	id, err := s.chat.CreateGroup(me.ID, name, members, status)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not make the group")
 		return
+	}
+	if status == ChatPending {
+		users, _ := s.chatUsers()
+		if conv, err := s.chat.conversation(id, users); err == nil {
+			s.askParents(conv, me, people)
+		}
 	}
 	s.writeConv(w, id, me, people)
 }
@@ -371,7 +418,7 @@ func (s *Server) handleChatUpdateGroup(w http.ResponseWriter, r *http.Request, m
 	if !ok {
 		return
 	}
-	if !post || conv.Kind != ConvGroup {
+	if !slices.Contains(conv.Members, me.ID) || conv.Kind != ConvGroup {
 		writeError(w, http.StatusForbidden, "only people in a group chat can change it")
 		return
 	}
@@ -381,6 +428,11 @@ func (s *Server) handleChatUpdateGroup(w http.ResponseWriter, r *http.Request, m
 		Remove []string `json:"remove"`
 	}
 	if !readJSON(w, r, &body) {
+		return
+	}
+	// While a group waits for a parent, or a parent has paused it, people can only leave.
+	if !post && (body.Name != nil || len(body.Add) > 0 || slices.ContainsFunc(body.Remove, func(id string) bool { return id != me.ID })) {
+		writeError(w, http.StatusForbidden, "a parent needs to say yes before this group can change")
 		return
 	}
 	if body.Name != nil {
@@ -398,6 +450,14 @@ func (s *Server) handleChatUpdateGroup(w http.ResponseWriter, r *http.Request, m
 			return
 		}
 		s.chat.AddToGroup(conv.ID, add)
+		// A child adding people: the group waits for a parent again.
+		if me.role() == RoleChild {
+			s.chat.SetStatus(conv.ID, ChatPending)
+			users, _ := s.chatUsers()
+			if c, err := s.chat.conversation(conv.ID, users); err == nil {
+				s.askParents(c, me, people)
+			}
+		}
 	}
 	for _, id := range body.Remove {
 		if id != me.ID && conv.CreatedBy != me.ID && me.role() != RoleParent {

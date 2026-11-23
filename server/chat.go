@@ -56,7 +56,17 @@ type Conversation struct {
 	CreatedBy string   `json:"createdBy,omitempty"`
 	CreatedAt int64    `json:"createdAt"`
 	Members   []string `json:"members"` // for the family chat: everyone who uses the app
+	// "" (open), or set by parents for chats with a child in them (see kids.go):
+	// "pending" (a child's new group, waiting for a parent's OK), "paused" (read
+	// only) or "blocked" (hidden from the children in it).
+	Status string `json:"status,omitempty"`
 }
+
+const (
+	ChatPending = "pending"
+	ChatPaused  = "paused"
+	ChatBlocked = "blocked"
+)
 
 type Message struct {
 	ID       int64  `json:"id"`
@@ -112,6 +122,11 @@ INSERT OR IGNORE INTO conversations (id, kind, name, created_at) VALUES ('family
 		db.Close()
 		return nil, err
 	}
+	// Added in 0.19: parents' approval and moderation.
+	if _, err := db.Exec(`ALTER TABLE conversations ADD COLUMN status TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		db.Close()
+		return nil, err
+	}
 	return &ChatStore{db: db, mediaDir: media}, nil
 }
 
@@ -128,8 +143,8 @@ func (c *ChatStore) Backup(path string) error {
 
 func (c *ChatStore) conversation(id string, users []string) (*Conversation, error) {
 	var conv Conversation
-	err := c.db.QueryRow(`SELECT id, kind, name, created_by, created_at FROM conversations WHERE id = ?`, id).
-		Scan(&conv.ID, &conv.Kind, &conv.Name, &conv.CreatedBy, &conv.CreatedAt)
+	err := c.db.QueryRow(`SELECT id, kind, name, created_by, created_at, status FROM conversations WHERE id = ?`, id).
+		Scan(&conv.ID, &conv.Kind, &conv.Name, &conv.CreatedBy, &conv.CreatedAt, &conv.Status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -229,15 +244,16 @@ func (c *ChatStore) Direct(a, b string) (string, error) {
 }
 
 // CreateGroup makes a named group chat with its creator and the given people.
-func (c *ChatStore) CreateGroup(creator, name string, members []string) (string, error) {
+// status is "" or ChatPending (a child's group, until a parent says yes).
+func (c *ChatStore) CreateGroup(creator, name string, members []string, status string) (string, error) {
 	id := randomString(10)
 	tx, err := c.db.Begin()
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO conversations (id, kind, name, created_by, created_at) VALUES (?, 'group', ?, ?, ?)`,
-		id, name, creator, time.Now().UnixMilli()); err != nil {
+	if _, err := tx.Exec(`INSERT INTO conversations (id, kind, name, created_by, created_at, status) VALUES (?, 'group', ?, ?, ?, ?)`,
+		id, name, creator, time.Now().UnixMilli(), status); err != nil {
 		return "", err
 	}
 	for _, m := range append([]string{creator}, members...) {
@@ -273,7 +289,81 @@ func (c *ChatStore) ForgetMember(member string) error {
 	return err
 }
 
+// SetStatus opens, pauses or blocks a group or one-to-one chat (not the family chat).
+func (c *ChatStore) SetStatus(id, status string) error {
+	_, err := c.db.Exec(`UPDATE conversations SET status = ? WHERE id = ? AND kind != 'family'`, status, id)
+	return err
+}
+
+// DeleteConversation removes a group or one-to-one chat with all its messages and photos.
+func (c *ChatStore) DeleteConversation(id string) error {
+	if id == familyConvID {
+		return errors.New("the family chat can't be deleted")
+	}
+	photos := c.photosWhere(`conv_id = ?`, id)
+	tx, err := c.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{`DELETE FROM messages WHERE conv_id = ?`, `DELETE FROM reads WHERE conv_id = ?`,
+		`DELETE FROM conversation_members WHERE conv_id = ?`, `DELETE FROM conversations WHERE id = ?`} {
+		if _, err := tx.Exec(q, id); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	c.removePhotos(photos)
+	return nil
+}
+
 // ---- messages
+
+// Message finds one message by id.
+func (c *ChatStore) Message(id int64) (*Message, error) {
+	var m Message
+	err := c.db.QueryRow(`SELECT id, conv_id, sender_id, body, photo, created_at FROM messages WHERE id = ?`, id).
+		Scan(&m.ID, &m.Conv, &m.SenderID, &m.Text, &m.Photo, &m.Time)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &m, err
+}
+
+// DeleteMessage removes a message and its photo.
+func (c *ChatStore) DeleteMessage(id int64) error {
+	photos := c.photosWhere(`id = ?`, id)
+	if _, err := c.db.Exec(`DELETE FROM messages WHERE id = ?`, id); err != nil {
+		return err
+	}
+	c.removePhotos(photos)
+	return nil
+}
+
+func (c *ChatStore) photosWhere(where string, arg any) []string {
+	rows, err := c.db.Query(`SELECT photo FROM messages WHERE photo != '' AND `+where, arg)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		rows.Scan(&p)
+		out = append(out, p)
+	}
+	return out
+}
+
+func (c *ChatStore) removePhotos(names []string) {
+	for _, n := range names {
+		if p, ok := c.PhotoPath(n); ok {
+			os.Remove(p)
+		}
+	}
+}
 
 func (c *ChatStore) Post(conv, sender, text, photo string) (*Message, error) {
 	now := time.Now().UnixMilli()

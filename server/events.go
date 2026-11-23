@@ -160,7 +160,7 @@ func (s *Store) ChatEvents(to []string, fromID, fromName, conv, title, preview s
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, id := range to {
-		if _, ok := s.d.Members[id]; ok {
+		if m, ok := s.d.Members[id]; ok && m.can("chat") {
 			s.addEventLocked(Event{Type: EventChat, To: id, MemberID: fromID, Name: fromName, Conv: conv, Title: title, Note: preview, Message: msgID})
 		}
 	}

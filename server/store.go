@@ -107,6 +107,11 @@ type Member struct {
 	Role            string `json:"role,omitempty"`
 	Admin           bool   `json:"admin,omitempty"`
 	PasswordAllowed bool   `json:"passwordAllowed,omitempty"`
+
+	// A child's switches, set by parents (see kids.go), and the tiles on this
+	// person's home screen (nil = the app's default).
+	Kid  *KidSettings `json:"kid,omitempty"`
+	Home []string     `json:"home,omitempty"`
 }
 
 // SharesLowBattery reports whether others get told when this person's battery is low.
@@ -140,6 +145,10 @@ type data struct {
 
 	// Which FamLogic modules are on (see modules.go); nil = from before modules.
 	Modules *ModuleSettings `json:"modules,omitempty"`
+
+	// The parent PIN (hashed like a password) that unlocks settings on children's
+	// devices and family displays; "" = not set.
+	ParentPIN string `json:"parentPin,omitempty"`
 
 	// Recent alerts for phones to pick up (see events.go).
 	LastEventID int64   `json:"lastEventId"`

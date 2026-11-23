@@ -38,7 +38,7 @@ type Server struct {
 	geo     *geocoder     // address search for fences
 
 	indexSeen *indexDeliveries // Index 01 ring deliveries already handled
-	chat      *ChatStore // nil if the chat database couldn't be opened
+	chat      *ChatStore       // nil if the chat database couldn't be opened
 }
 
 func NewServer(cfg Config, store *Store, static fs.FS) *Server {
@@ -115,6 +115,21 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/chat/{id}/messages", s.device(s.handleChatPost))
 	mux.HandleFunc("POST /api/chat/{id}/read", s.device(s.handleChatRead))
 	mux.HandleFunc("GET /api/chat-media/{name}", s.handleChatMedia)
+	mux.HandleFunc("POST /api/chat/{id}/moderate", s.device(s.handleChatModerate))
+	mux.HandleFunc("DELETE /api/chat/{id}/messages/{mid}", s.device(s.handleChatDeleteMessage))
+	mux.HandleFunc("POST /api/chat/{id}/messages/{mid}/delete", s.device(s.handleChatDeleteMessage))
+	mux.HandleFunc("POST /api/admin/chat/{id}/moderate", s.admin(s.handleAdminChatModerate))
+	mux.HandleFunc("DELETE /api/admin/chat/{id}/messages/{mid}", s.admin(s.handleAdminChatDeleteMessage))
+	// Parents' controls (kids.go).
+	mux.HandleFunc("POST /api/pin/check", s.device(s.handleCheckPIN))
+	mux.HandleFunc("PUT /api/family/pin", s.device(s.handleFamilyPIN))
+	mux.HandleFunc("GET /api/admin/pin", s.admin(s.handleAdminPIN))
+	mux.HandleFunc("PUT /api/admin/pin", s.admin(s.handleAdminPIN))
+	mux.HandleFunc("GET /api/members/{id}/kid", s.device(s.handleKidSettings))
+	mux.HandleFunc("PUT /api/members/{id}/kid", s.device(s.handleKidSettings))
+	mux.HandleFunc("POST /api/members/{id}/kid", s.device(s.handleKidSettings)) // for clients that can't send PUT
+	mux.HandleFunc("GET /api/admin/members/{id}/kid", s.admin(s.kidSettingsHTTP))
+	mux.HandleFunc("PUT /api/admin/members/{id}/kid", s.admin(s.kidSettingsHTTP))
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
@@ -229,7 +244,7 @@ func toPublic(ms []Member) []publicMember {
 // an older server can hide what won't work instead of failing.
 var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails",
 	"emoji", "status", "schedules", "trips", "driving", "sos-seen", "requests", "nudges", "reminders", "index01",
-	"modules", "roles"}
+	"modules", "roles", "kids", "chat-moderation"}
 
 func (s *Server) serverInfo() map[string]any {
 	features := slices.Clone(serverFeatures)
@@ -594,6 +609,10 @@ func (s *Server) handleMembers(w http.ResponseWriter, r *http.Request, me *Membe
 			"tripDays":        me.TripDays,
 			"username":        me.Username,
 			"hasPassword":     me.PasswordHash != "",
+			"access":          me.access(),
+			"kid":             me.kidSettings(), // what this person may use (all on for adults)
+			"home":            me.Home,
+			"pinSet":          s.store.ParentPINHash() != "",
 		},
 	}
 	if since, ok := sinceParam(r); ok {
@@ -731,17 +750,37 @@ func (s *Server) handleLocation(w http.ResponseWriter, r *http.Request, me *Memb
 
 func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Member) {
 	var req struct {
-		Name            *string `json:"name"`
-		Paused          *bool   `json:"paused"`
-		Color           *string `json:"color"`
-		Emoji           *string `json:"emoji"`
-		ShareLowBattery *bool   `json:"shareLowBattery"`
-		ShareArrivals   *bool   `json:"shareArrivals"`
-		TrailHours      *int    `json:"trailHours"`
-		TripDays        *int    `json:"tripDays"`
+		Name            *string  `json:"name"`
+		Paused          *bool    `json:"paused"`
+		Color           *string  `json:"color"`
+		Emoji           *string  `json:"emoji"`
+		ShareLowBattery *bool    `json:"shareLowBattery"`
+		ShareArrivals   *bool    `json:"shareArrivals"`
+		TrailHours      *int     `json:"trailHours"`
+		TripDays        *int     `json:"tripDays"`
+		Home            []string `json:"home"`
 	}
 	if !readJSON(w, r, &req) {
 		return
+	}
+	if req.Paused != nil && *req.Paused && !me.can("pause") {
+		writeError(w, http.StatusForbidden, "a parent has to switch on pausing for you")
+		return
+	}
+	if req.Home != nil {
+		home, ok := cleanHome(req.Home)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "unknown home tile, or too many")
+			return
+		}
+		if me.role() == RoleChild {
+			writeError(w, http.StatusForbidden, "a parent arranges your home screen")
+			return
+		}
+		if err := s.store.SetHome(me.ID, home); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not save")
+			return
+		}
 	}
 	if !s.validatePatch(w, req.Name, req.Color, req.Emoji) {
 		return
@@ -908,7 +947,9 @@ type Session struct {
 	Member *Member // logged in with their own account
 }
 
-func (c Session) Admin() bool { return c.Owner || (c.Member != nil && c.Member.Admin && c.Member.role() == RoleParent) }
+func (c Session) Admin() bool {
+	return c.Owner || (c.Member != nil && c.Member.Admin && c.Member.role() == RoleParent)
+}
 func (c Session) Valid() bool { return c.Owner || c.Member != nil }
 
 func (s *Server) sign(payload string) string {
