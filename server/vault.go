@@ -1,7 +1,7 @@
 package main
 
 // The vault: the family's content as an Obsidian-compatible folder of Markdown
-// notes (see docs/ARCHITECTURE.md → Vault and vault_guide.md, which is the format
+// notes (see wiki/Architecture.md → Vault and wiki/Vault-Guide.md, which is the format
 // guide for people and agents). It lives in DATA_DIR/vault unless VAULT_DIR says
 // otherwise, so it can be a folder on the host that Obsidian, Syncthing or an AI
 // agent also uses.
@@ -11,7 +11,7 @@ package main
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"errors"
 	"fmt"
 	"log"
@@ -25,8 +25,16 @@ import (
 	"time"
 )
 
-//go:embed vault_guide.md
+//go:embed wiki/Vault-Guide.md
 var vaultGuide string
+
+// The project's docs, written into the vault as a small read-only wiki
+// (_FamLogic/), so a family that opens the vault in Obsidian has them to hand.
+//
+//go:embed wiki/*.md
+var wikiFS embed.FS
+
+const wikiFolder = "_FamLogic"
 
 // vaultFolders are made when the vault is opened, so people can see where things go.
 var vaultFolders = []string{"People", "Lists", "To-dos", "Chores", "Calendar", "Meals", "Meals/Recipes", "Routines", "Rhythms"}
@@ -83,10 +91,57 @@ func (v *Vault) ensure() error {
 			return err
 		}
 	}
+	if err := v.syncWiki(); err != nil {
+		return err
+	}
 	guide := "<!-- Written by FamLogic " + version + ". FamLogic replaces this file when it updates: don't edit it. -->\n\n" + vaultGuide
 	if old, err := os.ReadFile(filepath.Join(v.dir, "AGENTS.md")); err != nil || string(old) != guide {
 		if err := writeAtomic(filepath.Join(v.dir, "AGENTS.md"), []byte(guide)); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// wikiHeader starts every wiki page FamLogic writes (and marks the ones it may remove).
+const wikiHeader = "<!-- Written by FamLogic: replaced when it updates. Don't edit; keep your own notes elsewhere. -->\n\n"
+
+// syncWiki writes the wiki pages that changed, and removes pages FamLogic wrote
+// that it no longer ships. Anything else in the folder is left alone.
+func (v *Vault) syncWiki() error {
+	dir := filepath.Join(v.dir, wikiFolder)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	pages, err := wikiFS.ReadDir("wiki")
+	if err != nil {
+		return err
+	}
+	keep := map[string]bool{}
+	for _, p := range pages {
+		b, err := wikiFS.ReadFile("wiki/" + p.Name())
+		if err != nil {
+			return err
+		}
+		keep[p.Name()] = true
+		want := wikiHeader + string(b)
+		path := filepath.Join(dir, p.Name())
+		if old, err := os.ReadFile(path); err != nil || string(old) != want {
+			if err := writeAtomic(path, []byte(want)); err != nil {
+				return err
+			}
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if keep[e.Name()] || e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		if b, err := os.ReadFile(filepath.Join(dir, e.Name())); err == nil && strings.HasPrefix(string(b), wikiHeader) {
+			os.Remove(filepath.Join(dir, e.Name()))
 		}
 	}
 	return nil
@@ -98,7 +153,7 @@ type: home
 # FamLogic
 
 Our family's notes, kept by FamLogic and readable in Obsidian or any Markdown editor.
-How the notes are written: [[AGENTS]].
+How the notes are written: [[AGENTS]]. How FamLogic works: [[_FamLogic/Home|the FamLogic wiki]].
 
 - **People**: one note each, kept up to date by FamLogic
 - **Lists**, **To-dos**, **Chores**, **Calendar**, **Meals**, **Routines** and **Rhythms**: a folder each

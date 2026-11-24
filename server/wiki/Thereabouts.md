@@ -1,6 +1,6 @@
 # Thereabouts: family location sharing
 
-The Thereabouts module of [FamLogic](../README.md): everyone on an OpenStreetMap map, SOS, check-ins, fences with arrive/leave alerts, trips, driving, and the Pebble watch and Index 01 ring extras. Switch it on or off in the web console under **Settings → Modules**.
+The Thereabouts module of [FamLogic](Home.md): everyone on an OpenStreetMap map, SOS, check-ins, fences with arrive/leave alerts, trips, driving, and the Pebble watch and Index 01 ring extras. Switch it on or off in the web console under **Settings → Modules**.
 
 **Privacy:** only each person's **latest** position is stored, unless they choose to keep a trail or trips (off by default; turning them off deletes them). Pausing hides you from everyone. Location comes from Android's own location service, so it works on de-Googled phones; Wi-Fi-only tablets can opt in to [beaconDB](https://beacondb.net) positioning.
 
@@ -79,4 +79,4 @@ Optional extras, all running through the FamLogic phone app (Thereabouts module)
 - **Remind** turns "When I get home, remind me to take the bins out" into a place reminder. Say "leave" or "leaving" for a reminder when you leave instead. The fence's name has to be in what you say.
 - Anyone with a link can act as you, so keep them private; **Make new links** replaces them.
 
-Design notes and the message format: [PEBBLE.md](PEBBLE.md).
+Design notes and the message format: [Pebble](Pebble.md).

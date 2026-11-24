@@ -1,6 +1,6 @@
 # Chat
 
-The Chat module of [FamLogic](../README.md).
+The Chat module of [FamLogic](Home.md).
 
 
 Switch on **Chat** in Settings → Modules (on by default for new families). Then:
@@ -22,4 +22,4 @@ Switch on **Chat** in Settings → Modules (on by default for new families). The
 - **Opening a chat:** in portrait a chat opens full screen (Back returns to the list). For younger children the list splits open instead: the rows above slide up, the chat's name and picture stay pinned at the top, and the chat fills the space below, edge to edge. The list holds still while it's open, so scrolling the messages never drags the list along; tap the chat's row (or ✕) to close it. Landscape tablets show the list beside the open chat. Younger children get bigger pictures and buttons, and a group shows the faces of who's in it.
 - Messages are kept in `chat.db` and photos in `media/` in the data folder, both included in the daily backups (`backups/chat-<date>.db`; copy `media/` along with them).
 
-How it's built: [ARCHITECTURE.md](ARCHITECTURE.md#chat-built-in-0160).
+How it's built: [Architecture](Architecture.md#chat-built-in-0160).

@@ -4,15 +4,15 @@ A self-hosted family hub: location sharing, chat, chores and more, on your own s
 
 ## Features
 
-- **Thereabouts:** family map, SOS, check-ins, fences, trips ([guide](docs/THEREABOUTS.md))
-- **Chitchat:** family, group and one-to-one chat with photos and voice ([guide](docs/CHAT.md))
+- **Thereabouts:** family map, SOS, check-ins, fences, trips ([guide](server/wiki/Thereabouts.md))
+- **Chitchat:** family, group and one-to-one chat with photos and voice ([guide](server/wiki/Chitchat.md))
 - **Upkeep:** chores with optional stars, stored as Markdown (Obsidian-friendly)
 - **Family feed:** the day's timeline, one swipe from Home
-- **Steward:** scoped API keys for your own AI agent ([guide](docs/agents/famlogic-vault.md))
+- **Steward:** scoped API keys for your own AI agent ([guide](server/wiki/Vault-Guide.md))
 - **Roles:** parents, grandparents, older and younger children, each with their own controls
 - **Devices:** Android phones and tablets, Pebble watches, Index 01 ring, web console
 
-Coming: calendar, lists, routines, meals, TV launcher. See [ROADMAP.md](ROADMAP.md).
+Coming: calendar, lists, routines, meals, TV launcher. See the [roadmap](server/wiki/Roadmap.md).
 
 ## Install
 
@@ -42,7 +42,7 @@ Open `http://<server>:8080` and log in. For phones away from home, use a VPN (Ta
 | `VOICE` | on | `off` disables speech |
 | `BACKUP_DAYS` | `7` | Daily backups in `/data/backups` |
 
-More options: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+More options: [Architecture](server/wiki/Architecture.md#server-settings).
 
 **Update:** `docker compose pull && docker compose up -d`. Everything lives in `/data`.
 
@@ -53,8 +53,10 @@ cd server && go test ./... && go run .
 cd android && ./gradlew assembleFossRelease
 ```
 
-Releasing: [docs/RELEASING.md](docs/RELEASING.md). API: [docs/API.md](docs/API.md).
+## Docs
+
+The [wiki](server/wiki/Home.md). Every server also writes it into the notes vault as `_FamLogic/`, so it opens in Obsidian.
 
 ## License
 
-[AGPLv3](LICENSE). Third-party fonts, models and data are credited in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#credits).
+[AGPLv3](LICENSE). Third-party fonts, models and data are credited in [Architecture](server/wiki/Architecture.md#credits).

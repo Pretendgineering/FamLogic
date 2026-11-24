@@ -1,7 +1,7 @@
 package main
 
 // Upkeep, the chores module. Each chore is a Markdown note in the vault's Chores/
-// folder (see vault_guide.md → chore), so people can read and edit chores in
+// folder (see wiki/Vault-Guide.md → chore), so people can read and edit chores in
 // Obsidian, agents can edit them as text or through the API, and the apps show
 // the same thing. The notes are the source of truth: the server reads them on
 // each request (a family has dozens, not thousands) and writes them back

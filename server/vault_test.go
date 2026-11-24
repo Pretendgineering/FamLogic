@@ -101,10 +101,6 @@ func TestVaultGuideServedAndInDocs(t *testing.T) {
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/markdown") || rec.Body.String() != vaultGuide {
 		t.Fatalf("guide: %d %s", rec.Code, rec.Header().Get("Content-Type"))
 	}
-	// The copy in docs/agents must match the one the server ships.
-	if b, err := os.ReadFile("../docs/agents/famlogic-vault.md"); err == nil && string(b) != vaultGuide {
-		t.Fatal("docs/agents/famlogic-vault.md differs from server/vault_guide.md: copy it over")
-	}
 }
 
 func TestSetFront(t *testing.T) {
@@ -115,5 +111,26 @@ func TestSetFront(t *testing.T) {
 	got = setFront("---\ntags:\n  - a\nrole: old\n---\nbody", [][2]string{{"tags", "[b]"}, {"role", "parent"}})
 	if got != "---\ntags: [b]\nrole: parent\n---\nbody" {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestWiki(t *testing.T) {
+	dir := t.TempDir()
+	wiki := filepath.Join(dir, wikiFolder)
+	os.MkdirAll(wiki, 0o755)
+	os.WriteFile(filepath.Join(wiki, "Old page.md"), []byte(wikiHeader+"gone"), 0o644)
+	os.WriteFile(filepath.Join(wiki, "Mine.md"), []byte("my own note"), 0o644)
+	openVault(dir)
+	if b, err := os.ReadFile(filepath.Join(wiki, "Home.md")); err != nil || !strings.HasPrefix(string(b), wikiHeader) {
+		t.Fatalf("Home.md: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(wiki, "Vault-Guide.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(wiki, "Old page.md")); err == nil {
+		t.Fatal("a page FamLogic no longer ships should go")
+	}
+	if _, err := os.Stat(filepath.Join(wiki, "Mine.md")); err != nil {
+		t.Fatal("someone's own note in the wiki folder must stay")
 	}
 }

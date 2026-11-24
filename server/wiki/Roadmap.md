@@ -1,6 +1,6 @@
 # FamLogic roadmap
 
-FamLogic is a self-hosted family hub built from modules; location sharing (the Thereabouts module) came first. How the pieces fit together is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+FamLogic is a self-hosted family hub built from modules; location sharing (the Thereabouts module) came first. How the pieces fit together is in [Architecture](Architecture.md).
 
 ## Principles
 
@@ -137,7 +137,7 @@ In this order (each is finished before the next starts):
 ### ⏳ Later and parked
 - **Voice, beyond chat:** the Pebble (hold to talk), the TV and Control Deck, read-aloud with quiet hours.
 - **Devices page** in the console (several devices per person, last seen, Revoke); pairing displays with a code.
-- **Pebble App Store listing** (draft in [docs/PEBBLE-APPSTORE.md](docs/PEBBLE-APPSTORE.md)), and **F-Droid / IzzyOnDroid** for the app; a shareable invite message with a download link once the app is in a store.
+- **Pebble App Store listing** (draft in [Pebble-App-Store](Pebble-App-Store.md)), and **F-Droid / IzzyOnDroid** for the app; a shareable invite message with a download link once the app is in a store.
 - **Profile pictures** (emoji icons stay as the fallback).
 - **Home Assistant** integration (presence, chores done, a dashboard).
 
@@ -167,6 +167,6 @@ Location sharing came first; these versions built it:
 7. ✅ **0.9.0:** per-person/group/fence alert switches, emoji icons, phone health, "phone went quiet" alerts, backups, fence alert hours, battery saver.
 8. ✅ **0.10.0:** trips (journeys between stops) with names, speeds, routes and optional alerts; colour and emoji picker; keyless map styles.
 9. ✅ **0.11.0:** driving detection from GPS speed.
-10. ✅ **0.12.0:** Pebble watchapp and Family watchface, timeline pins, fall detection and heart rate (opt-in), Index 01 ring webhooks, SOS "seen" receipts, place reminders. See [docs/PEBBLE.md](docs/PEBBLE.md).
+10. ✅ **0.12.0:** Pebble watchapp and Family watchface, timeline pins, fall detection and heart rate (opt-in), Index 01 ring webhooks, SOS "seen" receipts, place reminders. See [Pebble](Pebble.md).
 11. ✅ **0.13.0:** two builds: FOSS and the Google edition (fused location, activity recognition).
 12. ✅ **0.14.0:** Pebble round two: watchface grid, hold-Select SOS, radar and street maps on the watch, nudges, watch themes.

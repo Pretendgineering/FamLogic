@@ -8,7 +8,7 @@ FamLogic apps, and nothing you write breaks what someone else wrote.
 
 FamLogic writes this file (`AGENTS.md`) and replaces it when it updates, so don't put
 your own notes in it. The same guide is in the FamLogic repository
-(`docs/agents/famlogic-vault.md`) and on every FamLogic server at
+(`server/wiki/Vault-Guide.md`), in the vault's `_FamLogic` wiki, and on every FamLogic server at
 `/api/v1/vault/guide`.
 
 ## The rules that matter most
@@ -33,6 +33,7 @@ your own notes in it. The same guide is in the FamLogic repository
 ```
 FamLogic.md            the home note: links to everything (you may edit it)
 AGENTS.md              this guide (FamLogic replaces it; don't edit)
+_FamLogic/             the FamLogic wiki: how FamLogic works (FamLogic replaces it; don't edit)
 People/                one note per family member (FamLogic keeps these up to date)
 Lists/                 shared lists: Shopping.md, Packing - Beach trip.md
 To-dos/                to-dos: one note per person (Sam.md) or shared (Family.md)

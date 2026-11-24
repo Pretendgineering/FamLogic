@@ -1,6 +1,6 @@
 # FamLogic architecture
 
-How FamLogic is put together, and the plan for the pieces still to come. The order things get built is in [ROADMAP.md](../ROADMAP.md).
+How FamLogic is put together, and the plan for the pieces still to come. The order things get built is in [ROADMAP.md](Roadmap.md).
 
 ## The parts
 
@@ -70,7 +70,7 @@ Parents and admins already log in to the console with their own accounts (0.16.0
 
 ## Vault: family content as Markdown (Phase 3 design)
 
-`/data/vault/` (or `VAULT_DIR`) is an ordinary Obsidian-compatible folder. It can be a folder on the host (a bind mount): the server starts as root only to hand its folders to `PUID:PGID` (65532 unless set), then runs as that user, so the files belong to the person who owns the folder. Without `PUID`, a mounted folder is never taken over; the console says if FamLogic can't write there. The format is in [agents/famlogic-vault.md](agents/famlogic-vault.md) (also written into the vault as `AGENTS.md` and served at `/api/v1/vault/guide`). Today the server keeps the folders, the home note, the guide and the **People** notes (front-matter fields it owns: `type`, `famlogic_id`, `role`, `color`, `emoji`); the modules move onto the other note types in Phase 4.
+`/data/vault/` (or `VAULT_DIR`) is an ordinary Obsidian-compatible folder. It can be a folder on the host (a bind mount): the server starts as root only to hand its folders to `PUID:PGID` (65532 unless set), then runs as that user, so the files belong to the person who owns the folder. Without `PUID`, a mounted folder is never taken over; the console says if FamLogic can't write there. The format is in [Vault-Guide](Vault-Guide.md) (also written into the vault as `AGENTS.md` and served at `/api/v1/vault/guide`). Today the server keeps the folders, the home note, the guide, the read-only `_FamLogic/` wiki (these docs, from `server/wiki/`) and the **People** notes (front-matter fields it owns: `type`, `famlogic_id`, `role`, `color`, `emoji`); the modules move onto the other note types in Phase 4.
 
  FamLogic reads and writes it, watches it for changes made elsewhere (Obsidian Sync/Syncthing, an agent, a text editor), and treats the files as the source of truth for chores, lists, menus and schedules. Chat and location stay in the database (too much, too fast).
 
@@ -148,7 +148,7 @@ where: Smile Dental
 
 - **API keys** made in Settings → AI & API, each with a name ("Hermes on the NAS"), scopes and an optional expiry. Scopes: `read`, `lists`, `chores`, `calendar`, `meals`, `chat:post`, `location:read` (off by default). Keys are shown once and stored hashed; every use is logged.
 - **REST endpoints** under `/api/v1/` work on vault items as structured JSON *and* raw Markdown (`GET/PUT /api/v1/vault/{path}`), so an agent can either use fields or just edit text.
-- **OpenAPI description** at `/api/v1/openapi.json`, and a **skill file** (`docs/agents/famlogic-skill.md`) for Hermes and similar agents: what FamLogic is, the endpoints, the Markdown conventions above, and safety rules (never delete without being asked, prefer adding to lists).
+- **OpenAPI description** at `/api/v1/openapi.json`, and a **skill file** (the [Vault guide](Vault-Guide.md)) for Hermes and similar agents: what FamLogic is, the endpoints, the Markdown conventions above, and safety rules (never delete without being asked, prefer adding to lists).
 - Works the same with a cloud model or a local Ollama container: the agent only needs the server URL and a key.
 - Later: an MCP endpoint, so MCP-capable agents can use FamLogic as a tool directly.
 
@@ -255,7 +255,7 @@ Press-to-talk and read-aloud are meant to be a main way of using FamLogic on eve
 
 ## Watches and the ring
 
-The Pebble watchapp, Family watchface and Index 01 webhooks belong to the Thereabouts module today (see [PEBBLE.md](PEBBLE.md)). Next, as modules arrive: quick to-dos and list items from the watch and ring ("add milk to the shopping list"), chat quick replies, and chores ticked off from the wrist.
+The Pebble watchapp, Family watchface and Index 01 webhooks belong to the Thereabouts module today (see [Pebble](Pebble.md)). Next, as modules arrive: quick to-dos and list items from the watch and ring ("add milk to the shopping list"), chat quick replies, and chores ticked off from the wrist.
 
 
 ## Server settings
@@ -279,7 +279,7 @@ Environment variables (in `docker-compose.yml` or the container):
 
 ## Credits
 
-FamLogic is free software under the [GNU Affero General Public License v3.0](../LICENSE) (versions up to 0.17.0 were released under GPLv3). Running a modified version as a service for others requires offering them its source; every FamLogic server links to its source in the web console and the app.
+FamLogic is free software under the [GNU Affero General Public License v3.0](https://github.com/Pretendgineering/FamLogic/blob/main/LICENSE) (versions up to 0.17.0 were released under GPLv3). Running a modified version as a service for others requires offering them its source; every FamLogic server links to its source in the web console and the app.
 
 The family chat's monogram uses [UnifrakturMaguntia](https://unifraktur.sourceforge.net) (SIL OFL). Voice uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and OpenAI's Whisper *small.en* model (MIT), [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) with ONNX Runtime (MIT), the [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) voice model (Apache-2.0) and espeak-ng's data (GPLv3), all inside the server image.
 
