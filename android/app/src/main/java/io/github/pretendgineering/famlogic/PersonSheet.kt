@@ -189,7 +189,7 @@ private fun TripTimeline(trips: List<Trip>, onShowTrip: (Trip) -> Unit) {
     }
     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         days.take(7).forEach { d ->
-            androidx.compose.material3.FilterChip(selected = d == day, onClick = { day = d }, label = { Text(dayName(d)) })
+            FilterChip(selected = d == day, onClick = { day = d }, label = { Text(dayName(d)) })
         }
     }
     val today = trips.filter { dayOf(it.start) == day }.sortedByDescending { it.start }

@@ -33,7 +33,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -348,7 +347,7 @@ fun UpkeepTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onO
     val due = data?.chores?.filter { Upkeep.isMine(it, me) && Upkeep.dueNow(it, data.today) }.orEmpty()
     Column(Modifier.fillMaxWidth().height(height).clickable(onClickLabel = "Open ${Access.name("chores")}", onClick = onOpen).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(tileIcon("chores"), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(if (big) 32.dp else 26.dp))
+            Icon(tileIcon("chores"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp))
             Text(Access.name("chores"), Modifier.padding(start = 8.dp).weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val stars = data?.stars?.get(me) ?: 0
             if (stars > 0) Text("★ $stars", color = Color(0xFFE0A82E), fontWeight = FontWeight.Bold)

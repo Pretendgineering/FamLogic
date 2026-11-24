@@ -52,7 +52,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -300,7 +299,7 @@ private fun HomeScreenCard(onOpenHomeEditor: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Tiles across", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
             listOf(3 to "3", 2 to "2").forEach { (n, label) ->
-                androidx.compose.material3.FilterChip(
+                FilterChip(
                     selected = (if (HomeLayout.columns == 2) 2 else 3) == n,
                     onClick = { Prefs(context).homeColumns = n; HomeLayout.columns = n },
                     label = { Text(label) },
@@ -558,6 +557,7 @@ private fun FencesPage(
                     Hint(size + group + (p.schedule?.let { " · " + scheduleSummary(it) } ?: ""))
                 }
                 Switch(
+                    colors = accentSwitch(),
                     checked = p.id !in mutedPlaces,
                     onCheckedChange = { on ->
                         mutedPlaces = if (on) mutedPlaces - p.id else mutedPlaces + p.id
@@ -1284,7 +1284,7 @@ internal fun SwitchRow(title: String, detail: String, checked: Boolean, enabled:
                 Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = { on ->
+        Switch(checked = checked, enabled = enabled, colors = accentSwitch(), onCheckedChange = { on ->
             haptics.performHapticFeedback(if (on) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
             onChange(on)
         })

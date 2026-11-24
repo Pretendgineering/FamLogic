@@ -35,7 +35,7 @@ private data class Tokens(
 
 enum class Palette(val id: String, val title: String, val description: String) {
     Dracula("dracula", "Default", "Soft dusky purples with gentle pink, cyan and green."),
-    Hannah("hannah", "Hannah's Theme", "Bright sea-glass teal with tasteful gold."),
+    Hannah("hannah", "Hannah's Theme", "Sea glass, somewhere between blue and green, with tasteful gold."),
     Forest("forest", "Hobbit Door", "Deep round-door green with a brass knob."),
     Ocean("ocean", "Boring Blue", "Cool, calm, perfectly sensible blues."),
     Paper("paper", "Lofi Cabin", "Cream, wood and a deep red: beats to relax to."),
@@ -76,10 +76,10 @@ private fun tokens(p: Palette, dark: Boolean): Tokens = when (p) {
         0xFF7FB8E0, 0xFF0B2A40, 0xFF23425B, 0xFFCFE6F7, 0xFF8FD3C0, 0xFFE57A84, 0xFFE0606E)
     else Tokens(0xFFEFF4F8, 0xFFFFFFFF, 0xFFE0EAF2, 0xFF1A2633, 0xFF586A7C, 0xFFD0DDE8,
         0xFF1F5F8B, 0xFFFFFFFF, 0xFFD3E5F3, 0xFF0F3654, 0xFF2D7A6A, 0xFFB3261E, 0xFFC0394F)
-    Palette.Hannah -> if (dark) Tokens(0xFF0F1F1D, 0xFF152927, 0xFF1D3633, 0xFFE6F7F3, 0xFF9CC2BA, 0xFF2A4A45,
-        0xFF00E3BD, 0xFF00201B, 0xFF0E4A41, 0xFFB8FFF0, 0xFFE0B84E, 0xFFEF7B7B, 0xFFE5534B)
-    else Tokens(0xFFF2FAF8, 0xFFFFFFFF, 0xFFE1F2EE, 0xFF10302B, 0xFF4E6E67, 0xFFCBE3DD,
-        0xFF009E84, 0xFFFFFFFF, 0xFFB8F5E9, 0xFF00382F, 0xFFB8901F, 0xFFB3261E, 0xFFC0392B)
+    Palette.Hannah -> if (dark) Tokens(0xFF101C1F, 0xFF16262A, 0xFF1F3237, 0xFFE6F3F4, 0xFF9DBCC0, 0xFF2B4247,
+        0xFF6CC5C9, 0xFF062226, 0xFF1A454A, 0xFFC4EEF0, 0xFFD9B45A, 0xFFEF7B7B, 0xFFE5534B)
+    else Tokens(0xFFF1F7F8, 0xFFFFFFFF, 0xFFE0EDEF, 0xFF12292D, 0xFF4F6A6E, 0xFFCADCDF,
+        0xFF2B8A93, 0xFFFFFFFF, 0xFFC6E7EA, 0xFF0B3439, 0xFFA8822A, 0xFFB3261E, 0xFFC0392B)
     Palette.Noir -> if (dark) Tokens(0xFF121212, 0xFF1A1A1A, 0xFF262626, 0xFFEDEDED, 0xFFA3A3A3, 0xFF333333,
         0xFFE0E0E0, 0xFF121212, 0xFF3A3A3A, 0xFFF5F5F5, 0xFFBDBDBD, 0xFFEF6B6B, 0xFFE5484D)
     else Tokens(0xFFF5F5F5, 0xFFFFFFFF, 0xFFE8E8E8, 0xFF141414, 0xFF5E5E5E, 0xFFD4D4D4,
@@ -198,3 +198,43 @@ fun FamLogicTheme(content: @Composable () -> Unit) {
         )
     }
 }
+
+/**
+ * The theme's second colour (Hannah's gold, Hobbit Door's brass…), used for small
+ * accents: home tile icons, the family name and crest, selected chips and switches.
+ */
+val Accent2: Color @Composable get() = MaterialTheme.colorScheme.secondary
+
+/** A selected chip: a soft wash of the second colour. */
+@Composable
+fun FilterChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: @Composable () -> Unit,
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
+    enabled: Boolean = true,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingIcon: (@Composable () -> Unit)? = null,
+) {
+    val a = Accent2
+    androidx.compose.material3.FilterChip(
+        selected, onClick, label, modifier, enabled, leadingIcon, trailingIcon,
+        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+            selectedContainerColor = a.copy(alpha = .22f),
+            selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+            selectedLeadingIconColor = a,
+            selectedTrailingIconColor = a,
+        ),
+        border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+            enabled = enabled, selected = selected, selectedBorderColor = a.copy(alpha = .7f), selectedBorderWidth = 1.dp,
+        ),
+    )
+}
+
+/** Switches: on in the second colour. */
+@Composable
+fun accentSwitch() = androidx.compose.material3.SwitchDefaults.colors(
+    checkedTrackColor = Accent2,
+    checkedThumbColor = MaterialTheme.colorScheme.surface,
+    checkedBorderColor = Accent2,
+)

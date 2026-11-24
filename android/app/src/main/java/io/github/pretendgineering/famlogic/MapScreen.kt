@@ -18,7 +18,6 @@ import android.location.Location
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.material3.FilterChip
 import android.location.LocationManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -692,7 +691,8 @@ fun MapScreen(
                 ) {
                     val choices = listOf("" to "Everyone") + circles.map { it.id to it.name }
                     items(choices, key = { it.first }) { (id, name) ->
-                        FilterChip(
+                        // Over the map: solid chips that stand out (the main colour when selected).
+                        androidx.compose.material3.FilterChip(
                             selected = circleFilter == id,
                             onClick = {
                                 if (circleFilter != id) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)

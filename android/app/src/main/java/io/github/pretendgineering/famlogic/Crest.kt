@@ -50,7 +50,7 @@ fun FamilyCrest(size: Int, modifier: Modifier = Modifier) {
     val initial = familyInitial(name)
     Box(
         modifier.size(size.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)
-            .border((size / 22f).coerceAtLeast(1.5f).dp, GOLD, CircleShape),
+            .border((size / 18f).coerceAtLeast(2f).dp, Accent2, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         if (initial == null) {

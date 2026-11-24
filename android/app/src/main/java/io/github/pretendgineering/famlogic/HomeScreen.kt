@@ -516,7 +516,7 @@ private fun TileDrawer(ids: List<String>, modifier: Modifier, onBounds: (Rect) -
                             verticalArrangement = Arrangement.Center,
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Icon(tileIcon(id), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                            Icon(tileIcon(id), contentDescription = null, tint = Accent2, modifier = Modifier.size(28.dp))
                             Text(Access.name(id), style = MaterialTheme.typography.labelMedium, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -949,7 +949,7 @@ private fun MapTile(
             Box(Modifier.fillMaxSize().clickable(onClickLabel = "Open the map", onClick = onClick))
         }
         if (!compact) Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (Access.pictures) Pictures.Map(28.dp) else Icon(Icons.Filled.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            if (Access.pictures) Pictures.Map(28.dp) else Icon(Icons.Filled.LocationOn, contentDescription = null, tint = Accent2)
             Text(Access.name("map"), Modifier.padding(start = 6.dp, end = 10.dp), style = MaterialTheme.typography.titleMedium)
             // Faces of who's where, in a row: easy to read at a glance.
             members.take(if (big) 6 else 5).forEach { m ->
@@ -1020,7 +1020,7 @@ private fun ChatTile(
     Column(Modifier.fillMaxWidth().height(height).clickable(onClick = onOpen).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (Access.pictures) Pictures.Talk(if (big) 48.dp else 32.dp)
-            else Icon(Icons.Filled.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(if (big) 40.dp else 28.dp))
+            else Icon(Icons.Filled.Email, contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 40.dp else 28.dp))
             Text(Access.name("chat"), Modifier.padding(start = 8.dp).weight(1f), style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge)
             if (unread > 0) androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$unread", fontSize = if (big) 16.sp else 11.sp) }
         }
@@ -1112,7 +1112,7 @@ private fun SimpleTile(
     Column(Modifier.fillMaxWidth().height(height).clickable(onClick = onClick).padding(16.dp)) {
         val s = if (big) 56.dp else 36.dp
         if (Access.pictures && picture != null) picture(s + 8.dp)
-        else Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary.copy(alpha = .6f), modifier = Modifier.size(s))
+        else Icon(icon, contentDescription = null, tint = Accent2.copy(alpha = .75f), modifier = Modifier.size(s))
         Spacer(Modifier.height(10.dp))
         // Long names ("Odds & Ends") wrap onto a second line and shrink to fit a small tile.
         val style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge
@@ -1165,6 +1165,7 @@ fun SecretTitle(text: String, gate: SettingsGate) {
         text,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        color = Accent2,
         modifier = Modifier.pointerInput(Unit) {
             detectTapGestures(onPress = {
                 val job = scope.launch {
