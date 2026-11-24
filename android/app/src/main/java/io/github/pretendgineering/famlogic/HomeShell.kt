@@ -36,6 +36,9 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -54,13 +57,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** The app's sections: the home screen, then each module that's on (and that this person may use). */
-enum class Tab { Home, Map, Chat }
+enum class Tab { Home, Map, Chat, Chores }
 
 /** The tabs this person sees, in order. */
 fun visibleTabs(features: Set<String>, prefs: Prefs): List<Tab> = buildList {
     add(Tab.Home)
     if (Modules.on(features, Modules.THEREABOUTS) && Access.can("map")) add(Tab.Map)
     if (Modules.has(features, Modules.CHAT) && prefs.access != "dependent" && Access.can("chat")) add(Tab.Chat)
+    if (Modules.has(features, Modules.CHORES) && prefs.access != "dependent" && Access.can("chores")) add(Tab.Chores)
 }
 
 @Composable
@@ -178,12 +182,14 @@ private fun tileFor(t: Tab) = when (t) {
     Tab.Home -> "home"
     Tab.Map -> "map"
     Tab.Chat -> "chat"
+    Tab.Chores -> "chores"
 }
 
 fun tabLook(t: Tab): Triple<ImageVector, ImageVector, String> = when (t) {
     Tab.Home -> Triple(Icons.Filled.Home, Icons.Outlined.Home, "Home")
     Tab.Map -> Triple(Icons.Filled.LocationOn, Icons.Outlined.LocationOn, Access.name("map"))
     Tab.Chat -> Triple(Icons.Filled.Email, Icons.Outlined.Email, Access.name("chat"))
+    Tab.Chores -> Triple(Icons.Filled.Star, Icons.Outlined.Star, Access.name("chores"))
 }
 
 /** A tab's icon: the usual symbol (filled when selected), or a picture for people who use picture icons. */
@@ -195,6 +201,7 @@ fun TabIcon(t: Tab, on: Boolean, size: androidx.compose.ui.unit.Dp) {
             Tab.Home -> Pictures.Home(s)
             Tab.Map -> Pictures.Map(s)
             Tab.Chat -> Pictures.Talk(s)
+            Tab.Chores -> Icon(Icons.Filled.Star, contentDescription = null, tint = Color(0xFFE0A82E), modifier = Modifier.size(s))
         }
         return
     }

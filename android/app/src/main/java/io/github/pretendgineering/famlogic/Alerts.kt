@@ -29,6 +29,7 @@ object Alerts {
 
     /** Intent extra: open the map centred on this member. */
     const val EXTRA_FOCUS_MEMBER = "focus_member"
+    const val EXTRA_OPEN_UPKEEP = "open_upkeep"
 
     /** Bumped whenever alerts arrive, so an open map refreshes straight away. */
     @Volatile
@@ -114,6 +115,16 @@ object Alerts {
                 // Replaces (and silences) that person's SOS notification.
                 if (!prefs.notifySos) return
                 notify(context, CHANNEL_ALERTS, sosId(e.memberId), "${e.name} is OK", "They ended their SOS.", e.memberId)
+            }
+            // Upkeep: a chore for you, or (for parents) one someone did.
+            "chore" -> {
+                if (e.kind == "done") {
+                    if (e.memberId in prefs.mutedPeople) return
+                    val stars = if (e.level > 0) "  ★ ${e.level}" else ""
+                    notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} did a chore", e.title + stars, e.memberId, upkeep = true)
+                } else {
+                    notify(context, CHANNEL_ALERTS, eventId(e), "A job for you", e.title + " (from ${e.name})", e.memberId, upkeep = true)
+                }
             }
             "checkin" -> {
                 if (!prefs.notifyCheckIn || e.memberId in prefs.mutedPeople) return
@@ -212,12 +223,12 @@ object Alerts {
     /** Opens the map centred on [memberId]. */
     fun clearChat(context: Context, conv: String) = ChatNotify.clear(context, conv)
 
-    fun openMapIntent(context: Context, memberId: String?, requestCode: Int): PendingIntent =
+    fun openMapIntent(context: Context, memberId: String?, requestCode: Int, upkeep: Boolean = false): PendingIntent =
         PendingIntent.getActivity(
             context, requestCode,
             Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .putExtra(EXTRA_FOCUS_MEMBER, memberId),
+                .apply { if (upkeep) putExtra(EXTRA_OPEN_UPKEEP, true) else putExtra(EXTRA_FOCUS_MEMBER, memberId) },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
@@ -235,6 +246,8 @@ object Alerts {
         hereFor: String = "",
         /** Adds 👍 and ❤️ buttons that send this person a nudge. */
         nudgeFor: String = "",
+        /** Tapping opens Upkeep instead of the map. */
+        upkeep: Boolean = false,
     ) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -245,7 +258,7 @@ object Alerts {
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(openMapIntent(context, memberId, id))
+            .setContentIntent(openMapIntent(context, memberId, id, upkeep))
             .setAutoCancel(true)
             .setWhen(System.currentTimeMillis())
         if (sos) {

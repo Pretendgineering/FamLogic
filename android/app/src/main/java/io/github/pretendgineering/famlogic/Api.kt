@@ -513,12 +513,62 @@ class Api(private val baseUrl: String, private val token: String = "") {
         request("POST", "/api/me", JSONObject().put("name", name))
     }
 
-    /** Your map pin: an emoji ("" = your initial) on a colour like #6e48d6. */
+    // ---- Upkeep (chores) and the family feed
+
+    suspend fun chores(): ChoreList {
+        val o = request("GET", "/api/chores")
+        val arr = o.optJSONArray("chores")
+        val stars = o.optJSONObject("stars")
+        return ChoreList(
+            chores = (0 until (arr?.length() ?: 0)).map { parseChore(arr!!.getJSONObject(it)) },
+            stars = stars?.keys()?.asSequence()?.associateWith { stars.optInt(it) } ?: emptyMap(),
+            today = o.optString("today"),
+            canEdit = o.optBoolean("canEdit"),
+            level = o.optString("level", "full"),
+        )
+    }
+
+    suspend fun addChore(title: String, who: List<String>, every: String, due: String, stars: Int, notes: String = ""): Chore =
+        parseChore(request("POST", "/api/chores", JSONObject().put("title", title).put("who", org.json.JSONArray(who))
+            .put("every", every).put("due", due).put("stars", stars).put("notes", notes)))
+
+    suspend fun choreDone(id: String, date: String = "", by: String = ""): Chore {
+        val body = JSONObject()
+        if (date.isNotEmpty()) body.put("date", date)
+        if (by.isNotEmpty()) body.put("by", by)
+        return parseChore(request("POST", "/api/chores/" + enc(id) + "/done", body))
+    }
+
+    suspend fun choreUndo(id: String, date: String = ""): Chore =
+        parseChore(request("POST", "/api/chores/" + enc(id) + "/undo", if (date.isNotEmpty()) JSONObject().put("date", date) else JSONObject()))
+
+    suspend fun retireChore(id: String) {
+        request("POST", "/api/chores/" + enc(id) + "/delete")
+    }
+
+    suspend fun feed(from: Long, to: Long): List<AppEvent> {
+        val o = request("GET", "/api/feed?from=$from&to=$to")
+        return parseEvents(JSONObject().put("events", o.optJSONArray("items") ?: org.json.JSONArray()).put("cursor", 0), -1)?.events.orEmpty()
+    }
+
+    private fun parseChore(o: JSONObject): Chore {
+        val who = o.optJSONArray("who")
+        val done = o.optJSONArray("done")
+        return Chore(
+            id = o.optString("id"), title = o.optString("title"),
+            who = (0 until (who?.length() ?: 0)).map { who!!.getString(it) },
+            every = o.optString("every"), due = o.optString("due"), whenOfDay = o.optString("when"),
+            stars = o.optInt("stars"), notes = o.optString("notes"), finished = o.optBoolean("finished"),
+            done = (0 until (done?.length() ?: 0)).map { done!!.getJSONObject(it).let { d -> d.optString("date") to d.optString("by") } },
+        )
+    }
+
     /** The voice your messages are read aloud in: "female", "male" or "". */
     suspend fun setVoice(voice: String) {
         request("POST", "/api/me", JSONObject().put("voice", voice))
     }
 
+    /** Your map pin: an emoji ("" = your initial) on a colour like #6e48d6. */
     suspend fun setIcon(emoji: String, color: String) {
         request("POST", "/api/me", JSONObject().put("emoji", emoji).put("color", color))
     }
@@ -890,3 +940,23 @@ data class ChatThread(
 
 /** A FamLogic module (Thereabouts, Chitchat…): whether it's built yet, and whether the family has it on. */
 data class ModuleInfo(val id: String, val name: String, val plain: String, val description: String, val available: Boolean, val enabled: Boolean)
+
+/** A chore (Upkeep): kept as a Markdown note in the family's vault. */
+data class Chore(
+    val id: String,
+    val title: String,
+    /** Member ids it's for; empty = anyone. */
+    val who: List<String>,
+    /** "" = once; day, weekdays, week, "2 weeks", month, "mon,thu". */
+    val every: String,
+    /** The next date it's due (YYYY-MM-DD). */
+    val due: String,
+    val whenOfDay: String,
+    val stars: Int,
+    val notes: String,
+    val finished: Boolean,
+    /** The times it was done, latest first: (date, member id). */
+    val done: List<Pair<String, String>>,
+)
+
+data class ChoreList(val chores: List<Chore>, val stars: Map<String, Int>, val today: String, val canEdit: Boolean, val level: String)

@@ -17,7 +17,10 @@ type testEnv struct {
 	t      *testing.T
 	srv    *httptest.Server
 	cookie *http.Cookie
+	path   string // the data file
 }
+
+func (e *testEnv) dataFile() string { return e.path }
 
 func newEnv(t *testing.T) *testEnv {
 	t.Helper()
@@ -27,10 +30,11 @@ func newEnv(t *testing.T) *testEnv {
 	}
 	store.EnsureDefaultCircle("Test Family") // as the server does at start-up
 	static, _ := fs.Sub(webFS, "web")
-	cfg := Config{AdminPassword: "correct horse", FamilyName: "Test Family", TileURL: "https://tiles/{z}/{x}/{y}.png", InviteTTL: time.Hour}
+	cfg := Config{AdminPassword: "correct horse", FamilyName: "Test Family", TileURL: "https://tiles/{z}/{x}/{y}.png", InviteTTL: time.Hour,
+		VaultDir: filepath.Join(filepath.Dir(store.path), "vault")}
 	srv := httptest.NewServer(NewServer(cfg, store, static).Routes())
 	t.Cleanup(srv.Close)
-	return &testEnv{t: t, srv: srv}
+	return &testEnv{t: t, srv: srv, path: store.path}
 }
 
 func (e *testEnv) do(method, path, auth string, body any) (*http.Response, map[string]any) {

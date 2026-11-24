@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -189,6 +190,7 @@ func (v *Vault) syncPeople(members []Member) error {
 			{"role", m.access()},
 			{"color", yamlString(m.Color)},
 			{"emoji", yamlString(m.Emoji)},
+			{"stars", strconv.Itoa(m.Stars)},
 		}
 		updated := setFront(text, fields)
 		if updated != string(old) {

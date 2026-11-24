@@ -141,7 +141,10 @@ where: Smile Dental
 - Writes are atomic (write to a temp file, then rename) and every change is also kept in `backups/`.
 - Conflicts: if a file changed on disk since FamLogic last read it, FamLogic re-reads it before applying an edit, and never overwrites an edit it hasn't seen.
 
-## API and AI agents (Phase 3 design)
+## API and AI agents (keys built in 0.27.0)
+
+**Built:** keys (Settings → AI & API in the console) with a name and scopes `people`, `chores`, `feed`, `location`; shown once, stored as SHA-256, every use logged (the last 300), revocable; the `agents` module switches them all off at once. A key acts as a parent named after it (`agent:<id>`, 🤖). `GET /api/v1/people`, the chores and stars endpoints, `GET /api/feed`, and `GET /api/v1/openapi.json` (embedded `server/openapi.json`). Agents' rules live in the vault guide. The design below is the fuller plan.
+
 
 - **API keys** made in Settings → AI & API, each with a name ("Hermes on the NAS"), scopes and an optional expiry. Scopes: `read`, `lists`, `chores`, `calendar`, `meals`, `chat:post`, `location:read` (off by default). Keys are shown once and stored hashed; every use is logged.
 - **REST endpoints** under `/api/v1/` work on vault items as structured JSON *and* raw Markdown (`GET/PUT /api/v1/vault/{path}`), so an agent can either use fields or just edit text.

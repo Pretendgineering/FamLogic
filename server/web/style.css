@@ -836,3 +836,13 @@ button.danger { background: var(--danger); color: #fff; }
 /* The family chat's crest: its initial in an ornate blackletter, in a gold ring (as in the app). */
 @font-face { font-family: "UnifrakturMaguntia"; src: url("/fonts/UnifrakturMaguntia.ttf") format("truetype"); font-display: swap; }
 .avatar.crest { font-family: "UnifrakturMaguntia", var(--serif); font-weight: 400; font-size: 1.35rem; box-shadow: inset 0 0 0 2px #d4af37; }
+/* Upkeep (chores) in the console. */
+.upkeep-add { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+.upkeep-add .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.list li.chore .faces { display: flex; gap: 2px; min-width: 40px; }
+.list li.chore.late .sub { color: var(--sos); }
+.banner { background: var(--accent-soft); color: var(--accent-soft-text); padding: 8px 12px; border-radius: 12px; }
+.upkeep-add .acc-opts { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.upkeep-add .acc-opts label, #agents-panel .acc-opts label { display: flex; gap: 8px; align-items: center; }
+.upkeep-add textarea { font: inherit; padding: .6em .8em; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
+#agents-panel .acc-opts { display: flex; flex-direction: column; gap: 6px; }

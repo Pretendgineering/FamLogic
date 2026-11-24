@@ -194,7 +194,7 @@ fun SettingsScreen(
                 }
                 SettingsPage.Look -> {
                     LookCards(prefs)
-                    if (!limited && !Access.isChild) ModulesCard(prefs, features, onOpenHomeEditor)
+                    if (!limited && !Access.isChild) HomeScreenCard(onOpenHomeEditor)
                     VoiceCard(prefs)
                 }
                 SettingsPage.Alerts -> AlertsPage(prefs, features, shareLowBattery, onShareLowBatteryChange, members.filter { it.id != myId })
@@ -288,66 +288,27 @@ private fun VoiceCard(prefs: Prefs) {
 }
 
 /**
- * Look and Feel → Home Screen and Modules: arrange the home screen (with the
- * drawer of tiles), and choose modules. An admin's switches change the whole
- * family; everyone else's only hide a module on their own phone.
+ * Look and Feel → Home Screen: arrange it (tiles you don't want go back in the
+ * drawer), and how many tiles across. Which modules the family has is chosen in
+ * the web console.
  */
 @Composable
-private fun ModulesCard(prefs: Prefs, features: Set<String>?, onOpenHomeEditor: () -> Unit) {
+private fun HomeScreenCard(onOpenHomeEditor: () -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val admin = prefs.access == "admin"
-    var mods by remember { mutableStateOf<List<ModuleInfo>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        mods = runCatching { Api(prefs.serverUrl, prefs.token).modules() }.onFailure { error = it.message }.getOrNull()
-    }
-    SettingsCard("Home Screen and Modules") {
+    SettingsCard("Home Screen") {
         OutlinedButton(onClick = onOpenHomeEditor, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("Arrange home screen") }
-        // How many tiles across.
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Tiles across", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
             listOf(3 to "3", 2 to "2").forEach { (n, label) ->
                 androidx.compose.material3.FilterChip(
                     selected = (if (HomeLayout.columns == 2) 2 else 3) == n,
-                    onClick = { prefs.homeColumns = n; HomeLayout.columns = n },
+                    onClick = { Prefs(context).homeColumns = n; HomeLayout.columns = n },
                     label = { Text(label) },
                     modifier = Modifier.padding(start = 6.dp),
                 )
             }
         }
-        Hint(
-            if (admin) "As an admin, switching a module off here switches it off for the whole family."
-            else "Hide the modules you don't use on this phone. Your family's admin chooses which modules the family has.",
-        )
-        val list = mods
-        when {
-            list == null && error != null -> Hint("Couldn't load the modules: $error")
-            list == null -> Hint("Loading…")
-            else -> list.filter { admin || it.enabled }.forEach { m ->
-                val name = if (Access.plainNames) m.plain.ifEmpty { m.name } else m.name
-                SwitchRow(
-                    title = name + if (!m.available) " (coming soon)" else "",
-                    detail = m.description,
-                    checked = if (admin) m.enabled && m.id !in Modules.hidden else m.id !in Modules.hidden,
-                    onChange = { on ->
-                        if (admin && (on || m.enabled)) {
-                            // An admin switching on also un-hides it here; switching off is family-wide.
-                            Modules.hidden = Modules.hidden - m.id
-                            prefs.hiddenModules = Modules.hidden
-                            scope.launch {
-                                runCatching { Api(prefs.serverUrl, prefs.token).setModules(list.associate { it.id to (if (it.id == m.id) on else it.enabled) }) }
-                                    .onSuccess { mods = it }
-                                    .onFailure { android.widget.Toast.makeText(context, "Couldn't save: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
-                            }
-                        } else {
-                            Modules.hidden = if (on) Modules.hidden - m.id else Modules.hidden + m.id
-                            prefs.hiddenModules = Modules.hidden
-                        }
-                    },
-                )
-            }
-        }
+        Hint("Don't need something? Put its tile back in the drawer while arranging.")
     }
 }
 

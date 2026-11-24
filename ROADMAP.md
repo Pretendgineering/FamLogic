@@ -41,7 +41,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Small things: rotating keeps what you typed; a camera icon that takes a new photo or picks one; senders' pictures in chat; a clearer selected tab.
 
 ### ✅ Phase 3c: Access & Control, grandparents and a friendlier app (0.20.0)
-- **Module names** with a vibe: Thereabouts, **Chitchat**, **Datebook**, **Odds & Ends**, **Fair Share**, **Rhythms**, **Pantry**, **Corkboard**, **Front Room**, **Steward** (nudges stay nudges). **Plain names** switch (Customize, and the console's Look) for Map, Chat, Calendar…
+- **Module names** with a vibe: Thereabouts, **Chitchat**, **Datebook**, **Odds & Ends**, **Upkeep**, **Rhythms**, **Pantry**, **Corkboard**, **Front Room**, **Steward** (nudges stay nudges). **Plain names** switch (Customize, and the console's Look) for Map, Chat, Calendar…
 - **Access & Control** page in the console: everyone in a list that opens into their switches. Per child: a preset, then each module **Off / View only / Can add / Full** and single features; bigger buttons and picture icons; their home screen (drag to reorder, sizes); **open their settings for 10 minutes** from afar. The parent PIN lives here.
 - **Grandparents:** a role with the whole app but no parents' controls or children's chats; bigger buttons and picture icons as options.
 - **Children's settings:** none for younger children, only Customize/Account/About for older ones; the secret way in is holding the family name for 5 seconds, then the parent PIN.
@@ -72,6 +72,15 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Reading aloud:** Kokoro voices on the server (warm female and male), each person's chosen **reading voice**, a small speaker beside every text message, emoji and stretched words tidied before reading; a plain microphone for grown-ups, a smiley with sound waves for children; a paper airplane for the children's Chitchat; "Sent!" instead of reading the whole message back.
 - **Home screen:** 2 or 3 tiles across (Look and Feel), tiles 1 to 3 columns wide and 1 or 2 rows tall.
 - **Console:** the same edge-to-edge design language as the app (flat sections, hairlines, the map to the edges).
+
+### ✅ Upkeep, the family feed and Steward keys (0.27.0)
+- **Upkeep (chores)**, the first module on the Markdown vault: each chore is a note in `Chores/` (who, how often, when it's next due, optional **stars**), so Obsidian, the console, the app and AI agents all share it. Children tick theirs off with a big round tick (done straight away; parents are told and can undo); parents add chores, tick for someone, and see everyone's stars.
+- **The family feed:** swipe right from Home for today's timeline ("Sam got to School", "Mia did *Unload the dishwasher* ★2"), with earlier days a tap away. Kept on the server for 60 days, with the same who-sees-what rules as alerts.
+- **Steward API keys:** the console (Settings → AI & API) makes named keys with scopes (people, chores, feed, location), shown once, logged and revocable; agents act as a grown-up named after the key. An OpenAPI description at `/api/v1/openapi.json`, and rules for agents in the vault guide. ("Tell Sam to unload the dishwasher" works today with an agent like Hermes; talking to it from the app comes with Steward.)
+- **Home:** the map tile takes any size (a plain preview when it's one tile wide or tall, its title bar from 2×2); dragging a tile now makes room wherever you hold it; the resize bars are easier to grab near the screen edge without triggering Back. Module switches live only in the console now: on a phone, tiles you don't want go in the drawer.
+
+### Design rule: tiles grow into mini versions
+A module's home tile is a **shortcut when small** (an icon, a name, a count) and a **live mini version when 2×2 or larger**: Upkeep shows the chores due, ticked right on the tile; Odds & Ends will show its lists and Datebook the next few events the same way. Opening the tile still goes to the full screen.
 
 ### ✅ Back to cards (0.26.0)
 - After trying the flat, edge-to-edge look, the app and console go back to **rounded cards with a little depth** (Material You): settings in cards, home tiles as spaced cards; every arranging behaviour stays (tap to select, edge bars, gliding tiles, the drawer). The map's pull-up sheet stays.
@@ -118,7 +127,7 @@ A walkthrough in the web console that sets everything up properly the first time
 ### ⏳ 6. Modules, one at a time
 In this order (each is finished before the next starts):
 1. **Odds & Ends** (lists and to-dos) on the Markdown vault, with tags (`@Sam`, `#kids`) and time of day. The vault itself has started: its location setting, People notes and the agents' formatting guide.
-2. **Fair Share** (chores): who, what, how often; tick off anywhere; optional stars.
+2. ✅ **Upkeep** (chores), 0.27.0. Next for it: chores on the Pebble, a "spend stars" list of rewards, and talking to Steward from the app ("I finished the dishwasher").
 3. **Rhythms** (routines and daily rhythms): checklists that switch with the time of day.
 4. **Datebook** (calendar) with CalDAV and outside calendars by link.
 5. **Pantry** (meals and recipes), feeding the shopping list.

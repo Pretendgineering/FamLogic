@@ -14,7 +14,7 @@ func TestModulesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := fresh.Modules(); m.SetupDone || !m.Enabled["thereabouts"] || !m.Enabled["chat"] || m.Enabled["chores"] {
+	if m := fresh.Modules(); m.SetupDone || !m.Enabled["thereabouts"] || !m.Enabled["chat"] || !m.Enabled["chores"] || m.Enabled["meals"] {
 		t.Fatalf("fresh: %+v", m)
 	}
 	// An existing family (a data file from before modules, with people in it):
@@ -44,11 +44,11 @@ func TestModulesDefaults(t *testing.T) {
 	if m.Enabled["thereabouts"] || !m.Enabled["chat"] || m.Enabled["bogus"] || !m.SetupDone {
 		t.Fatalf("after set: %+v", m)
 	}
-	if err := s.SetModules(map[string]bool{"chores": true}, true); err != nil {
+	if err := s.SetModules(map[string]bool{"meals": true}, true); err != nil {
 		t.Fatal(err)
 	}
 	if feats := s.moduleFeatures(); len(feats) != 0 {
-		t.Fatalf("features should be empty until chores is built: %v", feats)
+		t.Fatalf("features should be empty until meals is built: %v", feats)
 	}
 }
 

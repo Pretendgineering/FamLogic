@@ -1,6 +1,6 @@
 # FamLogic
 
-A self-hosted family hub: location sharing (**Thereabouts**), chat (**Chitchat**) and (soon) a shared calendar (**Datebook**), lists (**Odds & Ends**), chores (**Fair Share**), routines (**Rhythms**) and meals (**Pantry**), on **your own server**, with **press-to-talk voice** to your own AI agent across phones, tablets, the TV and the watch.
+A self-hosted family hub: location sharing (**Thereabouts**), chat (**Chitchat**) and (soon) a shared calendar (**Datebook**), lists (**Odds & Ends**), chores (**Upkeep**), routines (**Rhythms**) and meals (**Pantry**), on **your own server**, with **press-to-talk voice** to your own AI agent across phones, tablets, the TV and the watch.
 
 - **Private:** no third-party accounts, no cloud, no ads, no tracking. Your family's data stays in one folder on your server.
 - **Modular:** at first setup you choose what your family uses, and you can change it any time.
@@ -27,10 +27,13 @@ A self-hosted family hub: location sharing (**Thereabouts**), chat (**Chitchat**
 |---|---|
 | **Thereabouts**: everyone on a map, SOS, check-ins, fences with arrive/leave alerts, trips, driving, Pebble and Index 01 ([guide](docs/THEREABOUTS.md)) | ✅ |
 | **Chitchat** (chat): a family chat, group chats and one-to-one, with photos, read receipts, chat icons and per-chat mute; parents approve children's groups and can read, pause or delete their chats ([guide](docs/CHAT.md)) | ✅ |
-| **Datebook** (calendar, with CalDAV sync), **Odds & Ends** (to-dos and lists), **Fair Share** (chores), **Rhythms** (routines that follow the family's day), **Pantry** (meals, menus and recipes), all taggable to people or groups | planned |
+| **Upkeep** (chores): who does what and how often, kept as Markdown notes in the vault (Obsidian-friendly); children tick theirs off, optional stars, parents see it all; a mini checklist on a big home tile | ✅ |
+| **Family feed**: swipe right from Home for the day's timeline (arrivals, check-ins, trips, chores done) | ✅ |
+| **Steward API keys**: scoped, logged, revocable keys so your own AI agent (Hermes, a local model…) can add and tick off chores and read the feed ([guide](docs/agents/famlogic-vault.md)) | ✅ |
+| **Datebook** (calendar, with CalDAV sync), **Odds & Ends** (to-dos and lists), **Rhythms** (routines that follow the family's day), **Pantry** (meals, menus and recipes), all taggable to people or groups | planned |
 | **Tablet layouts** and **Control Deck** mode (a family screen on the wall or counter) | ✅ |
 | **Front Room** (the Android TV launcher) and **Corkboard** (the family display) | planned |
-| **Steward** (AI agents) and **Android widgets** | planned |
+| **Steward** (talking to your agent from the app) and **Android widgets** | planned |
 | **Voice and AI**: press-to-talk and read-aloud everywhere, routed to your own agent (Hermes, OpenClaw…); family content as Markdown (Obsidian-friendly) that agents can edit; optional end-of-day summaries for parents | planned |
 
 See [ROADMAP.md](ROADMAP.md) for the order and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together.

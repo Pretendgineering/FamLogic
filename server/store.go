@@ -43,7 +43,9 @@ type Member struct {
 	Color string `json:"color"`
 	Emoji string `json:"emoji,omitempty"` // shown instead of the initial, if set
 	// The voice their messages are read aloud in: "female", "male" or "" (the default).
-	Voice     string    `json:"voice,omitempty"`
+	Voice string `json:"voice,omitempty"`
+	// Stars earned for chores (Upkeep), until a parent spends or resets them.
+	Stars     int       `json:"stars,omitempty"`
 	TokenHash string    `json:"tokenHash"`
 	CreatedAt int64     `json:"createdAt"`
 	Paused    bool      `json:"paused"`
@@ -140,7 +142,10 @@ type Invite struct {
 }
 
 type data struct {
-	Secret  string             `json:"secret"` // signs admin session cookies
+	Secret string `json:"secret"` // signs admin session cookies
+	// Steward: API keys for AI agents, and their recent uses (see apikeys.go).
+	APIKeys []*APIKey          `json:"apiKeys,omitempty"`
+	KeyLog  []KeyUse           `json:"keyLog,omitempty"`
 	Members map[string]*Member `json:"members"`
 	Invites map[string]*Invite `json:"invites"`
 	Circles map[string]*Circle `json:"circles"`

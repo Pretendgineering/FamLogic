@@ -42,6 +42,17 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `GET`/`PUT /api/members/{id}/kid` `{preset?, modules?, features?, home?, big?, pictures?}` | a parent (`/api/admin/members/{id}/kid` for admins) | A child's (or grandparent's) settings: preset `younger` or `older`; each module (`thereabouts`, `chat`, `calendar`, `todos`, `chores`, `meals`) `off`, `view`, `add` or `full`; features (`sos`, `checkin`, `requests`, `nudges`, `trips`, `pause`, `chat_start`, `chat_photos`, `chat_delete`, `chat_mute`) on or off; home tiles (`map:big`, `chat:half`…); bigger buttons and picture icons. Grandparents take only `home`, `big` and `pictures`. A new preset starts afresh |
 | `POST /api/members/{id}/unlock` `{minutes}` | a parent (`/api/admin/members/{id}/unlock` for admins) | Opens settings on that person's device for a while (default 10 minutes) |
 | `PATCH /api/chat/{id}` `{emoji, color}` | parents (family chat), people in a group | The chat's icon |
+| `GET /api/chores` | `Bearer <token>`, a key with `chores`, or the console | Upkeep: `{chores:[{id, title, who:[ids], every, due, when, stars, notes, done:[{date, by}], finished, file}], stars:{id:n}, today, canEdit, level}`. Chores are Markdown notes in the vault's `Chores/` folder |
+| `POST /api/chores` `{title, who, every?, due?, when?, stars?, notes?}`; `PATCH`/`DELETE /api/chores/{id}` (or `POST …/delete`) | parents, keys, children with `full` (children with `add`: their own, without stars) | Add, change or retire a chore (retiring sets `archived: true`; the note stays) |
+| `POST /api/chores/{id}/done` `{date?, by?}` | anyone it's for; parents and keys for anyone | Tick it off: stars go to `by`, parents are told, the feed records it, a repeating chore moves to its next date |
+| `POST /api/chores/{id}/undo` `{date?}` | parents, keys | Take a tick back (and its stars) |
+| `POST /api/members/{id}/stars` `{add}` or `{set}` | parents, keys with `chores` | Give or spend stars |
+| `GET /api/feed?from=<ms>&to=<ms>` | `Bearer <token>`, a key with `feed` | The family feed (default the last 24 hours, at most 8 days): `{items:[event]}` newest first, the same visibility as alerts |
+| `GET /api/v1/people` | a key with `people` | Everyone's id, name, role, access, stars and voice (no locations) |
+| `GET /api/v1/openapi.json` | none | The OpenAPI description of what keys can use |
+| `GET`/`POST /api/admin/keys` `{name, scopes}`, `DELETE /api/admin/keys/{id}` | admin session | Steward keys: list (with the recent-use log), make one (the key is returned once), revoke |
+
+**API keys** (`Authorization: Bearer fl_…`) work only while the family's `agents` module (Steward) is on, and only for their scopes.
 
 Device tokens are stored only as SHA-256 hashes, and member passwords as PBKDF2-SHA256 hashes. The console cookie is HMAC-signed, `HttpOnly` and `SameSite=Strict`. Wrong passwords (console and app) are slowed down to stop guessing, and a member's username locks for 15 minutes after 5 wrong tries.
 

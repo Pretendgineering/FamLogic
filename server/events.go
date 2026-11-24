@@ -67,6 +67,7 @@ func (s *Store) addEventLocked(e Event) {
 		e.Time = time.Now().UnixMilli()
 	}
 	s.d.Events = append(s.d.Events, e)
+	s.timelineLocked(e) // the family feed keeps the ones worth looking back on
 
 	cutoff := time.Now().Add(-eventTTL).UnixMilli()
 	drop := 0

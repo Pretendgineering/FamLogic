@@ -1119,7 +1119,7 @@ $("#pin-clear").addEventListener("click", async () => {
 
 // ---- Access & Control: what each person can use (parents and admins)
 const TILE_NAMES = { map: ["Thereabouts", "Map"], chat: ["Chitchat", "Chat"], sos: ["SOS", "SOS"], checkin: ["Check in", "Check in"],
-  calendar: ["Datebook", "Calendar"], todos: ["Odds & Ends", "Lists"], chores: ["Fair Share", "Chores"], meals: ["Pantry", "Meals"],
+  calendar: ["Datebook", "Calendar"], todos: ["Odds & Ends", "Lists"], chores: ["Upkeep", "Chores"], meals: ["Pantry", "Meals"],
   routines: ["Rhythms", "Routines"], nudges: ["Nudges", "Nudges"], ride: ["Where's My Ride", "Where's my ride"], steward: ["Steward", "AI"] };
 const tileName = (t) => t.startsWith("convo.") ? "Chat shortcut" : (TILE_NAMES[t] || [t, t])[plainNames ? 1 : 0];
 const LEVEL_NAMES = { off: "Off", view: "View only", add: "Can add", full: "Full" };
@@ -1345,7 +1345,11 @@ function renderDevices() {
 
 // Settings: Modules, Server, AI & API.
 let settingsTab = "modules";
-document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.addEventListener("click", () => { settingsTab = b.dataset.sub; renderSettings(); }));
+document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.addEventListener("click", () => {
+  settingsTab = b.dataset.sub;
+  if (settingsTab === "agents") $("#agents-panel").replaceChildren(); // fresh each time it's opened
+  renderSettings();
+}));
 
 function moduleRows(target, checked) {
   target.replaceChildren(...modules.map((m) => {
@@ -1364,6 +1368,8 @@ function renderSettings() {
   document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.sub === settingsTab)));
   document.querySelectorAll("[data-sub-panel]").forEach((p) => { p.hidden = p.dataset.subPanel !== settingsTab; });
   if (settingsTab === "modules" && !$("#module-list").contains(document.activeElement)) moduleRows($("#module-list"), (m) => m.enabled);
+  // Drawn once per visit (not by the 10-second refresh, which would wipe a key that's being shown).
+  if (settingsTab === "agents" && !$("#agents-panel").childElementCount) renderKeys();
   if (settingsTab === "server") {
     const facts = [["Family", $("#family-name").textContent], ["Server", $("#server-version").textContent.replace(/^server /, "")],
       ["Modules on", modules.filter((m) => m.enabled).map((m) => m.name + (m.available ? "" : " (soon)")).join(", ") || "none"],
@@ -1405,6 +1411,8 @@ function renderModulePage(id) {
   $("#module-title").textContent = displayName(m);
   $("#module-desc").textContent = m.description;
   const box = $("#module-soon");
+  if (id === "chores" && m.available) { box.classList.remove("soon"); renderUpkeep(box); return; }
+  box.classList.add("soon");
   box.replaceChildren(
     el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
     el("ul", { class: "plain" }, ...(MODULE_PLANS[id] || []).map((t) => el("li", {}, t))));
@@ -1683,3 +1691,137 @@ async function start() {
 }
 
 api("GET", "/api/admin/session").then(start).catch(() => {});
+
+
+// ---- Upkeep (chores): the same chores as the app, kept as notes in the vault ----
+
+const REPEATS = [["", "Once"], ["day", "Every day"], ["weekdays", "Weekdays"], ["week", "Every week"], ["2 weeks", "Every 2 weeks"], ["month", "Every month"]];
+const repeatText = (e) => (REPEATS.find(([k]) => k === e) || [e, e ? "Every " + e : "Once"])[1];
+let upkeepDrawn = "";
+
+async function renderUpkeep(box, force = false) {
+  // Don't redraw under someone typing a new chore.
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select, textarea")) return;
+  let data;
+  try { data = await api("GET", "/api/chores"); }
+  catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  // Redraw only when something changed (the 10-second refresh calls this too).
+  const sig = JSON.stringify(data);
+  if (!force && sig === upkeepDrawn && box.childElementCount) return;
+  upkeepDrawn = sig;
+  const people = lastMembers.filter((m) => m.role !== "dependent");
+  const name = (id) => (people.find((m) => m.id === id) || {}).name || "?";
+  const today = data.today;
+  const act = async (method, path, body) => {
+    try { await api(method, path, body); renderUpkeep(box, true); } catch (err) { alert(err.message); }
+  };
+
+  // Add a chore.
+  const title = el("input", { placeholder: "e.g. Unload the dishwasher", maxlength: "80" });
+  const who = el("div", { class: "acc-opts" }, ...people.map((m) => el("label", {}, el("input", { type: "checkbox", value: m.id }), m.name)));
+  const every = el("select", {}, ...REPEATS.map(([k, v]) => el("option", { value: k }, v)));
+  const due = el("input", { type: "date", value: today });
+  const stars = el("input", { type: "number", min: "0", max: "100", value: "0", style: "width:5em" });
+  const notes = el("textarea", { rows: "2", placeholder: "Details (optional)", maxlength: "2000" });
+  const add = el("form", { class: "upkeep-add" },
+    el("label", {}, "Chore ", title), el("div", { class: "muted small" }, "For"), who,
+    el("div", { class: "row" }, el("label", {}, "Repeats ", every), el("label", {}, "From ", due), el("label", {}, "Stars ", stars)),
+    notes, el("div", { class: "row" }, el("button", { type: "submit" }, "Add chore")));
+  add.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (!title.value.trim()) return;
+    act("POST", "/api/chores", { title: title.value.trim(), who: [...who.querySelectorAll("input:checked")].map((i) => i.value),
+      every: every.value, due: due.value, stars: Number(stars.value) || 0, notes: notes.value });
+  });
+
+  // The chores: due now, coming up, done.
+  const row = (c) => {
+    const late = c.due && c.due < today;
+    const faces = c.who.length ? c.who.map((id) => { const m = people.find((p) => p.id === id); return m ? avatarOf(m) : null; }) : [el("span", { class: "muted small" }, "Anyone")];
+    const done = el("button", { type: "button", class: "tonal", title: "Ticked off" }, "✓ Done");
+    done.addEventListener("click", () => {
+      let by = c.who[0];
+      if (c.who.length > 1) {
+        const pick = prompt("Who did it? " + c.who.map((id, i) => `${i + 1}. ${name(id)}`).join("  "), "1");
+        if (!pick) return;
+        by = c.who[Number(pick) - 1] || c.who[0];
+      }
+      act("POST", `/api/chores/${c.id}/done`, by ? { by } : {});
+    });
+    const undo = el("button", { type: "button", class: "link", title: "It wasn't really done" }, "Undo");
+    undo.addEventListener("click", () => act("POST", `/api/chores/${c.id}/undo`, {}));
+    const retire = el("button", { type: "button", class: "link" }, "Retire");
+    retire.addEventListener("click", () => { if (confirm(`Retire "${c.title}"? Its note stays in the vault.`)) act("DELETE", `/api/chores/${c.id}`); });
+    const last = c.done[0];
+    return el("li", { class: "chore" + (late ? " late" : "") },
+      el("div", { class: "faces" }, ...faces),
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, c.title, c.stars ? el("span", { class: "badge" }, "★ " + c.stars) : null),
+        el("div", { class: "sub" }, [repeatText(c.every), c.finished ? "done" : (c.due ? (late ? "late: " : "due ") + c.due : ""),
+          last ? `last done ${last.date}${last.by ? " by " + name(last.by) : ""}` : ""].filter(Boolean).join(" · ")),
+        c.notes ? el("div", { class: "muted small" }, c.notes) : null),
+      c.finished ? null : done, last ? undo : null, retire);
+  };
+  const now = data.chores.filter((c) => !c.finished && (!c.due || c.due <= today));
+  const later = data.chores.filter((c) => !c.finished && c.due && c.due > today);
+  const finished = data.chores.filter((c) => c.finished);
+  const section = (h, list, empty) => [el("h2", {}, h), list.length ? el("ul", { class: "list" }, ...list.map(row)) : el("p", { class: "muted" }, empty)];
+
+  // Stars, for the children who have any (or could).
+  const kids = people.filter((m) => m.role === "child");
+  const starRow = (m) => {
+    const n = data.stars[m.id] || 0;
+    const btn = (label, body) => { const b = el("button", { type: "button", class: "secondary" }, label); b.addEventListener("click", () => act("POST", `/api/members/${m.id}/stars`, body)); return b; };
+    return el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "title" }, m.name), el("div", { class: "sub" }, `★ ${n}`)),
+      btn("+1", { add: 1 }), btn("−1", { add: -1 }), btn("Spend all", { set: 0 }));
+  };
+
+  box.replaceChildren(
+    ...section("Due now", now, "Nothing due. 🎉"),
+    ...section("Coming up", later, "Nothing coming up."),
+    ...(finished.length ? section("Done", finished, "") : []),
+    ...(data.canEdit ? [el("h2", {}, "Add a chore"), add] : []),
+    ...(kids.length ? [el("h2", {}, "Stars"), el("ul", { class: "list" }, ...kids.map(starRow))] : []),
+    el("p", { class: "muted small" }, "Chores are Markdown notes in the vault's Chores folder: open it in Obsidian, or let your AI agent add and tick them off (Settings → AI & API)."));
+}
+
+// ---- Settings → AI & API: keys for agents (Steward) ----
+
+async function renderKeys() {
+  const box = $("#agents-panel");
+  if (!box) return;
+  const on = (moduleInfo("agents") || {}).enabled;
+  let data;
+  try { data = await api("GET", "/api/admin/keys"); } catch (err) { box.replaceChildren(el("p", {}, err.message)); return; }
+  const name = el("input", { placeholder: "Who'll use it, e.g. Hermes on the NAS", maxlength: "40" });
+  const scopes = el("div", { class: "acc-opts" }, ...data.scopes.map((sc) => el("label", {}, el("input", { type: "checkbox", value: sc.id, ...(sc.id === "location" ? {} : { checked: "" }) }), el("span", {}, el("strong", {}, sc.id), " · ", sc.text))));
+  const shown = el("div");
+  const form = el("form", {}, el("label", {}, "Name ", name), el("div", { class: "muted small" }, "It may:"), scopes, el("div", { class: "row" }, el("button", { type: "submit" }, "Make a key")));
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      const res = await api("POST", "/api/admin/keys", { name: name.value.trim(), scopes: [...scopes.querySelectorAll("input:checked")].map((i) => i.value) });
+      shown.replaceChildren(el("p", {}, el("strong", {}, "Copy this key now: "), "it won't be shown again."),
+        el("div", { class: "copy" }, el("input", { readonly: "", value: res.key }), el("button", { type: "button", onclick: (e) => { navigator.clipboard.writeText(res.key); e.target.textContent = "Copied"; } }, "Copy")));
+      renderKeysList(data = await api("GET", "/api/admin/keys"));
+    } catch (err) { alert(err.message); }
+  });
+  const list = el("ul", { class: "list" });
+  const log = el("ul", { class: "list compact" });
+  const renderKeysList = (d) => {
+    list.replaceChildren(...(d.keys.length ? d.keys.map((k) => {
+      const revoke = el("button", { type: "button", class: "secondary" }, "Revoke");
+      revoke.addEventListener("click", async () => { if (confirm(`Revoke "${k.name}"? It stops working at once.`)) { await api("DELETE", `/api/admin/keys/${k.id}`); renderKeys(); } });
+      return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, k.name, " ", el("code", {}, k.prefix + "…")),
+        el("div", { class: "sub" }, `${k.scopes.join(", ")} · made ${new Date(k.created).toLocaleDateString()} · ${k.uses ? `used ${k.uses} times, last ${new Date(k.lastUsed).toLocaleString()}` : "not used yet"}`)), revoke);
+    }) : [el("li", { class: "muted" }, "No keys yet.")]));
+    const names = Object.fromEntries(d.keys.map((k) => [k.id, k.name]));
+    log.replaceChildren(...d.log.slice(-25).reverse().map((u) => el("li", { class: "small" }, `${new Date(u.time).toLocaleString()} · ${names[u.key] || "(revoked key)"} · ${u.method} ${u.path}`)));
+  };
+  renderKeysList(data);
+  box.replaceChildren(...[
+    el("p", {}, "Keys let an AI agent (a Hermes agent, an Ollama-driven tool, a script) work with your family's FamLogic: say \"tell Sam to unload the dishwasher\" and it adds the chore; Sam says \"done\" and it ticks it off. Each key can only do what you tick, every use is logged below, and you can revoke it any time."),
+    on ? null : el("p", { class: "banner" }, "Switch on ", el("strong", {}, "Steward"), " in Modules for keys to work."),
+    el("p", {}, "For the agent: the API is described at ", el("a", { href: "/api/v1/openapi.json", target: "_blank" }, "/api/v1/openapi.json"), " and the rules it should follow are in the ", el("a", { href: "/api/v1/vault/guide", target: "_blank" }, "vault guide"), " (also AGENTS.md in the vault)."),
+    el("h2", {}, "Keys"), list, el("h2", {}, "Make a key"), form, shown, el("h2", {}, "Recent uses"), log].filter(Boolean));
+}

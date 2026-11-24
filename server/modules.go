@@ -26,10 +26,10 @@ var allModules = []ModuleInfo{
 	{"chat", "Chitchat", "Chat", "A family chat, group chats and one-to-one messages, with photos. Parents can see children's chats.", true, true},
 	{"calendar", "Datebook", "Calendar", "Shared family calendar, with CalDAV so phones and other apps can sync.", false, true},
 	{"todos", "Odds & Ends", "Lists", "Quick to-dos and shared lists (shopping, packing), stored as Markdown.", false, true},
-	{"chores", "Fair Share", "Chores", "A chore chart with who does what and when, ticked off on phones or the family display.", false, false},
+	{"chores", "Upkeep", "Chores", "Chores: who does what and how often, ticked off on phones, the watch or by voice through your AI agent, with optional stars for children. Kept as Markdown notes in the vault.", true, true},
 	{"meals", "Pantry", "Meals", "Weekly meal plans, menus and recipes, with shopping lists.", false, false},
 	{"display", "Corkboard", "Family display", "A wall tablet or Android TV showing the day: calendar, chores, menus and who's where.", false, false},
-	{"agents", "Steward", "AI & API", "API keys for AI agents (Hermes, Ollama-driven tools and others) to read and edit your family's Markdown notes.", false, false},
+	{"agents", "Steward", "AI & API", "API keys for AI agents (Hermes, Ollama-driven tools and others): add and tick off chores, read the feed, and edit your family's Markdown notes.", true, false},
 }
 
 // ModuleSettings are the family's choices.

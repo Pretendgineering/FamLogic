@@ -58,7 +58,7 @@ var kidModules = []kidModule{
 	{"chat", "Chitchat", "Chat", LevelFull, LevelFull},
 	{"calendar", "Datebook", "Calendar", LevelOff, LevelFull},
 	{"todos", "Odds & Ends", "Lists", LevelOff, LevelFull},
-	{"chores", "Fair Share", "Chores", LevelOff, LevelFull},
+	{"chores", "Upkeep", "Chores", LevelView, LevelFull}, // younger children see and tick off their own chores
 	{"meals", "Pantry", "Meals", LevelOff, LevelFull},
 }
 

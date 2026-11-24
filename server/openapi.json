@@ -1,0 +1,78 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "FamLogic API for agents",
+    "version": "1",
+    "description": "What an AI agent (or a script) can do with a FamLogic API key. Send the key as `Authorization: Bearer fl_...`. Each key has scopes (people, chores, feed, location) chosen by the family's admin, and every use is logged. Read the vault guide first (`/api/v1/vault/guide`): it has the safety rules (never delete, ask before anything a child would find surprising) and the Markdown format, for agents that also edit the vault's files."
+  },
+  "servers": [{"url": "/"}],
+  "components": {
+    "securitySchemes": {"key": {"type": "http", "scheme": "bearer"}},
+    "schemas": {
+      "Person": {"type": "object", "properties": {
+        "id": {"type": "string"}, "name": {"type": "string"},
+        "role": {"type": "string", "enum": ["parent", "grandparent", "child", "dependent"]},
+        "access": {"type": "string", "description": "admin, parent, grandparent, older_child, younger_child or dependent"},
+        "stars": {"type": "integer"}, "voice": {"type": "string"}}},
+      "Chore": {"type": "object", "properties": {
+        "id": {"type": "string"}, "title": {"type": "string"},
+        "who": {"type": "array", "items": {"type": "string"}, "description": "person ids; empty = anyone"},
+        "every": {"type": "string", "description": "empty (once), day, weekdays, week, month, \"2 weeks\", \"3 days\", or days like \"mon,thu\""},
+        "due": {"type": "string", "format": "date", "description": "the next date it's due (YYYY-MM-DD)"},
+        "when": {"type": "string", "description": "time of day: morning, evening, 16:00..."},
+        "stars": {"type": "integer"}, "notes": {"type": "string"},
+        "done": {"type": "array", "items": {"type": "object", "properties": {"date": {"type": "string"}, "by": {"type": "string"}}}},
+        "finished": {"type": "boolean", "description": "a one-off chore that's been done"},
+        "file": {"type": "string", "description": "its note in the vault"}}},
+      "ChoreInput": {"type": "object", "properties": {
+        "title": {"type": "string"}, "who": {"type": "array", "items": {"type": "string"}},
+        "every": {"type": "string"}, "due": {"type": "string", "format": "date"}, "when": {"type": "string"},
+        "stars": {"type": "integer", "minimum": 0, "maximum": 100}, "notes": {"type": "string"}}},
+      "FeedItem": {"type": "object", "properties": {
+        "time": {"type": "integer", "description": "unix ms"},
+        "type": {"type": "string", "description": "arrived, left, checkin, sos, sos_end, trip, drive_start, chore_done"},
+        "memberId": {"type": "string"}, "name": {"type": "string"}, "place": {"type": "string"},
+        "title": {"type": "string", "description": "chore_done: the chore"}, "note": {"type": "string"}}}
+    }
+  },
+  "security": [{"key": []}],
+  "paths": {
+    "/api/v1/vault/guide": {"get": {"summary": "The vault guide: Markdown format and the rules agents follow", "security": [],
+      "responses": {"200": {"description": "Markdown", "content": {"text/markdown": {}}}}}},
+    "/api/v1/people": {"get": {"summary": "Everyone in the family (scope: people)",
+      "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"type": "object", "properties": {"people": {"type": "array", "items": {"$ref": "#/components/schemas/Person"}}}}}}}}}},
+    "/api/chores": {
+      "get": {"summary": "Every chore, and everyone's stars (scope: chores)",
+        "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"type": "object", "properties": {
+          "chores": {"type": "array", "items": {"$ref": "#/components/schemas/Chore"}},
+          "stars": {"type": "object", "additionalProperties": {"type": "integer"}}, "today": {"type": "string"}}}}}}}},
+      "post": {"summary": "Add a chore, e.g. \"unload the dishwasher\" for one child today (scope: chores). The people it's for get a notification.",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChoreInput"}}}},
+        "responses": {"200": {"description": "The new chore", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Chore"}}}}}}},
+    "/api/chores/{id}": {
+      "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "patch": {"summary": "Change a chore (scope: chores)", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChoreInput"}}}},
+        "responses": {"200": {"description": "The chore"}}},
+      "delete": {"summary": "Retire a chore: hidden, but its note stays in the vault (scope: chores). Only when asked to.",
+        "responses": {"204": {"description": "Retired"}}}},
+    "/api/chores/{id}/done": {
+      "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "post": {"summary": "Tick a chore off, e.g. when a child says \"I finished the dishwasher\" (scope: chores). Give `by` (who did it); a repeating chore moves on to its next date; its stars go to that person.",
+        "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"by": {"type": "string"}, "date": {"type": "string", "format": "date"}}}}}},
+        "responses": {"200": {"description": "The chore"}}}},
+    "/api/chores/{id}/undo": {
+      "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "post": {"summary": "Take a tick back (it wasn't really done); its stars come off again (scope: chores)",
+        "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"date": {"type": "string", "format": "date"}}}}}},
+        "responses": {"200": {"description": "The chore"}}}},
+    "/api/members/{id}/stars": {
+      "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "post": {"summary": "Give (add), spend (negative add) or reset (set) someone's stars (scope: chores). Only when a parent asks.",
+        "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"add": {"type": "integer"}, "set": {"type": "integer"}}}}}},
+        "responses": {"204": {"description": "Done"}}}},
+    "/api/feed": {"get": {"summary": "The family feed between two times (scope: feed)",
+      "parameters": [{"name": "from", "in": "query", "schema": {"type": "integer"}, "description": "unix ms (default: a day before `to`)"},
+        {"name": "to", "in": "query", "schema": {"type": "integer"}, "description": "unix ms (default: now)"}],
+      "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"type": "object", "properties": {"items": {"type": "array", "items": {"$ref": "#/components/schemas/FeedItem"}}}}}}}}}}
+  }
+}

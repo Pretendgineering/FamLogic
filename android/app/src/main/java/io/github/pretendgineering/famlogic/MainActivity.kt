@@ -73,13 +73,16 @@ class MainActivity : ComponentActivity() {
                         // Settings → Arrange home screen: back to Home, where the editor opens.
                         LaunchedEffect(HomeEditor.requested) { if (HomeEditor.requested) tab = Tab.Home }
                         when (current) {
-                            Tab.Home -> HomeScreen(
+                            Tab.Home -> HomePager(prefs) {
+                                HomeScreen(
                                 prefs = prefs,
                                 features = features,
                                 onOpen = { tab = it },
                                 onOpenSettings = { full -> settingsRequest = if (full) "full" else "limited"; tab = Tab.Map },
                                 onOpenChat = { id -> openChat = id; tab = Tab.Chat },
                             )
+                            }
+                            Tab.Chores -> UpkeepScreen(prefs)
                             Tab.Chat -> ChatScreen(prefs, openRequest = openChat, onOpenHandled = { openChat = null })
                             Tab.Map -> MapScreen(
                                 prefs = prefs,
@@ -162,6 +165,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         intent?.getStringExtra(Alerts.EXTRA_FOCUS_MEMBER)?.let { focusMember = it; tab = if (Access.can("map")) Tab.Map else Tab.Home }
+        if (intent?.getBooleanExtra(Alerts.EXTRA_OPEN_UPKEEP, false) == true) tab = Tab.Chores
         intent?.getStringExtra(ChatNotify.EXTRA_OPEN_CHAT)?.let { openChat = it; tab = Tab.Chat }
         val data: Uri = intent?.data ?: return
         if (data.scheme != "famlogic" || data.host != "join") return

@@ -117,7 +117,7 @@ Allergic to peanuts. Football on Tuesdays.
 ```
 
 - FamLogic creates a note for each family member and updates its **`type`,
-  `famlogic_id`, `role`, `color` and `emoji`** fields; don't change those. When someone
+  `famlogic_id`, `role`, `color`, `emoji` and `stars`** fields; don't change those. When someone
   is renamed, FamLogic renames their note too.
 - `role` is one of `parent`, `grandparent`, `older_child`, `younger_child`, `dependent`
   (a baby or anyone without the app).
@@ -135,15 +135,16 @@ headings (`## Bakery`).
 Someone's to-dos (`who: ["[[Sam]]"]`), or the family's (`Family.md`). Task lines, as
 above; `when:` on a task's note or `📅` on a line says when it matters.
 
-### `chore`: Chores/<Title>.md
+### `chore`: Chores/<Title>.md (Upkeep)
 
 ```markdown
 ---
 type: chore
+famlogic_id: c3f9a1e2b4
 who: ["[[Sam]]", "[[Mia]]"]
 every: week
 due: 2026-12-02
-points: 2
+stars: 2
 ---
 # Bins out
 
@@ -153,11 +154,15 @@ Green and black bins to the kerb on Sunday evening.
 - [ ] 2026-12-01
 ```
 
-- `every`: `day`, `weekdays`, `week`, `2 weeks`, `month`, or days such as `mon,thu`.
-- `due`: the next time it's due. `points`: optional, for families who count them.
-- Below the description, one task line per time it's due. To mark it done, tick the
-  line and add ` done by [[Name]]`; then add a new `- [ ]` line for the next date and
-  move `due` to that date.
+- `every`: `day`, `weekdays`, `week`, `2 weeks`, `3 days`, `month`, or days such as
+  `mon,thu`; leave it out for a chore done once.
+- `due`: the next time it's due. `when`: a time of day, if it matters (`after school`, `18:00`).
+- `stars`: optional, earned by whoever does it (children love them; parents spend them).
+- `famlogic_id` is FamLogic's: don't change it. A chore you write without one gets one.
+- Below the description, one task line per time it's due. When it's done the line
+  becomes `- [x] 2026-11-24 done by [[Sam]]`, a new `- [ ] <next date>` line is added
+  and `due` moves on. **Prefer the API to tick chores** (below): it also gives the
+  stars and tells the parents. To retire a chore, add `archived: true`.
 
 ### `event`: Calendar/<YYYY-MM-DD> <Title>.md
 
@@ -241,13 +246,38 @@ days: [mon, tue, wed, thu, fri]
 Which routine is current, and from when, on the given `days`. In `who`, `#name` means
 a group or tag.
 
+## The API (for agents with a key)
+
+Editing text is fine, but the API does things properly: it notifies the right
+people, keeps stars, and checks permissions. A family admin makes a key in the web
+console (Settings → AI & API) with the scopes it may use; send it as
+`Authorization: Bearer fl_...`. The full description is at `/api/v1/openapi.json`.
+
+| Do | Call | Scope |
+|---|---|---|
+| Who's in the family (ids, names, roles, stars) | `GET /api/v1/people` | people |
+| All chores, and stars | `GET /api/chores` | chores |
+| Add a chore ("tell Sam to unload the dishwasher") | `POST /api/chores {title, who: [id], due?, every?, stars?, notes?}` | chores |
+| Tick one off ("I finished the dishwasher") | `POST /api/chores/{id}/done {by: id}` | chores |
+| Change or retire one | `PATCH` / `DELETE /api/chores/{id}` | chores |
+| Give or spend stars | `POST /api/members/{id}/stars {add or set}` | chores |
+| What happened today | `GET /api/feed?from=&to=` | feed |
+
+Rules for agents using the API:
+- **Who's talking matters.** Only tick a chore off for the person who says they did it,
+  or when a parent says so. Don't let a child tick off a sibling's chore.
+- **Ask a parent first** before giving or spending stars, retiring a chore, or
+  changing who a chore is for. Never delete notes.
+- Keep chore names short and plain ("Unload the dishwasher"), and put details in `notes`.
+- If you're unsure which person someone means, ask instead of guessing.
+
 ## What FamLogic does with the vault today
 
-The vault is new. FamLogic currently creates the folders, the home note, this guide and
-the **People** notes. The other types above are the agreed format: the apps'
-lists, to-dos, chores, calendar, meals and routines are moving onto them in the coming
-versions. Notes you write in this format now will be picked up as each one arrives.
-Until then they're ordinary Markdown that people can read in Obsidian or any editor.
+FamLogic keeps the folders, the home note, this guide and the **People** notes, and
+**Upkeep** (chores) lives in `Chores/` as above. The other types are the agreed
+format: lists, to-dos, the calendar, meals and routines are moving onto them in the
+coming versions. Notes you write in this format now will be picked up as each one
+arrives.
 
 Chat messages and locations are *not* in the vault (there are too many of them, and
 they're private). Agents reach those through FamLogic's API, with a key a parent

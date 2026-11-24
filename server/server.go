@@ -42,6 +42,7 @@ type Server struct {
 	chat      *ChatStore       // nil if the chat database couldn't be opened
 	voice     *Voice           // speech to text and reading aloud, when the tools are there
 	vault     *Vault           // the family's Markdown notes (nil in tests that don't need it)
+	chores    *chores          // Upkeep: chores as notes in the vault (nil without a vault)
 }
 
 func NewServer(cfg Config, store *Store, static fs.FS) *Server {
@@ -49,6 +50,7 @@ func NewServer(cfg Config, store *Store, static fs.FS) *Server {
 		indexSeen: &indexDeliveries{seen: map[string]time.Time{}}}
 	if cfg.VaultDir != "" {
 		s.vault = openVault(cfg.VaultDir)
+		s.chores = newChores(s.vault)
 	}
 	s.voice = openVoice(env("VOICE_DIR", "/voice"), filepath.Join(filepath.Dir(store.path), "tmp"))
 	if s.chat = openChatNextTo(store.path); s.chat != nil {
@@ -135,6 +137,23 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/voice/transcribe", s.device(s.handleTranscribe))
 	mux.HandleFunc("POST /api/voice/speak", s.device(s.handleSpeak))
 	mux.HandleFunc("GET /api/v1/vault/guide", s.handleVaultGuide)
+	// Upkeep (chores) and the family feed.
+	mux.HandleFunc("GET /api/chores", s.choreAuth(s.handleChores))
+	mux.HandleFunc("POST /api/chores", s.choreAuth(s.handleCreateChore))
+	mux.HandleFunc("PATCH /api/chores/{id}", s.choreAuth(s.handleUpdateChore))
+	mux.HandleFunc("POST /api/chores/{id}", s.choreAuth(s.handleUpdateChore)) // for clients that can't send PATCH
+	mux.HandleFunc("DELETE /api/chores/{id}", s.choreAuth(s.handleArchiveChore))
+	mux.HandleFunc("POST /api/chores/{id}/delete", s.choreAuth(s.handleArchiveChore))
+	mux.HandleFunc("POST /api/chores/{id}/done", s.choreAuth(s.handleChoreDone))
+	mux.HandleFunc("POST /api/chores/{id}/undo", s.choreAuth(s.handleChoreUndo))
+	mux.HandleFunc("POST /api/members/{id}/stars", s.choreAuth(s.handleStars))
+	mux.HandleFunc("GET /api/feed", s.device(s.handleFeed))
+	// Steward: AI agents' keys and what they can use.
+	mux.HandleFunc("GET /api/v1/people", s.device(s.handlePeople))
+	mux.HandleFunc("GET /api/v1/openapi.json", s.handleOpenAPI)
+	mux.HandleFunc("GET /api/admin/keys", s.admin(s.handleAdminKeys))
+	mux.HandleFunc("POST /api/admin/keys", s.admin(s.handleAdminCreateKey))
+	mux.HandleFunc("DELETE /api/admin/keys/{id}", s.admin(s.handleAdminRevokeKey))
 	mux.HandleFunc("GET /api/admin/vault", s.admin(s.handleAdminVault))
 	mux.HandleFunc("PUT /api/family/pin", s.device(s.handleFamilyPIN))
 	mux.HandleFunc("GET /api/admin/pin", s.admin(s.handleAdminPIN))
@@ -229,6 +248,7 @@ type publicMember struct {
 	Color  string    `json:"color"`
 	Emoji  string    `json:"emoji,omitempty"`
 	Voice  string    `json:"voice,omitempty"` // read aloud in: "female", "male" or "" (default)
+	Stars  int       `json:"stars,omitempty"` // earned for chores
 	Role   string    `json:"role"`            // "parent", "child" or "dependent"
 	Access string    `json:"access"`          // admin, parent, older_child, younger_child, dependent
 	Paused bool      `json:"paused"`
@@ -249,7 +269,7 @@ type publicMember struct {
 func toPublic(ms []Member) []publicMember {
 	out := make([]publicMember, len(ms))
 	for i, m := range ms {
-		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Voice: m.Voice, Role: m.role(), Access: m.access(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
+		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Voice: m.Voice, Stars: m.Stars, Role: m.role(), Access: m.access(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
 		if out[i].Circles == nil {
 			out[i].Circles = []string{}
 		}
@@ -313,6 +333,10 @@ func (s *Server) device(h deviceHandler) http.HandlerFunc {
 				return
 			}
 			writeError(w, http.StatusUnauthorized, "missing token")
+			return
+		}
+		// An AI agent's API key (Steward), limited to its scopes.
+		if s.agentRequest(w, r, strings.TrimSpace(token), h) {
 			return
 		}
 		me, signedOut := s.store.lookupToken(strings.TrimSpace(token))
