@@ -59,7 +59,7 @@ func scopeFor(method, path string) string {
 	switch {
 	case path == "/api/v1/people":
 		return "people"
-	case strings.HasPrefix(path, "/api/chores"), strings.HasPrefix(path, "/api/members/") && strings.HasSuffix(path, "/stars"):
+	case strings.HasPrefix(path, "/api/chores"), strings.HasPrefix(path, "/api/rewards"), strings.HasPrefix(path, "/api/members/") && strings.HasSuffix(path, "/stars"):
 		return "chores"
 	case path == "/api/feed":
 		return "feed"

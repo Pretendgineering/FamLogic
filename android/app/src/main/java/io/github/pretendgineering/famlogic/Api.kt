@@ -528,9 +528,9 @@ class Api(private val baseUrl: String, private val token: String = "") {
         )
     }
 
-    suspend fun addChore(title: String, who: List<String>, every: String, due: String, stars: Int, notes: String = ""): Chore =
+    suspend fun addChore(title: String, who: List<String>, every: String, due: String, stars: Int, notes: String = "", whenOfDay: String = ""): Chore =
         parseChore(request("POST", "/api/chores", JSONObject().put("title", title).put("who", org.json.JSONArray(who))
-            .put("every", every).put("due", due).put("stars", stars).put("notes", notes)))
+            .put("every", every).put("due", due).put("stars", stars).put("notes", notes).put("when", whenOfDay)))
 
     suspend fun choreDone(id: String, date: String = "", by: String = ""): Chore {
         val body = JSONObject()
@@ -550,6 +550,32 @@ class Api(private val baseUrl: String, private val token: String = "") {
         val o = request("GET", "/api/feed?from=$from&to=$to")
         return parseEvents(JSONObject().put("events", o.optJSONArray("items") ?: org.json.JSONArray()).put("cursor", 0), -1)?.events.orEmpty()
     }
+
+    suspend fun updateChore(id: String, title: String, who: List<String>, every: String, due: String, stars: Int, notes: String, whenOfDay: String): Chore =
+        parseChore(request("POST", "/api/chores/" + enc(id), JSONObject().put("title", title).put("who", org.json.JSONArray(who))
+            .put("every", every).put("due", due).put("stars", stars).put("notes", notes).put("when", whenOfDay)))
+
+    // ---- Rewards: what stars are for
+
+    suspend fun rewards(): RewardList {
+        val o = request("GET", "/api/rewards")
+        val rs = o.optJSONArray("rewards")
+        val asks = o.optJSONArray("asks")
+        return RewardList(
+            rewards = (0 until (rs?.length() ?: 0)).map { rs!!.getJSONObject(it).let { r -> Reward(r.optString("id"), r.optString("title"), r.optInt("cost")) } },
+            asks = (0 until (asks?.length() ?: 0)).map {
+                asks!!.getJSONObject(it).let { a ->
+                    RewardAsk(a.optString("id"), a.optString("title"), a.optInt("cost"), a.optString("memberId"), a.optLong("time"), a.optString("status"))
+                }
+            },
+            canEdit = o.optBoolean("canEdit"),
+        )
+    }
+
+    suspend fun addReward(title: String, cost: Int) { request("POST", "/api/rewards", JSONObject().put("title", title).put("cost", cost)) }
+    suspend fun deleteReward(id: String) { request("POST", "/api/rewards/" + enc(id) + "/delete") }
+    suspend fun askReward(id: String) { request("POST", "/api/rewards/" + enc(id) + "/ask") }
+    suspend fun answerAsk(id: String, approve: Boolean) { request("POST", "/api/rewards/asks/" + enc(id) + if (approve) "/approve" else "/decline") }
 
     private fun parseChore(o: JSONObject): Chore {
         val who = o.optJSONArray("who")
@@ -958,5 +984,9 @@ data class Chore(
     /** The times it was done, latest first: (date, member id). */
     val done: List<Pair<String, String>>,
 )
+
+data class Reward(val id: String, val title: String, val cost: Int)
+data class RewardAsk(val id: String, val title: String, val cost: Int, val memberId: String, val time: Long, val status: String)
+data class RewardList(val rewards: List<Reward>, val asks: List<RewardAsk>, val canEdit: Boolean)
 
 data class ChoreList(val chores: List<Chore>, val stars: Map<String, Int>, val today: String, val canEdit: Boolean, val level: String)

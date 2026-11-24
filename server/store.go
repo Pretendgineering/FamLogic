@@ -145,12 +145,14 @@ type Invite struct {
 type data struct {
 	Secret string `json:"secret"` // signs admin session cookies
 	// Steward: API keys for AI agents, and their recent uses (see apikeys.go).
-	APIKeys []*APIKey          `json:"apiKeys,omitempty"`
-	KeyLog  []KeyUse           `json:"keyLog,omitempty"`
-	Members map[string]*Member `json:"members"`
-	Invites map[string]*Invite `json:"invites"`
-	Circles map[string]*Circle `json:"circles"`
-	Places  map[string]*Place  `json:"places,omitempty"`
+	APIKeys    []*APIKey          `json:"apiKeys,omitempty"`
+	Rewards    []Reward           `json:"rewards,omitempty"`
+	RewardAsks []RewardAsk        `json:"rewardAsks,omitempty"`
+	KeyLog     []KeyUse           `json:"keyLog,omitempty"`
+	Members    map[string]*Member `json:"members"`
+	Invites    map[string]*Invite `json:"invites"`
+	Circles    map[string]*Circle `json:"circles"`
+	Places     map[string]*Place  `json:"places,omitempty"`
 	// Place reminders, by id (see requests.go).
 	Reminders map[string]*Reminder `json:"reminders,omitempty"`
 	// Trails, per member, oldest point first (see trails.go).

@@ -262,6 +262,7 @@ console (Settings → AI & API) with the scopes it may use; send it as
 | Tick one off ("I finished the dishwasher") | `POST /api/chores/{id}/done {by: id}` | chores |
 | Change or retire one | `PATCH` / `DELETE /api/chores/{id}` | chores |
 | Give or spend stars | `POST /api/members/{id}/stars {add or set}` | chores |
+| Rewards, and answering a child's ask | `GET /api/rewards`, `POST /api/rewards/asks/{id}/approve` | chores |
 | What happened today | `GET /api/feed?from=&to=` | feed |
 
 Rules for agents using the API:

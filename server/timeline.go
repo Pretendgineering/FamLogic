@@ -28,7 +28,7 @@ const (
 // Kinds of event that go on the timeline (when they're not for one person only).
 var timelineTypes = map[string]bool{
 	EventArrived: true, EventLeft: true, EventCheckIn: true, EventSOS: true, EventSOSEnd: true,
-	EventTrip: true, EventDriveStart: true, EventChoreDone: true,
+	EventTrip: true, EventDriveStart: true, EventChoreDone: true, EventRewarded: true,
 }
 
 func (s *Store) timelineDir() string { return filepath.Join(filepath.Dir(s.path), "timeline") }
@@ -82,7 +82,9 @@ func (s *Store) Timeline(viewerID string, from, to int64) []Event {
 	defer s.mu.RUnlock()
 	viewer, ok := s.d.Members[viewerID]
 	out := []Event{}
-	if !ok {
+	// The main admin's console login and AI agents (with the feed scope) see it all.
+	everything := viewerID == "admin" || strings.HasPrefix(viewerID, "agent:")
+	if !ok && !everything {
 		return out
 	}
 	for d := time.UnixMilli(from).UTC().Truncate(24 * time.Hour); !d.After(time.UnixMilli(to).UTC()); d = d.AddDate(0, 0, 1) {
@@ -101,7 +103,7 @@ func (s *Store) Timeline(viewerID string, from, to int64) []Event {
 			if _, still := s.d.Members[e.MemberID]; !still {
 				continue
 			}
-			if e.MemberID == viewer.ID || s.eventVisibleLocked(e, viewer) || (e.Type == EventChoreDone && len(sharedCircles(s.d.Members[e.MemberID], viewer)) > 0) {
+			if everything || e.MemberID == viewer.ID || s.eventVisibleLocked(e, viewer) || (e.Type == EventChoreDone && len(sharedCircles(s.d.Members[e.MemberID], viewer)) > 0) {
 				out = append(out, e)
 			}
 		}

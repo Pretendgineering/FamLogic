@@ -10,8 +10,8 @@ enum {
   K_CMD = 0, K_IDX, K_COUNT, K_ID, K_NAME, K_STATUS, K_COLOR, K_FLAGS, K_TEXT, K_KIND, K_NUM, K_INITIAL,
   K_STATE, K_BEARING, K_DIST, K_LABEL, K_DATA, K_W, K_H, K_STRIDE, K_CHUNK, K_RADIUS
 };
-enum { C_PERSON = 1, C_ME, C_ALERT, C_RESULT, C_FACE, C_FENCE, C_MAP, C_MAP_FAIL };
-enum { C_HELLO = 20, C_CHECKIN, C_SOS, C_SOS_END, C_REQUEST, C_SEEN, C_SHARING, C_BATTERY, C_MAP_REQ };
+enum { C_PERSON = 1, C_ME, C_ALERT, C_RESULT, C_FACE, C_FENCE, C_MAP, C_MAP_FAIL, C_CHORE };
+enum { C_HELLO = 20, C_CHECKIN, C_SOS, C_SOS_END, C_REQUEST, C_SEEN, C_SHARING, C_BATTERY, C_MAP_REQ, C_CHORE_DONE };
 enum { F_ME = 1, F_SOS = 2, F_DRIVING = 4, F_AWAY = 8, F_PLACE = 16, F_ADULT = 32 }; // F_ADULT: you and they are both grown-ups
 enum { M_SHARING = 1, M_SOS = 2, M_HEART_RATE = 4, M_FALLS = 8, M_LIGHT = 16, M_QUICK_SOS = 32, M_MILES = 64 };
 
@@ -46,6 +46,16 @@ static Person s_people[MAX_PEOPLE];
 static int s_count;          // people received so far (me included, first)
 static bool s_loaded;        // a full list has arrived
 static Fence s_fences[MAX_FENCES];
+
+// Your chores due now (Upkeep), from the phone.
+#define MAX_CHORES 8
+typedef struct {
+  char id[16];
+  char title[32];
+  int stars;
+} Chore;
+static Chore s_chores[MAX_CHORES];
+static int s_chore_count;
 static int s_fence_count;
 static int s_me_flags;
 static char s_me_status[64] = "Connecting to your phone…";
@@ -532,14 +542,68 @@ static void checkin_preset(ActionMenu *menu, const ActionMenuItem *item, void *c
   send_cmd(C_CHECKIN, NULL, NULL, text, 0);
 }
 
+// ---- My jobs: your chores due now; Select ticks one off.
+static Window *s_jobs;
+static MenuLayer *s_jobs_menu;
+
+static uint16_t jobs_rows(MenuLayer *m, uint16_t s, void *ctx) { return s_chore_count > 0 ? s_chore_count : 1; }
+
+static void jobs_draw(GContext *g, const Layer *cell, MenuIndex *i, void *ctx) {
+  if (s_chore_count == 0) {
+    menu_cell_basic_draw(g, cell, "All done", "Nothing due now", NULL);
+    return;
+  }
+  Chore *c = &s_chores[i->row];
+  char sub[16] = "";
+  if (c->stars > 0) snprintf(sub, sizeof(sub), "%d star%s", c->stars, c->stars == 1 ? "" : "s");
+  menu_cell_basic_draw(g, cell, c->title, sub[0] ? sub : "Select when done", NULL);
+}
+
+static void jobs_select(MenuLayer *m, MenuIndex *i, void *ctx) {
+  if (s_chore_count == 0) return;
+  send_cmd(C_CHORE_DONE, s_chores[i->row].id, NULL, NULL, 0);
+  vibes_short_pulse();
+  // Gone from the list straight away; the phone sends the new list after.
+  for (int k = i->row; k < s_chore_count - 1; k++) s_chores[k] = s_chores[k + 1];
+  s_chore_count--;
+  menu_layer_reload_data(s_jobs_menu);
+}
+
+static void jobs_load(Window *w) {
+  Layer *root = window_get_root_layer(w);
+  s_jobs_menu = menu_layer_create(layer_get_bounds(root));
+  menu_layer_set_callbacks(s_jobs_menu, NULL, (MenuLayerCallbacks){.get_num_rows = jobs_rows, .draw_row = jobs_draw, .select_click = jobs_select});
+  menu_layer_set_normal_colors(s_jobs_menu, bg(), fg());
+  menu_layer_set_highlight_colors(s_jobs_menu, highlight(), PBL_IF_COLOR_ELSE(GColorWhite, bg()));
+  menu_layer_set_click_config_onto_window(s_jobs_menu, w);
+  layer_add_child(root, menu_layer_get_layer(s_jobs_menu));
+}
+
+static void jobs_unload(Window *w) { menu_layer_destroy(s_jobs_menu); s_jobs_menu = NULL; }
+
+static void open_jobs(void) {
+  if (!s_jobs) {
+    s_jobs = window_create();
+    window_set_window_handlers(s_jobs, (WindowHandlers){.load = jobs_load, .unload = jobs_unload});
+  }
+  window_set_background_color(s_jobs, bg());
+  window_stack_push(s_jobs, true);
+}
+
 static void me_action(ActionMenu *menu, const ActionMenuItem *item, void *ctx) {
   int what = (int)action_menu_item_get_action_data(item);
   if (what == 1) open_sos();
+  else if (what == 3) open_jobs();
   else if (what == 2) send_cmd(C_SHARING, NULL, NULL, NULL, (s_me_flags & M_SHARING) ? 0 : 1);
 }
 
 static void open_me_menu(void) {
-  ActionMenuLevel *me = action_menu_level_create(4);
+  ActionMenuLevel *me = action_menu_level_create(5);
+  static char jobs[20];
+  if (s_chore_count > 0) {
+    snprintf(jobs, sizeof(jobs), "My jobs (%d)", s_chore_count);
+    action_menu_level_add_action(me, jobs, me_action, (void *)3);
+  }
   ActionMenuLevel *checkin = action_menu_level_create(5);
   action_menu_level_add_child(me, checkin, "Check in");
   action_menu_level_add_action(checkin, "Made it", checkin_preset, "Made it");
@@ -1294,6 +1358,16 @@ static void inbox(DictionaryIterator *it, void *ctx) {
     menu_layer_reload_data(s_menu);
     if (s_person && window_stack_contains_window(s_person) && idx == s_person_idx) person_show();
     if (s_view_layer && s_view_idx < 0) layer_mark_dirty(s_view_layer);
+  } else if (cmd == C_CHORE) {
+    int idx = get_int(it, K_IDX), count = get_int(it, K_COUNT);
+    s_chore_count = count < MAX_CHORES ? count : MAX_CHORES;
+    if (idx >= 0 && idx < s_chore_count) {
+      Chore *c = &s_chores[idx];
+      copy_str(c->id, sizeof(c->id), it, K_ID);
+      copy_str(c->title, sizeof(c->title), it, K_NAME);
+      c->stars = get_int(it, K_NUM);
+    }
+    if (s_jobs_menu) menu_layer_reload_data(s_jobs_menu);
   } else if (cmd == C_FENCE) {
     int idx = get_int(it, K_IDX), count = get_int(it, K_COUNT);
     s_fence_count = count < MAX_FENCES ? count : MAX_FENCES;

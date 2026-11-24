@@ -58,8 +58,8 @@ fun FamilyCrest(size: Int, modifier: Modifier = Modifier, color: String = "") {
         } else {
             Text(
                 initial.toString(),
-                style = TextStyle(fontFamily = Fraktur, fontSize = (size * 0.62f).sp, color = MaterialTheme.colorScheme.onPrimary, textAlign = TextAlign.Center),
-                modifier = Modifier.padding(bottom = (size * 0.04f).dp),
+                style = TextStyle(fontFamily = Fraktur, fontSize = with(androidx.compose.ui.platform.LocalDensity.current) { (size * 0.8f).dp.toSp() }, color = MaterialTheme.colorScheme.onPrimary, textAlign = TextAlign.Center),
+                modifier = Modifier.padding(bottom = (size * 0.06f).dp),
             )
         }
     }

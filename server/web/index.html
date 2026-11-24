@@ -46,9 +46,10 @@
         <div class="appearance muted small">Look:
           <select id="theme-select" aria-label="Colours"></select>
           <select id="mode-select" aria-label="Light or dark"><option value="system">Same as this device</option><option value="light">Light</option><option value="dark">Dark</option></select>
-          <label class="plain-toggle"><input type="checkbox" id="plain-names"> Plain names (Map, Chat…)</label>
+          <label class="switch-label" title="Map, Chat, Calendar… instead of Thereabouts, Chitchat, Datebook…"><input type="checkbox" class="switch" id="plain-names" role="switch"> Plain Labels</label>
         </div></header>
       <div class="cards" id="home-cards"></div>
+      <div class="panel wide-panel" id="feed-panel"><h2>Today</h2><ul class="list feed" id="feed-list"></ul></div>
     </main>
 
     <main class="page" data-page="family" hidden>

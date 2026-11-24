@@ -73,7 +73,16 @@ class MainActivity : ComponentActivity() {
                         // Settings → Arrange home screen: back to Home, where the editor opens.
                         LaunchedEffect(HomeEditor.requested) { if (HomeEditor.requested) tab = Tab.Home }
                         when (current) {
-                            Tab.Home -> HomePager(prefs) {
+                            Tab.Home -> HomePager(prefs, onOpen = { e ->
+                                // A feed item opens where it happened: Upkeep for chores and
+                                // rewards, the map (on that person) for everything else.
+                                if (e.type == "chore_done" || e.type == "reward_spent") {
+                                    if (Tab.Chores in visibleTabs(features, prefs)) tab = Tab.Chores
+                                } else if (Tab.Map in visibleTabs(features, prefs)) {
+                                    focusMember = e.memberId
+                                    tab = Tab.Map
+                                }
+                            }) {
                                 HomeScreen(
                                 prefs = prefs,
                                 features = features,

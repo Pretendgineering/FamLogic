@@ -47,13 +47,13 @@ import java.util.Date
  * are being arranged.
  */
 @Composable
-fun HomePager(prefs: Prefs, home: @Composable () -> Unit) {
+fun HomePager(prefs: Prefs, onOpen: (AppEvent) -> Unit = {}, home: @Composable () -> Unit) {
     val pager = rememberPagerState(initialPage = 1, pageCount = { 2 })
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // Back from the feed goes to Home.
     androidx.activity.compose.BackHandler(pager.currentPage == 0) { scope.launch { pager.animateScrollToPage(1) } }
     HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !HomeEditor.arranging, beyondViewportPageCount = 0) { page ->
-        if (page == 1) home() else FeedScreen(prefs, visible = pager.currentPage == 0)
+        if (page == 1) home() else FeedScreen(prefs, visible = pager.currentPage == 0, onOpen = onOpen)
     }
 }
 
@@ -70,7 +70,7 @@ private fun midnight(daysAgo: Int): Long = Calendar.getInstance().apply {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FeedScreen(prefs: Prefs, visible: Boolean) {
+fun FeedScreen(prefs: Prefs, visible: Boolean, onOpen: (AppEvent) -> Unit = {}) {
     var days by remember { mutableIntStateOf(1) } // how many days are shown
     var items by remember { mutableStateOf<List<AppEvent>?>(null) }
     var failed by remember { mutableStateOf(false) }
@@ -110,7 +110,7 @@ fun FeedScreen(prefs: Prefs, visible: Boolean) {
                 if (today.isEmpty()) item(key = "e$d") {
                     Text("Nothing yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
                 }
-                items(today, key = { "i${it.type}${it.id}${it.time}" }) { e -> FeedRow(prefs, e) }
+                items(today, key = { "i${it.type}${it.id}${it.time}" }) { e -> FeedRow(prefs, e) { onOpen(e) } }
             }
             if (days < 8) item(key = "more") {
                 TextButton(onClick = { days++ }, modifier = Modifier.padding(top = 8.dp)) { Text("Show the day before") }
@@ -121,7 +121,7 @@ fun FeedScreen(prefs: Prefs, visible: Boolean) {
 
 /** One moment on the timeline: the time, a dot in the person's colour, and what happened. */
 @Composable
-private fun FeedRow(prefs: Prefs, e: AppEvent) {
+private fun FeedRow(prefs: Prefs, e: AppEvent, onClick: () -> Unit) {
     val names = prefs.fenceNames
     val (text, sub) = when (e.type) {
         "arrived" -> "${e.name} got to ${e.place.ifEmpty { names[e.placeId] ?: "a place" }}" to ""
@@ -135,11 +135,12 @@ private fun FeedRow(prefs: Prefs, e: AppEvent) {
             "${e.name} finished a trip" + (to?.let { " to $it" } ?: "") to "${Units.duration(e.duration)} · ${Units.distance(e.distance)}"
         }
         "chore_done" -> "${e.name} did “${e.title}”" to (if (e.level > 0) "★ ${e.level}" else "")
+        "reward_spent" -> "${e.name} got “${e.title}”" to "★ ${e.level} spent"
         else -> "${e.name}: ${e.type}" to ""
     }
     val color = when (e.type) {
         "sos" -> SOS_RED
-        "chore_done" -> androidx.compose.ui.graphics.Color(0xFFE0A82E)
+        "chore_done", "reward_spent" -> androidx.compose.ui.graphics.Color(0xFFE0A82E)
         else -> MaterialTheme.colorScheme.primary
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -148,7 +149,7 @@ private fun FeedRow(prefs: Prefs, e: AppEvent) {
             Modifier.width(64.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Box(Modifier.size(10.dp).clip(CircleShape).background(color))
-        ElevatedCard(Modifier.padding(start = 10.dp).weight(1f), shape = RoundedCornerShape(16.dp)) {
+        ElevatedCard(onClick = onClick, modifier = Modifier.padding(start = 10.dp).weight(1f), shape = RoundedCornerShape(16.dp)) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(text, style = MaterialTheme.typography.bodyLarge)
                 if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

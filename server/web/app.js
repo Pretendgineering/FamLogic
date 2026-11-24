@@ -1041,6 +1041,33 @@ function renderHome() {
     cards.push(card("#/settings", "gear", "Settings", "Modules, backups, AI and API access."));
   }
   $("#home-cards").replaceChildren(...cards);
+  renderFeed();
+}
+
+// The family feed: today's timeline (arrivals, check-ins, trips, chores, rewards).
+let feedDrawn = "";
+async function renderFeed() {
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  let items;
+  try { items = (await api("GET", `/api/feed?from=${midnight.getTime()}&to=${Date.now() + 60000}`)).items; } catch (_) { return; }
+  const sig = JSON.stringify(items);
+  if (sig === feedDrawn) return;
+  feedDrawn = sig;
+  const place = (e) => e.place || (places.find((p) => p.id === e.placeId) || {}).name || "a place";
+  const text = (e) => ({
+    arrived: `${e.name} got to ${place(e)}`, left: `${e.name} left ${place(e)}`, checkin: `${e.name} checked in` + (e.note ? `: ${e.note}` : ""),
+    sos: `${e.name} sent an SOS`, sos_end: `${e.name} is OK`, drive_start: `${e.name} started driving`, trip: `${e.name} finished a trip`,
+    chore_done: `${e.name} did "${e.title}"` + (e.level ? ` ★ ${e.level}` : ""), reward_spent: `${e.name} got "${e.title}" (★ ${e.level})`,
+  }[e.type] || `${e.name}: ${e.type}`);
+  const open = (e) => (e.type === "chore_done" || e.type === "reward_spent") ? "#/chores" : "#/thereabouts";
+  const list = $("#feed-list");
+  list.replaceChildren(...items.map((e) => {
+    const m = personById(e.memberId);
+    return el("li", { class: "clickable", onclick: () => { location.hash = open(e); } },
+      el("span", { class: "muted small feed-time" }, new Date(e.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
+      m ? avatarOf(m) : null, el("div", { class: "grow" }, el("div", { class: "title" }, text(e))));
+  }));
+  if (!items.length) list.append(el("li", { class: "muted" }, "Nothing yet today."));
 }
 
 function avatarOf(m) {
@@ -1696,15 +1723,18 @@ api("GET", "/api/admin/session").then(start).catch(() => {});
 const REPEATS = [["", "Once"], ["day", "Every day"], ["weekdays", "Weekdays"], ["week", "Every week"], ["2 weeks", "Every 2 weeks"], ["month", "Every month"]];
 const repeatText = (e) => (REPEATS.find(([k]) => k === e) || [e, e ? "Every " + e : "Once"])[1];
 let upkeepDrawn = "";
+let upkeepEdit = null; // the chore being changed in the form, if any
+const WHENS = [["", "No reminder"], ["morning", "Morning"], ["after school", "After school"], ["evening", "Evening"], ["bedtime", "Bedtime"]];
 
 async function renderUpkeep(box, force = false) {
   // Don't redraw under someone typing a new chore.
   if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select, textarea")) return;
-  let data;
+  let data, rewards = { rewards: [], asks: [], canEdit: false };
   try { data = await api("GET", "/api/chores"); }
   catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  try { rewards = await api("GET", "/api/rewards"); } catch (_) {}
   // Redraw only when something changed (the 10-second refresh calls this too).
-  const sig = JSON.stringify(data);
+  const sig = JSON.stringify([data, rewards, upkeepEdit && upkeepEdit.id]);
   if (!force && sig === upkeepDrawn && box.childElementCount) return;
   upkeepDrawn = sig;
   const people = lastMembers.filter((m) => m.role !== "dependent");
@@ -1714,30 +1744,37 @@ async function renderUpkeep(box, force = false) {
     try { await api(method, path, body); renderUpkeep(box, true); } catch (err) { alert(err.message); }
   };
 
-  // Add a chore.
-  const title = el("input", { placeholder: "e.g. Unload the dishwasher", maxlength: "80" });
+  // Add a chore (or change the one picked with "Change").
+  const ed = upkeepEdit;
+  const title = el("input", { placeholder: "e.g. Unload the dishwasher", maxlength: "80", value: ed ? ed.title : "" });
   // Who it's for: a toggle button per person (lit when chosen), like the app.
   const who = el("div", { class: "toggles" }, ...people.map((m) => {
-    const b = el("button", { type: "button", class: "toggle", "data-id": m.id, "aria-pressed": "false" }, avatarOf(m), el("span", {}, m.name));
+    const b = el("button", { type: "button", class: "toggle", "data-id": m.id, "aria-pressed": ed && ed.who.includes(m.id) ? "true" : "false" }, avatarOf(m), el("span", {}, m.name));
     b.addEventListener("click", () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"));
     return b;
   }));
   const every = el("select", {}, ...REPEATS.map(([k, v]) => el("option", { value: k }, v)));
-  const due = el("input", { type: "date", value: today });
-  const stars = el("input", { type: "number", min: "0", max: "100", value: "0", style: "width:4.5em" });
+  const when = el("select", {}, ...WHENS.map(([k, v]) => el("option", { value: k }, v)));
+  if (ed) { every.value = ed.every || ""; when.value = WHENS.some(([k]) => k === ed.when) ? ed.when : ""; }
+  const due = el("input", { type: "date", value: ed && ed.due ? ed.due : today });
+  const stars = el("input", { type: "number", min: "0", max: "100", value: ed ? String(ed.stars || 0) : "0", style: "width:4.5em" });
   const nudge = (n) => { const b = el("button", { type: "button", class: "secondary small" }, (n > 0 ? "+" : "−") + Math.abs(n));
     b.addEventListener("click", () => { stars.value = Math.max(0, Math.min(100, (Number(stars.value) || 0) + n)); }); return b; };
   const starPicker = el("div", { class: "stars-pick" }, el("span", {}, "Stars"), nudge(-10), nudge(-5), nudge(-1), stars, nudge(1), nudge(5), nudge(10));
   const notes = el("textarea", { rows: "2", placeholder: "Details (optional)", maxlength: "2000" });
+  if (ed) notes.value = ed.notes || "";
+  const cancel = el("button", { type: "button", class: "secondary" }, "Cancel");
+  cancel.addEventListener("click", () => { upkeepEdit = null; renderUpkeep(box, true); });
   const add = el("form", { class: "upkeep-add" },
     el("label", {}, "Chore ", title), el("div", { class: "muted small" }, "For"), who,
-    el("div", { class: "row" }, el("label", {}, "Repeats ", every), el("label", {}, "From ", due)), starPicker,
-    notes, el("div", { class: "row" }, el("button", { type: "submit" }, "Add chore")));
+    el("div", { class: "row" }, el("label", {}, "Repeats ", every), el("label", {}, "From ", due), el("label", {}, "Reminder ", when)), starPicker,
+    notes, el("div", { class: "row" }, el("button", { type: "submit" }, ed ? "Save changes" : "Add chore"), ed ? cancel : null));
   add.addEventListener("submit", (ev) => {
     ev.preventDefault();
     if (!title.value.trim()) return;
-    act("POST", "/api/chores", { title: title.value.trim(), who: [...who.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.id),
-      every: every.value, due: due.value, stars: Number(stars.value) || 0, notes: notes.value });
+    const body = { title: title.value.trim(), who: [...who.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.id),
+      every: every.value, due: due.value, when: when.value, stars: Number(stars.value) || 0, notes: notes.value };
+    if (ed) { upkeepEdit = null; act("PATCH", `/api/chores/${ed.id}`, body); } else act("POST", "/api/chores", body);
   });
 
   // The chores: due now, coming up, done.
@@ -1746,16 +1783,22 @@ async function renderUpkeep(box, force = false) {
     const faces = c.who.length ? c.who.map((id) => { const m = people.find((p) => p.id === id); return m ? avatarOf(m) : null; }) : [el("span", { class: "muted small" }, "Anyone")];
     const done = el("button", { type: "button", class: "tonal", title: "Ticked off" }, "✓ Done");
     done.addEventListener("click", () => {
-      let by = c.who[0];
+      // Shared: who did it? A button per person, in place of Done.
       if (c.who.length > 1) {
-        const pick = prompt("Who did it? " + c.who.map((id, i) => `${i + 1}. ${name(id)}`).join("  "), "1");
-        if (!pick) return;
-        by = c.who[Number(pick) - 1] || c.who[0];
+        done.replaceWith(el("div", { class: "toggles" }, el("span", { class: "muted small" }, "Who did it?"), ...c.who.map((id) => {
+          const m = people.find((p) => p.id === id);
+          const b = el("button", { type: "button", class: "toggle" }, m ? avatarOf(m) : null, el("span", {}, name(id)));
+          b.addEventListener("click", () => act("POST", `/api/chores/${c.id}/done`, { by: id }));
+          return b;
+        })));
+        return;
       }
-      act("POST", `/api/chores/${c.id}/done`, by ? { by } : {});
+      act("POST", `/api/chores/${c.id}/done`, c.who[0] ? { by: c.who[0] } : {});
     });
     const undo = el("button", { type: "button", class: "link", title: "It wasn't really done" }, "Undo");
     undo.addEventListener("click", () => act("POST", `/api/chores/${c.id}/undo`, {}));
+    const change = el("button", { type: "button", class: "link" }, "Change");
+    change.addEventListener("click", () => { upkeepEdit = c; renderUpkeep(box, true).then(() => box.querySelector(".upkeep-add input")?.focus()); });
     const retire = el("button", { type: "button", class: "link" }, "Retire");
     retire.addEventListener("click", () => { if (confirm(`Retire "${c.title}"? Its note stays in the vault.`)) act("DELETE", `/api/chores/${c.id}`); });
     const last = c.done[0];
@@ -1766,7 +1809,7 @@ async function renderUpkeep(box, force = false) {
         el("div", { class: "sub" }, [repeatText(c.every), c.finished ? "done" : (c.due ? (late ? "late: " : "due ") + c.due : ""),
           last ? `last done ${last.date}${last.by ? " by " + name(last.by) : ""}` : ""].filter(Boolean).join(" · ")),
         c.notes ? el("div", { class: "muted small" }, c.notes) : null),
-      c.finished ? null : done, last ? undo : null, retire);
+      c.finished ? null : done, last ? undo : null, data.canEdit ? change : null, data.canEdit ? retire : null);
   };
   const now = data.chores.filter((c) => !c.finished && (!c.due || c.due <= today));
   const later = data.chores.filter((c) => !c.finished && c.due && c.due > today);
@@ -1783,12 +1826,39 @@ async function renderUpkeep(box, force = false) {
         btn("+1", { add: 1 }), btn("+5", { add: 5 }), btn("+10", { add: 10 }), btn("Spend all", { set: 0 })));
   };
 
+  // Rewards: a child asks, a parent says yes (the stars come off) or no.
+  const rewardBox = [];
+  const pending = rewards.asks.filter((a) => a.status === "asked");
+  if (pending.length) rewardBox.push(el("ul", { class: "list" }, ...pending.map((a) => {
+    const m = people.find((p) => p.id === a.memberId);
+    const yes = el("button", { type: "button" }, "Yes");
+    yes.addEventListener("click", () => act("POST", `/api/rewards/asks/${a.id}/approve`));
+    const no = el("button", { type: "button", class: "secondary" }, "No");
+    no.addEventListener("click", () => act("POST", `/api/rewards/asks/${a.id}/decline`));
+    return el("li", {}, m ? avatarOf(m) : null, el("div", { class: "grow" },
+      el("div", { class: "title" }, `${m ? m.name : "Someone"} asked for ${a.title}`),
+      el("div", { class: "sub" }, `★ ${a.cost} · has ★ ${data.stars[a.memberId] || 0}`)), no, yes);
+  })));
+  if (rewards.rewards.length) rewardBox.push(el("ul", { class: "list" }, ...rewards.rewards.map((r) => {
+    const rm = el("button", { type: "button", class: "link" }, "Remove");
+    rm.addEventListener("click", () => { if (confirm(`Remove "${r.title}"?`)) act("DELETE", `/api/rewards/${r.id}`); });
+    return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, r.title)), el("span", { class: "badge" }, "★ " + r.cost), rewards.canEdit ? rm : null);
+  })));
+  if (rewards.canEdit) {
+    const rt = el("input", { placeholder: "e.g. 30 minutes of screen time", maxlength: "60" });
+    const rc = el("input", { type: "number", min: "1", max: "1000", value: "10", style: "width:5em" });
+    const rf = el("form", { class: "row upkeep-reward" }, el("label", { class: "grow" }, "Reward ", rt), el("label", {}, "★ ", rc), el("button", { type: "submit" }, "Add reward"));
+    rf.addEventListener("submit", (ev) => { ev.preventDefault(); if (rt.value.trim()) act("POST", "/api/rewards", { title: rt.value.trim(), cost: Number(rc.value) || 1 }); });
+    rewardBox.push(rf);
+  }
+
   box.replaceChildren(
     ...section("Due now", now, "Nothing due."),
     ...section("Coming up", later, "Nothing coming up."),
     ...(finished.length ? section("Done", finished, "") : []),
-    ...(data.canEdit ? [el("h2", {}, "Add a chore"), add] : []),
+    ...(data.canEdit ? [el("h2", {}, ed ? `Change "${ed.title}"` : "Add a chore"), add] : []),
     ...(kids.length ? [el("h2", {}, "Stars"), el("ul", { class: "list" }, ...kids.map(starRow))] : []),
+    ...(rewardBox.length ? [el("h2", {}, "Rewards"), ...rewardBox] : []),
     el("p", { class: "muted small" }, "Chores are Markdown notes in the vault's Chores folder: open it in Obsidian, or let your AI agent add and tick them off (Settings → AI & API)."));
 }
 

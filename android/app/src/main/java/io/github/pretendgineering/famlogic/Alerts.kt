@@ -122,9 +122,18 @@ object Alerts {
                     if (e.memberId in prefs.mutedPeople) return
                     val stars = if (e.level > 0) "  ★ ${e.level}" else ""
                     notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} did a chore", e.title + stars, e.memberId, upkeep = true)
+                } else if (e.kind == "due") {
+                    val stars = if (e.level > 0) "  ★ ${e.level}" else ""
+                    notify(context, CHANNEL_ALERTS, eventId(e), "Time for a job", e.title + stars, "", upkeep = true)
                 } else {
                     notify(context, CHANNEL_ALERTS, eventId(e), "A job for you", e.title + " (from ${e.name})", e.memberId, upkeep = true)
                 }
+            }
+            // Rewards: a child asked (to parents), or a parent answered (to the child).
+            "reward" -> when (e.kind) {
+                "asked" -> notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} asked for a reward", "${e.title} (★ ${e.level})", e.memberId, upkeep = true)
+                "approved" -> notify(context, CHANNEL_ALERTS, eventId(e), "Yes: ${e.title}", "${e.name} said yes. ★ ${e.level} spent.", "", upkeep = true)
+                else -> notify(context, CHANNEL_ALERTS, eventId(e), "Not this time", "${e.name} said no to ${e.title}.", "", upkeep = true)
             }
             "checkin" -> {
                 if (!prefs.notifyCheckIn || e.memberId in prefs.mutedPeople) return

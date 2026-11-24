@@ -92,6 +92,8 @@ object Upkeep {
     }
 }
 
+private val WHENS = listOf("" to "None", "morning" to "Morning", "after school" to "After school", "evening" to "Evening", "bedtime" to "Bedtime")
+
 private val REPEATS = listOf("" to "Once", "day" to "Every day", "weekdays" to "Weekdays", "week" to "Every week", "2 weeks" to "Every 2 weeks", "month" to "Every month")
 
 /** Ticks a chore off (for me, or for someone else when a parent does it), with a little celebration. */
@@ -115,11 +117,29 @@ fun UpkeepScreen(prefs: Prefs) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Chore?>(null) }
+    var pickWho by remember { mutableStateOf<Chore?>(null) }
+    var rewards by remember { mutableStateOf<RewardList?>(null) }
+    var addingReward by remember { mutableStateOf(false) }
+    val refreshAll: suspend () -> Unit = {
+        Upkeep.refresh(prefs)
+        rewards = runCatching { Api(prefs.serverUrl, prefs.token).rewards() }.getOrDefault(rewards)
+    }
     LaunchedEffect(Unit) {
         while (true) {
-            Upkeep.refresh(prefs)
+            refreshAll()
             delay(20_000)
         }
+    }
+    val api = { Api(prefs.serverUrl, prefs.token) }
+    // A parent's menu on a chore: change it, or retire it (its note stays in the vault).
+    val manage: (Chore) -> Pair<() -> Unit, () -> Unit>? = { c ->
+        if (Upkeep.list?.canEdit == true) ({ editing = c } to {
+            scope.launch {
+                runCatching { api().retireChore(c.id) }.onFailure { Toast.makeText(context, "Couldn't retire it: ${it.message}", Toast.LENGTH_LONG).show() }
+                refreshAll()
+            }
+        }) else null
     }
     val data = Upkeep.list
     val me = prefs.memberId
@@ -153,21 +173,23 @@ fun UpkeepScreen(prefs: Prefs) {
             item { SectionTitle(if (Access.isChild) "Your jobs" else "Yours") }
             if (mineNow.isEmpty()) item { Text("Nothing to do right now.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge) }
             items(mineNow, key = { "m" + it.id }) { c ->
-                ChoreCard(c, people, today, big = big, canUndo = data.canEdit) { scope.launch { tick(context, prefs, c) } }
+                ChoreCard(c, people, today, big = big, canUndo = data.canEdit, manage = manage(c)) { scope.launch { tick(context, prefs, c) } }
             }
             if (othersNow.isNotEmpty() && !Access.younger) {
                 item { SectionTitle("Everyone else") }
                 items(othersNow, key = { "o" + it.id }) { c ->
-                    ChoreCard(c, people, today, big = false, canUndo = data.canEdit, canTick = data.canEdit) {
-                        // A parent ticking someone's chore: it goes to the person it was for.
-                        scope.launch { tick(context, prefs, c, by = c.who.firstOrNull().orEmpty()) }
+                    ChoreCard(c, people, today, big = false, canUndo = data.canEdit, canTick = data.canEdit, manage = manage(c)) {
+                        // A parent ticking someone's chore: the stars go to whoever did it
+                        // (asked when it's shared).
+                        if (c.who.size > 1) pickWho = c
+                        else scope.launch { tick(context, prefs, c, by = c.who.firstOrNull().orEmpty()) }
                     }
                 }
             }
             if (doneToday.isNotEmpty()) {
                 item { SectionTitle("Done today") }
                 items(doneToday, key = { "d" + it.id }) { c ->
-                    ChoreCard(c, people, today, big = false, done = true, canUndo = data.canEdit, onUndo = {
+                    ChoreCard(c, people, today, big = false, done = true, canUndo = data.canEdit, manage = manage(c), onUndo = {
                         scope.launch {
                             runCatching { Api(prefs.serverUrl, prefs.token).choreUndo(c.id, today) }
                             Upkeep.refresh(prefs)
@@ -177,7 +199,7 @@ fun UpkeepScreen(prefs: Prefs) {
             }
             if (later.isNotEmpty() && !Access.younger) {
                 item { SectionTitle("Coming up") }
-                items(later, key = { "l" + it.id }) { c -> ChoreCard(c, people, today, big = false, canTick = false, canUndo = false) {} }
+                items(later, key = { "l" + it.id }) { c -> ChoreCard(c, people, today, big = false, canTick = false, canUndo = false, manage = manage(c)) {} }
             }
             // Stars, for parents: who has how many.
             if (data.canEdit && data.stars.isNotEmpty()) {
@@ -194,9 +216,135 @@ fun UpkeepScreen(prefs: Prefs) {
                     }
                 }
             }
+            // Rewards: what stars are for. Children ask; a parent says yes (the stars come off) or no.
+            val rw = rewards
+            if (rw != null && (rw.rewards.isNotEmpty() || rw.canEdit)) {
+                item { SectionTitle("Rewards") }
+                val pending = rw.asks.filter { it.status == "asked" }
+                if (rw.canEdit) items(pending, key = { "a" + it.id }) { a ->
+                    val who = people.find { it.id == a.memberId }
+                    ElevatedCard(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (who != null) Avatar(who.name, who.emoji, who.color, 32)
+                            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                Text("${who?.name ?: "Someone"} asked for ${a.title}", style = MaterialTheme.typography.titleSmall)
+                                Text("★ ${a.cost} · has ★ ${data.stars[a.memberId] ?: 0}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = { scope.launch { runCatching { api().answerAsk(a.id, false) }; refreshAll() } }) { Text("No") }
+                            androidx.compose.material3.FilledTonalButton(onClick = {
+                                scope.launch {
+                                    runCatching { api().answerAsk(a.id, true) }.onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                                    refreshAll()
+                                }
+                            }) { Text("Yes") }
+                        }
+                    }
+                }
+                items(rw.rewards, key = { "r" + it.id }) { r ->
+                    val myStars = data.stars[me] ?: 0
+                    val asked = rw.asks.any { it.title == r.title && it.memberId == me && it.status == "asked" }
+                    var menu by remember { mutableStateOf(false) }
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                            .then(if (rw.canEdit) Modifier.clickable { menu = true } else Modifier),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(r.title, Modifier.weight(1f), style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge)
+                        Text("★ ${r.cost}", color = Color(0xFFE0A82E), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp))
+                        if (!rw.canEdit) {
+                            if (asked) Text("Asked", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            else androidx.compose.material3.FilledTonalButton(enabled = myStars >= r.cost, onClick = {
+                                scope.launch {
+                                    runCatching { api().askReward(r.id) }
+                                    Toast.makeText(context, "Asked for ${r.title}", Toast.LENGTH_SHORT).show()
+                                    refreshAll()
+                                }
+                            }) { Text("Ask") }
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text("Remove ${r.title}") }, onClick = {
+                                menu = false
+                                scope.launch { runCatching { api().deleteReward(r.id) }; refreshAll() }
+                            })
+                        }
+                    }
+                }
+                // A child's latest answers.
+                if (!rw.canEdit) items(rw.asks.filter { it.status != "asked" }.take(3), key = { "h" + it.id }) { a ->
+                    Text((if (a.status == "approved") "Yes to " else "Not this time: ") + a.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (rw.canEdit) item { TextButton(onClick = { addingReward = true }) { Text("Add a reward") } }
+            }
         }
     }
-    if (adding) AddChoreDialog(prefs, people, data, onDone = { adding = false; scope.launch { Upkeep.refresh(prefs) } })
+    if (adding) AddChoreDialog(prefs, people, data, onDone = { adding = false; scope.launch { refreshAll() } })
+    editing?.let { c -> AddChoreDialog(prefs, people, data, existing = c, onDone = { editing = null; scope.launch { refreshAll() } }) }
+    pickWho?.let { c ->
+        AlertDialog(
+            onDismissRequest = { pickWho = null },
+            title = { Text("Who did it?") },
+            text = {
+                Column {
+                    c.who.mapNotNull { id -> people.find { it.id == id } }.forEach { p ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
+                                pickWho = null
+                                scope.launch { tick(context, prefs, c, by = p.id) }
+                            }.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Avatar(p.name, p.emoji, p.color, 32)
+                            Text(p.name, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { pickWho = null }) { Text("Cancel") } },
+        )
+    }
+    if (addingReward) {
+        var title by remember { mutableStateOf("") }
+        var cost by remember { mutableIntStateOf(10) }
+        AlertDialog(
+            onDismissRequest = { addingReward = false },
+            title = { Text("Add a reward") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(title, { title = it.take(60) }, label = { Text("Reward") }, placeholder = { Text("e.g. 30 minutes of screen time") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    StarPicker(cost, 1, 1000) { cost = it }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = title.isNotBlank(), onClick = {
+                    addingReward = false
+                    scope.launch {
+                        runCatching { api().addReward(title.trim(), cost) }.onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                        refreshAll()
+                    }
+                }) { Text("Add") }
+            },
+            dismissButton = { TextButton(onClick = { addingReward = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+/** Stars with −10, −5, −1, +1, +5 and +10 buttons. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StarPicker(value: Int, min: Int, max: Int, onChange: (Int) -> Unit) {
+    Column {
+        Text("★ $value", color = Color(0xFFE0A82E), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf(-10, -5, -1, 1, 5, 10).forEach { d ->
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { onChange((value + d).coerceIn(min, max)) },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier.height(34.dp),
+                ) { Text(if (d > 0) "+$d" else "−${-d}") }
+            }
+        }
+    }
 }
 
 @Composable
@@ -212,7 +360,10 @@ private fun SectionTitle(text: String) {
 @Composable
 private fun ChoreCard(
     c: Chore, people: List<Member>, today: String, big: Boolean, done: Boolean = false,
-    canTick: Boolean = true, canUndo: Boolean, onUndo: () -> Unit = {}, onTick: () -> Unit,
+    canTick: Boolean = true, canUndo: Boolean, onUndo: () -> Unit = {},
+    /** A parent's Change and Retire, or null. */
+    manage: Pair<() -> Unit, () -> Unit>? = null,
+    onTick: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     var menu by remember { mutableStateOf(false) }
@@ -220,7 +371,7 @@ private fun ChoreCard(
     ElevatedCard(
         shape = RoundedCornerShape(22.dp),
         modifier = Modifier.fillMaxWidth().animateContentSize()
-            .combinedClickable(onClick = {}, onLongClick = { if (done && canUndo) menu = true }),
+            .combinedClickable(onClick = {}, onLongClick = { if ((done && canUndo) || manage != null) menu = true }),
     ) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = if (big) 16.dp else 10.dp), verticalAlignment = Alignment.CenterVertically) {
             val ring = if (big) 52.dp else 36.dp
@@ -252,7 +403,11 @@ private fun ChoreCard(
             if (c.stars > 0) Text("★ ${c.stars}", style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall, color = Color(0xFFE0A82E), fontWeight = FontWeight.Bold)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Not really done: undo") }, onClick = { menu = false; onUndo() })
+            if (done && canUndo) DropdownMenuItem(text = { Text("Not really done: undo") }, onClick = { menu = false; onUndo() })
+            manage?.let { (edit, retire) ->
+                DropdownMenuItem(text = { Text("Change") }, onClick = { menu = false; edit() })
+                DropdownMenuItem(text = { Text("Retire") }, onClick = { menu = false; retire() })
+            }
         }
     }
 }
@@ -260,20 +415,21 @@ private fun ChoreCard(
 /** A parent (or a child allowed to add their own) adds a chore. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AddChoreDialog(prefs: Prefs, people: List<Member>, data: ChoreList?, onDone: () -> Unit) {
+private fun AddChoreDialog(prefs: Prefs, people: List<Member>, data: ChoreList?, existing: Chore? = null, onDone: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val ownOnly = data?.canEdit != true
-    var title by remember { mutableStateOf("") }
-    var who by remember { mutableStateOf(if (ownOnly) setOf(prefs.memberId) else emptySet()) }
-    var every by remember { mutableStateOf("") }
-    var due by remember { mutableStateOf(data?.today ?: "") }
-    var stars by remember { mutableIntStateOf(0) }
-    var notes by remember { mutableStateOf("") }
+    var title by remember { mutableStateOf(existing?.title ?: "") }
+    var who by remember { mutableStateOf(existing?.who?.toSet() ?: if (ownOnly) setOf(prefs.memberId) else emptySet()) }
+    var every by remember { mutableStateOf(existing?.every ?: "") }
+    var due by remember { mutableStateOf(existing?.due?.ifEmpty { null } ?: data?.today ?: "") }
+    var stars by remember { mutableIntStateOf(existing?.stars ?: 0) }
+    var notes by remember { mutableStateOf(existing?.notes ?: "") }
+    var whenOfDay by remember { mutableStateOf(existing?.whenOfDay ?: "") }
     var busy by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDone,
-        title = { Text("Add a chore") },
+        title = { Text(if (existing == null) "Add a chore" else "Change chore") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(title, { title = it.take(80) }, label = { Text("What needs doing") }, placeholder = { Text("e.g. Unload the dishwasher") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -290,6 +446,11 @@ private fun AddChoreDialog(prefs: Prefs, people: List<Member>, data: ChoreList?,
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     REPEATS.forEach { (id, label) -> FilterChip(selected = every == id, onClick = { every = id }, label = { Text(label) }) }
                 }
+                // A time of day: the chore's reminder goes out then.
+                Text("Reminder", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    WHENS.forEach { (id, label) -> FilterChip(selected = whenOfDay == id, onClick = { whenOfDay = id }, label = { Text(label) }) }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("From ", style = MaterialTheme.typography.labelLarge)
                     TextButton(onClick = {
@@ -300,11 +461,9 @@ private fun AddChoreDialog(prefs: Prefs, people: List<Member>, data: ChoreList?,
                             parts.getOrNull(2) ?: now.get(java.util.Calendar.DAY_OF_MONTH)).show()
                     }) { Text(if (due == data?.today) "Today" else due) }
                 }
-                if (!ownOnly) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Stars", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { stars = maxOf(0, stars - 1) }) { Text("−") }
-                    Text("★ $stars", color = Color(0xFFE0A82E), fontWeight = FontWeight.Bold)
-                    TextButton(onClick = { stars = minOf(100, stars + 1) }) { Text("+") }
+                if (!ownOnly) {
+                    Text("Stars", style = MaterialTheme.typography.labelLarge)
+                    StarPicker(stars, 0, 100) { stars = it }
                 }
                 OutlinedTextField(notes, { notes = it.take(2000) }, label = { Text("Details (optional)") }, modifier = Modifier.fillMaxWidth())
             }
@@ -314,14 +473,16 @@ private fun AddChoreDialog(prefs: Prefs, people: List<Member>, data: ChoreList?,
                 busy = true
                 scope.launch {
                     try {
-                        Api(prefs.serverUrl, prefs.token).addChore(title.trim(), who.toList(), every, due, stars, notes)
+                        val api = Api(prefs.serverUrl, prefs.token)
+                        if (existing == null) api.addChore(title.trim(), who.toList(), every, due, stars, notes, whenOfDay)
+                        else api.updateChore(existing.id, title.trim(), who.toList(), every, due, stars, notes, whenOfDay)
                         onDone()
                     } catch (e: Exception) {
-                        Toast.makeText(context, "Couldn't add it: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Couldn't save it: ${e.message}", Toast.LENGTH_LONG).show()
                         busy = false
                     }
                 }
-            }) { Text("Add") }
+            }) { Text(if (existing == null) "Add" else "Save") }
         },
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
     )

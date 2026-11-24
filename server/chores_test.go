@@ -237,3 +237,47 @@ func TestAgentKeys(t *testing.T) {
 		t.Fatalf("openapi: %d", st)
 	}
 }
+
+func TestRewards(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	if st, _ := e.status("POST", "/api/rewards", f.kid, map[string]any{"title": "Screen time", "cost": 3}); st != 403 {
+		t.Fatalf("children don't set rewards: %d", st)
+	}
+	st, rw := e.status("POST", "/api/rewards", f.mom, map[string]any{"title": "Screen time", "cost": 3})
+	if st != 200 {
+		t.Fatalf("add: %d %v", st, rw)
+	}
+	id := rw["id"].(string)
+	st, ask := e.status("POST", "/api/rewards/"+id+"/ask", f.kid, nil)
+	if st != 200 || ask["status"] != "asked" {
+		t.Fatalf("ask: %d %v", st, ask)
+	}
+	ak := ask["id"].(string)
+	if st, _ := e.status("POST", "/api/rewards/asks/"+ak+"/approve", f.kid, nil); st != 403 {
+		t.Fatalf("a child can't approve: %d", st)
+	}
+	if st, _ := e.status("POST", "/api/rewards/asks/"+ak+"/approve", f.mom, nil); st != 409 {
+		t.Fatalf("not enough stars yet: %d", st)
+	}
+	e.status("POST", "/api/members/"+f.kidID+"/stars", f.mom, map[string]any{"add": 5})
+	if st, a := e.status("POST", "/api/rewards/asks/"+ak+"/approve", f.mom, nil); st != 200 || a["status"] != "approved" {
+		t.Fatalf("approve: %d %v", st, a)
+	}
+	_, list := e.status("GET", "/api/chores", f.mom, nil)
+	if list["stars"].(map[string]any)[f.kidID].(float64) != 2 {
+		t.Fatalf("5 - 3 = 2 stars: %v", list["stars"])
+	}
+}
+
+func TestWhenClock(t *testing.T) {
+	for in, want := range map[string]int{"07:15": 435, "16:00-18:00": 960, "after school": 930, "Evening": 1110} {
+		h, m, ok := whenClock(in)
+		if !ok || h*60+m != want {
+			t.Errorf("%q: %d:%d %v", in, h, m, ok)
+		}
+	}
+	if _, _, ok := whenClock("whenever"); ok {
+		t.Error("no time")
+	}
+}

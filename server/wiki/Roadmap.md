@@ -41,7 +41,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Small things: rotating keeps what you typed; a camera icon that takes a new photo or picks one; senders' pictures in chat; a clearer selected tab.
 
 ### ✅ Phase 3c: Access & Control, grandparents and a friendlier app (0.20.0)
-- **Module names** with a vibe: Thereabouts, **Chitchat**, **Datebook**, **Odds & Ends**, **Upkeep**, **Rhythms**, **Pantry**, **Corkboard**, **Front Room**, **Steward** (nudges stay nudges). **Plain names** switch (Customize, and the console's Look) for Map, Chat, Calendar…
+- **Module names** with a vibe: Thereabouts, **Chitchat**, **Datebook**, **Odds & Ends**, **Upkeep**, **Rhythms**, **Pantry**, **Corkboard**, **Front Room**, **Steward** (nudges stay nudges). **Plain Labels** switch (Customize, and the console's Look) for Map, Chat, Calendar…
 - **Access & Control** page in the console: everyone in a list that opens into their switches. Per child: a preset, then each module **Off / View only / Can add / Full** and single features; bigger buttons and picture icons; their home screen (drag to reorder, sizes); **open their settings for 10 minutes** from afar. The parent PIN lives here.
 - **Grandparents:** a role with the whole app but no parents' controls or children's chats; bigger buttons and picture icons as options.
 - **Children's settings:** none for younger children, only Customize/Account/About for older ones; the secret way in is holding the family name for 5 seconds, then the parent PIN.

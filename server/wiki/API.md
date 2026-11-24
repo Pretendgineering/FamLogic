@@ -47,6 +47,8 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `POST /api/chores/{id}/done` `{date?, by?}` | anyone it's for; parents and keys for anyone | Tick it off: stars go to `by`, parents are told, the feed records it, a repeating chore moves to its next date |
 | `POST /api/chores/{id}/undo` `{date?}` | parents, keys | Take a tick back (and its stars) |
 | `POST /api/members/{id}/stars` `{add}` or `{set}` | parents, keys with `chores` | Give or spend stars |
+| `GET /api/rewards`; `POST /api/rewards {title, cost}`; `DELETE /api/rewards/{id}` | anyone with Upkeep; parents and keys change the list | Rewards stars can buy, and asks (everyone's for parents, your own for children) |
+| `POST /api/rewards/{id}/ask`; `POST /api/rewards/asks/{id}/approve` or `/decline` | the child asks; a parent answers | Approving takes the stars (409 if there aren't enough) and goes on the feed |
 | `GET /api/feed?from=<ms>&to=<ms>` | `Bearer <token>`, a key with `feed` | The family feed (default the last 24 hours, at most 8 days): `{items:[event]}` newest first, the same visibility as alerts |
 | `GET /api/v1/people` | a key with `people` | Everyone's id, name, role, access, stars and voice (no locations) |
 | `GET /api/v1/openapi.json` | none | The OpenAPI description of what keys can use |

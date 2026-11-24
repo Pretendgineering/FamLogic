@@ -851,10 +851,10 @@ private fun TrailPage(
 private fun LookCards(prefs: Prefs) {
     val haptics = LocalHapticFeedback.current
     val namesContext = LocalContext.current
-    SettingsCard("Names") {
+    SettingsCard("Labels") {
         SwitchRow(
-            title = "Plain names",
-            detail = "Call things Map, Chat, Calendar and Lists instead of Thereabouts, Chitchat, Datebook and Odds & Ends. Only changes this device.",
+            title = "Plain Labels",
+            detail = "Map, Chat, Calendar and Lists instead of Thereabouts, Chitchat, Datebook and Odds & Ends. This device only.",
             checked = Access.plainNames,
             onChange = { Access.setPlainNames(namesContext, it) },
         )

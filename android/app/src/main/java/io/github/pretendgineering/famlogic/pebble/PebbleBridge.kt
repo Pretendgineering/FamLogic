@@ -70,6 +70,7 @@ object PebbleBridge {
     const val C_FENCE = 6
     const val C_MAP = 7 // a piece of a map picture: K_IDX offset, K_COUNT total, K_DATA bytes
     const val C_MAP_FAIL = 8
+    const val C_CHORE = 9 // one of your chores due now: K_IDX, K_COUNT, K_ID, K_NAME title, K_NUM stars
 
     // Watch -> phone
     const val C_HELLO = 20
@@ -80,6 +81,7 @@ object PebbleBridge {
     const val C_SEEN = 25
     const val C_SHARING = 26
     const val C_BATTERY = 27
+    const val C_CHORE_DONE = 29 // K_ID: you did this chore
     const val C_MAP_REQ = 28 // K_ID person, K_W/K_H/K_STRIDE, K_KIND "c" colour or "b" black and white, K_NUM zoom
 
     // Person flags
@@ -175,6 +177,11 @@ object PebbleBridge {
                         })
                     }
                     C_MAP_REQ -> sendMap(context, prefs, api, id, d)
+                    C_CHORE_DONE -> {
+                        val ch = api.choreDone(id)
+                        result(context, if (ch.stars > 0) "Done! +${ch.stars} stars" else "Done!")
+                        push(context, APP_UUID)
+                    }
                     C_SEEN -> {
                         api.sosSeen(id)
                         result(context, "They know you've seen it")
@@ -279,6 +286,15 @@ object PebbleBridge {
                 .take(8)
             fences.forEachIndexed { i, (p, d) -> send(context, APP_UUID, fenceMessage(p, d, i, fences.size)) }
             if (fences.isEmpty()) send(context, APP_UUID, mapOf(K_CMD to C_FENCE, K_IDX to 0, K_COUNT to 0))
+            // Your chores due now (Upkeep), to tick off from the wrist.
+            val chores = if (res.server.features?.contains("module:chores") == true) runCatching {
+                val all = Api(prefs.serverUrl, prefs.token).chores()
+                all.chores.filter { io.github.pretendgineering.famlogic.Upkeep.isMine(it, prefs.memberId) && io.github.pretendgineering.famlogic.Upkeep.dueNow(it, all.today) }.take(8)
+            }.getOrDefault(emptyList()) else emptyList()
+            chores.forEachIndexed { i, c ->
+                send(context, APP_UUID, mapOf(K_CMD to C_CHORE, K_IDX to i, K_COUNT to chores.size, K_ID to c.id.take(15), K_NAME to c.title.take(31), K_NUM to c.stars))
+            }
+            if (chores.isEmpty()) send(context, APP_UUID, mapOf(K_CMD to C_CHORE, K_IDX to 0, K_COUNT to 0))
         }
     }
 
