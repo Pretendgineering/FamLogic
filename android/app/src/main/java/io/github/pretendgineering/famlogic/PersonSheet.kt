@@ -82,8 +82,8 @@ fun PersonSheet(
                     Text(if (isMe) "${m.name} (you)" else m.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (!isMe && m.loc != null && !m.paused) {
-                    FilledTonalButton(onClick = onDirections) { Text("Directions") }
+                if (!isMe && m.loc != null && !m.paused && !Access.isChild) {
+                    DirectionsButton(onDirections)
                 }
             }
             if (!isMe && canRequests) {

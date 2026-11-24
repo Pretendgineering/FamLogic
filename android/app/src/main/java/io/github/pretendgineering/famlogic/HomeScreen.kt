@@ -56,6 +56,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -256,7 +257,7 @@ fun HomeScreen(
             val tile: @Composable (HomeTile, Dp) -> Unit = { t, h ->
                 when (t.id) {
                     "map" -> MapTile(prefs, members, tileUrl, tileUrlDark, attribution, cameraSeq, big, h, onClick = { onOpen(Tab.Map) }, compact = t.w(cols) == 1 || t.h() == 1)
-                    "chat" -> ChatTile(chats, members, prefs.memberId, big, h, t.w(cols) == 1, prefs.lastChat, onOpen = { onOpen(Tab.Chat) }, onOpenChat = onOpenChat)
+                    "chat" -> ChatTile(chats, members, prefs.memberId, big, h, t.w(cols), t.h(), prefs.lastChat, onOpen = { onOpen(Tab.Chat) }, onOpenChat = onOpenChat)
                     // One-button tiles: the tile is the button.
                     "sos" -> HoldForSosBar(
                         onTriggered = { Sos.send(context, scope, end = false); sosActive = true },
@@ -370,6 +371,9 @@ object HomeEditor {
  * sizes still read: "half" is one column, "wide" the full width, "big" the full
  * width and two rows. (The map shows its title bar only at 2 by 2 or bigger.)
  */
+/** Rows a tile may be tall: the map up to 3, everything else 2. */
+fun maxH(id: String) = if (id == "map") 3 else 2
+
 data class HomeTile(val id: String, val size: String) {
     fun encode() = "$id:$size"
 
@@ -389,7 +393,7 @@ data class HomeTile(val id: String, val size: String) {
         "big" -> 2
         "half", "wide" -> 1
         else -> dims.substringAfter('x', "1").toIntOrNull() ?: 1
-    }.coerceIn(1, 2)
+    }.coerceIn(1, maxH(id))
 
     /** Rows tall. */
     fun h(): Int = rawH()
@@ -487,7 +491,7 @@ fun tileIcon(id: String): ImageVector = when (id) {
 
 /** The drawer of tiles under the board while arranging: drag one up to add it. */
 @Composable
-private fun TileDrawer(ids: List<String>, modifier: Modifier, onBounds: (Rect) -> Unit, items: MutableMap<String, Rect>) {
+private fun TileDrawer(ids: List<String>, modifier: Modifier, onBounds: (Rect) -> Unit, items: MutableMap<String, Rect>, incoming: String? = null) {
     androidx.compose.material3.Surface(
         modifier.fillMaxWidth().height(DRAWER_HEIGHT).onGloballyPositioned { onBounds(it.boundsInRoot()) },
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -500,15 +504,28 @@ private fun TileDrawer(ids: List<String>, modifier: Modifier, onBounds: (Rect) -
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, top = 10.dp),
             )
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+            // The tiles slide aside to make room for one being dragged down into its place,
+            // and close up when one is taken out, like the tiles on the board.
+            val slots: List<String> = if (incoming != null && incoming in ALL_TILES && incoming !in ids)
+                ALL_TILES.filter { it in ids || it == incoming }.map { if (it == incoming) "gap:$it" else it } else ids
+            androidx.compose.foundation.lazy.LazyRow(
+                Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                ids.forEach { id ->
-                    key(id) {
+                items(slots.size, key = { slots[it] }) { i ->
+                    val id = slots[i]
+                    if (id.startsWith("gap:")) {
+                        Box(
+                            Modifier.animateItem().size(width = 92.dp, height = 80.dp)
+                                .border(1.5.dp, Accent2.copy(alpha = .6f), RoundedCornerShape(12.dp)),
+                        )
+                        return@items
+                    }
+                    run {
                         DisposableEffect(id) { onDispose { items.remove(id) } }
                         Column(
-                            Modifier.size(width = 92.dp, height = 80.dp).clip(RoundedCornerShape(12.dp))
+                            Modifier.animateItem().size(width = 92.dp, height = 80.dp).clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f))
                                 .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = .6f), RoundedCornerShape(12.dp))
                                 .onGloballyPositioned { items[id] = it.boundsInRoot() }
@@ -648,7 +665,7 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
         val unitPx = with(density) { unit.toPx() }
         val g = ghost()
         val w = kotlin.math.round((g.width + gapPx) / (colPx + gapPx)).toInt().coerceIn(1, cols)
-        val h = kotlin.math.round((g.height + gapPx) / (unitPx + gapPx)).toInt().coerceIn(1, 2)
+        val h = kotlin.math.round((g.height + gapPx) / (unitPx + gapPx)).toInt().coerceIn(1, maxH(id))
         val col = when (resizeEdge) {
             'l' -> (spot.col + spot.w - w).coerceAtLeast(0) // grows to the left: the right edge stays put
             else -> spot.col.coerceAtMost(cols - w)
@@ -844,7 +861,10 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
         }
         // The drawer: every tile that isn't on the home screen yet; it slides up into view.
         if (edit != null) {
-            TileDrawer(edit.hidden, Modifier.align(Alignment.BottomCenter).graphicsLayer { translationY = (1f - arranging) * DRAWER_HEIGHT.toPx() }, drawer, items = drawerItems)
+            TileDrawer(
+                edit.hidden, Modifier.align(Alignment.BottomCenter).graphicsLayer { translationY = (1f - arranging) * DRAWER_HEIGHT.toPx() }, drawer, items = drawerItems,
+                incoming = dragging?.takeIf { drawerRect.contains(finger) },
+            )
         }
         // The tile being carried floats above everything, the drawer included.
         val carried = dragging?.let { id -> spots[id] }
@@ -983,14 +1003,16 @@ private fun whereShort(m: Member): String {
  */
 @Composable
 private fun ChatTile(
-    chats: List<ChatConversation>, members: List<Member>, me: String, big: Boolean, height: Dp, half: Boolean, lastChat: String,
+    chats: List<ChatConversation>, members: List<Member>, me: String, big: Boolean, height: Dp, wide: Int, tall: Int, lastChat: String,
     onOpen: () -> Unit, onOpenChat: (String) -> Unit,
 ) {
     val unread = chats.sumOf { it.unread }
-    if (half) {
-        val family = chats.firstOrNull { it.kind == "family" }
-        val last = chats.firstOrNull { it.id == lastChat && it.id != family?.id }
-            ?: chats.filter { it.id != family?.id && it.last != null }.maxByOrNull { it.last!!.time }
+    // One tile wide or tall: a strip of chats, the most recent first, as many as fit:
+    // across for a wide tile, down for a tall one.
+    if (wide == 1 || tall == 1) {
+        val vertical = tall > wide
+        val order = chats.sortedByDescending { c -> c.last?.time ?: if (c.id == lastChat) 1L else 0L }
+        val face = if (big) 56 else 44
         Column(Modifier.fillMaxWidth().height(height)) {
             Row(
                 Modifier.fillMaxWidth().clickable(onClickLabel = "Open all chats", onClick = onOpen).padding(start = 12.dp, end = 12.dp, top = 8.dp),
@@ -999,19 +1021,32 @@ private fun ChatTile(
                 Text(Access.name("chat"), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 if (unread > 0) androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$unread") }
             }
-            Row(Modifier.fillMaxWidth().weight(1f).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOfNotNull(family, last).forEach { c ->
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(8.dp)) {
+                val slot = (face + 28).dp // a face and its name
+                val fit = (((if (vertical) maxHeight else maxWidth) + 8.dp) / (slot + 8.dp)).toInt().coerceAtLeast(1)
+                val shown = order.take(fit)
+                val item: @Composable (ChatConversation, Modifier) -> Unit = { c, m ->
                     Column(
-                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp))
-                            .clickable(onClickLabel = "Open ${c.title}") { onOpenChat(c.id) },
+                        m.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open ${c.title}") { onOpenChat(c.id) },
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        ConvoFace(c, members, me, if (big) 56 else 44)
+                        Box {
+                            ConvoFace(c, members, me, face)
+                            if (c.unread > 0) androidx.compose.material3.Badge(Modifier.align(Alignment.TopEnd), containerColor = MaterialTheme.colorScheme.primary) { Text("${c.unread}") }
+                        }
                         Text(c.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
-                if (family == null && last == null) Text("No chats yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                when {
+                    shown.isEmpty() -> Text("No chats yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    vertical -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        shown.forEach { c -> item(c, Modifier.fillMaxWidth().weight(1f)) }
+                    }
+                    else -> Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        shown.forEach { c -> item(c, Modifier.weight(1f).fillMaxHeight()) }
+                    }
+                }
             }
         }
         return

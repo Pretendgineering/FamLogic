@@ -151,7 +151,7 @@ fun UpkeepScreen(prefs: Prefs) {
         val later = data.chores.filter { !it.finished && it.due > today && it.done.none { d -> d.first == today } }
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item { SectionTitle(if (Access.isChild) "Your jobs" else "Yours") }
-            if (mineNow.isEmpty()) item { Text("Nothing to do right now. 🎉", color = MaterialTheme.colorScheme.onSurfaceVariant, style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge) }
+            if (mineNow.isEmpty()) item { Text("Nothing to do right now.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge) }
             items(mineNow, key = { "m" + it.id }) { c ->
                 ChoreCard(c, people, today, big = big, canUndo = data.canEdit) { scope.launch { tick(context, prefs, c) } }
             }
@@ -352,26 +352,51 @@ fun UpkeepTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onO
             val stars = data?.stars?.get(me) ?: 0
             if (stars > 0) Text("★ $stars", color = Color(0xFFE0A82E), fontWeight = FontWeight.Bold)
         }
-        if (wide >= 2 && tall >= 2) {
-            Spacer(Modifier.height(6.dp))
-            if (due.isEmpty()) Text("All done! 🎉", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            due.take(5).forEach { c ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(26.dp).clip(CircleShape).border(2.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .clickable(onClickLabel = "Done") { scope.launch { tick(context, prefs, c) } },
-                    )
-                    Text(c.title, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (c.stars > 0) Text("★${c.stars}", color = Color(0xFFE0A82E), style = MaterialTheme.typography.labelMedium)
+        val tickBox: @Composable (Chore) -> Unit = { c ->
+            Box(
+                Modifier.size(26.dp).clip(CircleShape).border(2.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    .clickable(onClickLabel = "Done") { scope.launch { tick(context, prefs, c) } },
+            )
+        }
+        when {
+            // A wide strip: the next few chores side by side, each with its tick.
+            tall == 1 && wide >= 2 -> {
+                Spacer(Modifier.weight(1f))
+                if (due.isEmpty()) Text("All done", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val n = if (due.size > wide) wide - 1 else wide
+                    due.take(n).forEach { c ->
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            tickBox(c)
+                            Text(c.title, Modifier.padding(start = 8.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    if (due.size > n) Text("+${due.size - n}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            if (due.size > 5) Text("and ${due.size - 5} more", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Spacer(Modifier.weight(1f))
-            Text(
-                when (due.size) { 0 -> "All done"; 1 -> "1 to do"; else -> "${due.size} to do" },
-                style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
-            )
+            // Tall (one wide and two up) or big: a checklist, as many as fit.
+            tall >= 2 -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp)) {
+                val fit = ((maxHeight + 0.dp) / 34.dp).toInt().coerceAtLeast(1)
+                Column {
+                    if (due.isEmpty()) Text("All done", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val n = if (due.size > fit) fit - 1 else fit
+                    due.take(n).forEach { c ->
+                        Row(Modifier.fillMaxWidth().height(34.dp), verticalAlignment = Alignment.CenterVertically) {
+                            tickBox(c)
+                            Text(c.title, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (c.stars > 0 && wide >= 2) Text("★${c.stars}", color = Color(0xFFE0A82E), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                    if (due.size > n) Text("and ${due.size - n} more", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            else -> {
+                Spacer(Modifier.weight(1f))
+                Text(
+                    when (due.size) { 0 -> "All done"; 1 -> "1 to do"; else -> "${due.size} to do" },
+                    style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
+                )
+            }
         }
     }
 }

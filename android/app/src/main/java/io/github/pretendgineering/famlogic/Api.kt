@@ -579,8 +579,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
     }
 
     /** Tells the server this phone's app version and anything that could stop it sharing. */
-    suspend fun sendStatus(app: String, issues: List<String>) {
-        request("POST", "/api/me/status", JSONObject().put("app", app).put("issues", org.json.JSONArray(issues)))
+    suspend fun sendStatus(app: String, issues: List<String>, device: String = "") {
+        request("POST", "/api/me/status", JSONObject().put("app", app).put("device", device).put("issues", org.json.JSONArray(issues)))
     }
 
     suspend fun leave() {

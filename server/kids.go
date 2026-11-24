@@ -75,7 +75,7 @@ var kidFeatures = []kidSwitch{
 	{"sos", "SOS button", "thereabouts", true, true},
 	{"checkin", "Check in (\"I'm here\")", "thereabouts", true, true},
 	{"requests", "Ask for a pick-up or a call", "thereabouts", true, true},
-	{"nudges", "Send nudges (👍 ❤️ 👋 …)", "thereabouts", true, true},
+	{"nudges", "Send nudges", "thereabouts", true, true},
 	{"trips", "See other people's trips", "thereabouts", false, true},
 	{"pause", "Pause sharing their location", "thereabouts", false, false},
 	{"chat_start", "Start new chats and groups (groups with a child need a parent's OK)", "chat", true, true},
@@ -92,7 +92,7 @@ var kidFeatures = []kidSwitch{
 var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward"}
 
 // "2x1@0": 2 columns, 1 row, in the first column.
-var gridSize = regexp.MustCompile(`^[1-3]x[12]@[0-2]$`)
+var gridSize = regexp.MustCompile(`^[1-3]x[1-3]@[0-2]$`) // 3 tall: the map only (the app keeps others to 2)
 
 var convoTile = regexp.MustCompile(`^convo\.[A-Za-z0-9_-]{1,64}$`)
 

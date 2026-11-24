@@ -24,7 +24,7 @@ var knownIssues = []string{
 }
 
 // SetStatus records what a phone reports about itself.
-func (s *Store) SetStatus(id, app string, issues []string) error {
+func (s *Store) SetStatus(id, app, device string, issues []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, ok := s.d.Members[id]
@@ -41,6 +41,10 @@ func (s *Store) SetStatus(id, app string, issues []string) error {
 		app = app[:20]
 	}
 	m.App, m.Issues = app, clean
+	switch device {
+	case "phone", "tablet", "display":
+		m.Device = device
+	}
 	m.StatusAt = time.Now().UnixMilli()
 	return s.saveLocked()
 }

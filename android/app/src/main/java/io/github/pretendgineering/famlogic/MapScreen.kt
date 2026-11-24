@@ -61,6 +61,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -979,8 +980,9 @@ private fun MemberRow(m: Member, isMe: Boolean, status: String, onClick: () -> U
                 fontWeight = if (sos) FontWeight.Bold else null,
             )
         }
-        if (!isMe && m.loc != null && !m.paused) {
-            TextButton(onClick = onDirections) { Text("Directions") }
+        // Directions: a small map-pin button (not for children: no maps app on their devices).
+        if (!isMe && m.loc != null && !m.paused && !Access.isChild) {
+            DirectionsButton(onDirections)
         }
     }
 }
@@ -1357,4 +1359,12 @@ private fun ShareToChatDialog(prefs: Prefs, text: String, onDone: () -> Unit) {
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
     )
+}
+
+/** Directions to someone, in the phone's maps app: a small map-pin button. */
+@Composable
+fun DirectionsButton(onClick: () -> Unit) {
+    androidx.compose.material3.FilledTonalIconButton(onClick = onClick) {
+        Icon(Icons.Filled.LocationOn, contentDescription = "Directions", tint = Accent2)
+    }
 }

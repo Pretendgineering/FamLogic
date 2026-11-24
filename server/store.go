@@ -91,6 +91,7 @@ type Member struct {
 	// when it last reported them, when it was last in touch at all, and when a
 	// "hasn't been in touch" alert went out (0 = none for this silence).
 	App         string   `json:"app,omitempty"`
+	Device      string   `json:"device,omitempty"` // phone, tablet or display (what the app reports)
 	Issues      []string `json:"issues,omitempty"`
 	StatusAt    int64    `json:"statusAt,omitempty"`
 	LastContact int64    `json:"lastContact,omitempty"`

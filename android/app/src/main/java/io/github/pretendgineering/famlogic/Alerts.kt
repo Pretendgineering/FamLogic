@@ -183,7 +183,7 @@ object Alerts {
     fun requestText(e: AppEvent): Pair<String, String> = when (e.kind) {
         "call" -> "${e.name} asks you to call them" to "Tap to see where they are."
         "where" -> "${e.name} asks where you are" to "Tap \"Send where I am\" to tell just them."
-        "comehome" -> "${e.name}: come home 🏠" to "Tap to see where they are."
+        "comehome" -> "${e.name}: come home" to "Tap to see where they are."
         in Nudges.all.map { it.kind } -> "${e.name} sent you ${Nudges.byKind(e.kind)!!.emoji}" to "Just a nudge."
         "here" -> "${e.name}: here I am" to (if (e.place.isNotEmpty()) "At ${e.place}. " else "") + "Tap to see them on the map."
         else -> "${e.name} asks you to pick them up" to "Tap to see where they are."

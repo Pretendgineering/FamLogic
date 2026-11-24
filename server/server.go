@@ -979,12 +979,13 @@ func (s *Server) handleIndexSettings(w http.ResponseWriter, r *http.Request, me 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request, me *Member) {
 	var req struct {
 		App    string   `json:"app"`
+		Device string   `json:"device"` // phone, tablet or display
 		Issues []string `json:"issues"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.store.SetStatus(me.ID, req.App, req.Issues); err != nil {
+	if err := s.store.SetStatus(me.ID, req.App, req.Device, req.Issues); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
 	}
@@ -1191,6 +1192,7 @@ type adminMember struct {
 	HiddenFrom  []string `json:"hiddenFrom"`
 	// Phone health
 	App         string   `json:"app,omitempty"`
+	Device      string   `json:"device,omitempty"`
 	Issues      []string `json:"issues"`
 	StatusAt    int64    `json:"statusAt,omitempty"`
 	LastContact int64    `json:"lastContact,omitempty"`
@@ -1209,7 +1211,7 @@ func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
 	out := make([]adminMember, len(ms))
 	for i, m := range ms {
 		out[i] = adminMember{pub[i], m.Username, m.PasswordHash != "", m.LastSignIn, append([]string{}, m.HiddenFrom...),
-			m.App, append([]string{}, m.Issues...), m.StatusAt, m.LastContact, m.SilentSince != 0}
+			m.App, m.Device, append([]string{}, m.Issues...), m.StatusAt, m.LastContact, m.SilentSince != 0}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"members": out, "circles": s.store.Circles(), "places": s.store.AllPlaces(), "server": s.serverInfo()})
 }

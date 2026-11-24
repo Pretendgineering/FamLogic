@@ -35,7 +35,13 @@ object Health {
         val now = System.currentTimeMillis()
         if (sig == lastSent && now - lastSentAt < 6 * 3_600_000L) return
         try {
-            Api(prefs.serverUrl, prefs.token).sendStatus(BuildConfig.VERSION_NAME, issues)
+            Api(prefs.serverUrl, prefs.token).sendStatus(BuildConfig.VERSION_NAME, issues,
+                // What this device is, for the console's Devices page.
+                device = when {
+                    Access.isDisplay -> "display"
+                    ctx.resources.configuration.smallestScreenWidthDp >= 600 -> "tablet"
+                    else -> "phone"
+                })
             lastSent = sig
             lastSentAt = now
         } catch (e: IOException) {

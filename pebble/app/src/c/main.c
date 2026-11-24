@@ -578,20 +578,6 @@ static void add_nudges(ActionMenuLevel *level, bool adults, int max) {
   for (int i = 0; i < n; i++) action_menu_level_add_action(level, NUDGE_WORDS[i], request_action, (void *)NUDGE_KINDS[i]);
 }
 
-static void open_person_menu(Person *p) {
-  strncpy(s_target_id, p->id, sizeof(s_target_id) - 1);
-  ActionMenuLevel *root = action_menu_level_create(4);
-  ActionMenuLevel *nudge = action_menu_level_create(NUDGES_ALL + 1);
-  if (p->flags & F_SOS) action_menu_level_add_action(root, "I've seen your SOS", request_action, "seen");
-  action_menu_level_add_action(root, "Pick me up", request_action, "pickup");
-  action_menu_level_add_action(root, "Call me", request_action, "call");
-  action_menu_level_add_child(root, nudge, "Nudge");
-  action_menu_level_add_action(nudge, "Where are you?", request_action, "where");
-  add_nudges(nudge, (p->flags & F_ADULT) != 0, NUDGES_ALL);
-  ActionMenuConfig cfg = menu_config(root);
-  action_menu_open(&cfg);
-}
-
 // Someone checked in: reply with a nudge (or not).
 static void open_checkin_reply(const char *id, bool adults) {
   strncpy(s_target_id, id, sizeof(s_target_id) - 1);
@@ -615,57 +601,209 @@ static void open_where_reply(const char *id, const char *name) {
 }
 
 // ---------------------------------------------------------------- one person
+// Their details at the top, then everything you can send them in one list, so a
+// nudge is one press away: scroll down and press Select. (Holding Select is SOS.)
 
 static Window *s_person;
-static TextLayer *s_person_name, *s_person_status, *s_person_detail;
+static MenuLayer *s_person_menu;
 static int s_person_idx;
+static int s_sent_row = -1;       // the row showing "Sent", briefly
+static AppTimer *s_sent_timer;
 
-static void person_select(ClickRecognizerRef r, void *ctx) { open_person_menu(&s_people[s_person_idx]); }
+// The rows below the details: requests, then nudges (kind, label).
+typedef struct { const char *kind, *label; } PersonAction;
+static PersonAction s_actions[16];
+static int s_action_count;
+
+static void person_build(Person *p) {
+  int n = 0;
+  if (p->flags & F_SOS) s_actions[n++] = (PersonAction){"seen", "I've seen your SOS"};
+  s_actions[n++] = (PersonAction){"pickup", "Pick me up"};
+  s_actions[n++] = (PersonAction){"call", "Call me"};
+  s_actions[n++] = (PersonAction){"where", "Where are you?"};
+  int nudges = (p->flags & F_ADULT) ? NUDGES_ALL : NUDGES_FOR_ALL;
+  for (int i = 0; i < nudges && n < 16; i++) s_actions[n++] = (PersonAction){NUDGE_KINDS[i], NUDGE_WORDS[i]};
+  s_action_count = n;
+}
+
+/** A small drawn picture for each nudge (the watch has no emoji font). */
+static void draw_nudge_icon(GContext *g, GRect r, const char *kind, GColor ink) {
+  GPoint c = grect_center_point(&r);
+  int rad = r.size.w / 2 - 1;
+  graphics_context_set_stroke_color(g, ink);
+  graphics_context_set_fill_color(g, ink);
+  graphics_context_set_stroke_width(g, 2);
+  if (strcmp(kind, "heart") == 0) {
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorRed, ink));
+    graphics_fill_circle(g, GPoint(c.x - 5, c.y - 3), 6);
+    graphics_fill_circle(g, GPoint(c.x + 5, c.y - 3), 6);
+    GPoint tri[] = {{c.x - 11, c.y - 1}, {c.x + 11, c.y - 1}, {c.x, c.y + 11}};
+    GPathInfo info = {3, tri};
+    GPath *path = gpath_create(&info);
+    gpath_draw_filled(g, path);
+    gpath_destroy(path);
+  } else if (strcmp(kind, "smile") == 0 || strcmp(kind, "alien") == 0 || strcmp(kind, "cowboy") == 0 || strcmp(kind, "ogre") == 0) {
+    GColor face = strcmp(kind, "alien") == 0 ? PBL_IF_COLOR_ELSE(GColorGreen, ink)
+                : strcmp(kind, "ogre") == 0 ? PBL_IF_COLOR_ELSE(GColorRed, ink) : PBL_IF_COLOR_ELSE(GColorChromeYellow, ink);
+    graphics_context_set_fill_color(g, face);
+    graphics_fill_circle(g, GPoint(c.x, c.y + 2), rad - 3);
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorBlack, GColorBlack));
+    graphics_fill_circle(g, GPoint(c.x - 4, c.y), 2);
+    graphics_fill_circle(g, GPoint(c.x + 4, c.y), 2);
+    graphics_fill_rect(g, GRect(c.x - 4, c.y + 6, 9, 2), 1, GCornersAll);
+    if (strcmp(kind, "cowboy") == 0) { // a hat
+      graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorWindsorTan, ink));
+      graphics_fill_rect(g, GRect(c.x - 12, c.y - 7, 25, 3), 1, GCornersAll);
+      graphics_fill_rect(g, GRect(c.x - 6, c.y - 13, 13, 7), 2, GCornersTop);
+    } else if (strcmp(kind, "ogre") == 0) { // horns
+      GPoint l[] = {{c.x - 9, c.y - 5}, {c.x - 5, c.y - 8}, {c.x - 11, c.y - 14}};
+      GPoint rt[] = {{c.x + 9, c.y - 5}, {c.x + 5, c.y - 8}, {c.x + 11, c.y - 14}};
+      GPathInfo a = {3, l}, b = {3, rt};
+      graphics_context_set_fill_color(g, face);
+      GPath *pa = gpath_create(&a), *pb = gpath_create(&b);
+      gpath_draw_filled(g, pa); gpath_draw_filled(g, pb);
+      gpath_destroy(pa); gpath_destroy(pb);
+    }
+  } else if (strcmp(kind, "thumbs") == 0) {
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorChromeYellow, ink));
+    graphics_fill_rect(g, GRect(c.x - 7, c.y - 1, 15, 12), 3, GCornersAll); // fist
+    graphics_fill_rect(g, GRect(c.x - 5, c.y - 12, 6, 13), 3, GCornersAll); // thumb
+    graphics_context_set_fill_color(g, ink);
+    graphics_fill_rect(g, GRect(c.x - 12, c.y, 4, 11), 1, GCornersAll);     // cuff
+  } else if (strcmp(kind, "wave") == 0) {
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorChromeYellow, ink));
+    graphics_fill_circle(g, GPoint(c.x, c.y + 5), 7);
+    for (int f = 0; f < 4; f++) graphics_fill_rect(g, GRect(c.x - 7 + f * 4, c.y - 9, 3, 12), 1, GCornersAll);
+    graphics_fill_rect(g, GRect(c.x + 7, c.y - 2, 3, 8), 1, GCornersAll);
+  } else if (strcmp(kind, "comehome") == 0) {
+    GPoint roof[] = {{c.x - 12, c.y}, {c.x, c.y - 11}, {c.x + 12, c.y}};
+    GPathInfo info = {3, roof};
+    GPath *path = gpath_create(&info);
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorRoseVale, ink));
+    gpath_draw_filled(g, path);
+    gpath_destroy(path);
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorChromeYellow, ink));
+    graphics_fill_rect(g, GRect(c.x - 8, c.y, 17, 11), 0, GCornerNone);
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorWindsorTan, bg()));
+    graphics_fill_rect(g, GRect(c.x - 2, c.y + 4, 5, 7), 0, GCornerNone);
+  } else if (strcmp(kind, "eggplant") == 0 || strcmp(kind, "peach") == 0) {
+    bool egg = kind[0] == 'e';
+    graphics_context_set_fill_color(g, egg ? PBL_IF_COLOR_ELSE(GColorPurple, ink) : PBL_IF_COLOR_ELSE(GColorRajah, ink));
+    if (egg) { graphics_fill_circle(g, GPoint(c.x + 2, c.y + 4), 7); graphics_fill_circle(g, GPoint(c.x - 3, c.y - 2), 5); }
+    else graphics_fill_circle(g, GPoint(c.x, c.y + 2), 9);
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorIslamicGreen, ink));
+    graphics_fill_rect(g, GRect(c.x - 6, c.y - 12, 8, 4), 2, GCornersAll);
+  } else {
+    // Requests: a ring with a mark (? for where, ! for SOS seen, a dot otherwise).
+    graphics_draw_circle(g, c, rad - 2);
+    const char *mark = strcmp(kind, "where") == 0 ? "?" : strcmp(kind, "seen") == 0 ? "!" : strcmp(kind, "call") == 0 ? "C" : "P";
+    graphics_context_set_text_color(g, ink);
+    graphics_draw_text(g, mark, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(r.origin.x, c.y - 13, r.size.w, 20), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  }
+}
+
+static uint16_t person_rows(MenuLayer *m, uint16_t section, void *ctx) { return 1 + s_action_count; }
+
+static int16_t person_row_height(MenuLayer *m, MenuIndex *i, void *ctx) {
+  if (i->row != 0) return 40;
+  // The details: as tall as they need (name, status, detail).
+  Person *p = &s_people[s_person_idx];
+  GRect b = layer_get_bounds(menu_layer_get_layer(m));
+  int w = b.size.w - 2 * PBL_IF_ROUND_ELSE(24, 6);
+  GSize st = graphics_text_layout_get_content_size(p->status, fonts_get_system_font(FONT_KEY_GOTHIC_24), GRect(0, 0, w, 200), GTextOverflowModeWordWrap, GTextAlignmentLeft);
+  GSize de = p->detail[0] ? graphics_text_layout_get_content_size(p->detail, fonts_get_system_font(FONT_KEY_GOTHIC_18), GRect(0, 0, w, 200), GTextOverflowModeWordWrap, GTextAlignmentLeft) : GSize(0, 0);
+  return PBL_IF_ROUND_ELSE(30, 6) + 32 + st.h + 4 + de.h + 10;
+}
+
+static void person_draw_row(GContext *g, const Layer *cell, MenuIndex *i, void *ctx) {
+  GRect b = layer_get_bounds(cell);
+  Person *p = &s_people[s_person_idx];
+  bool selected = menu_cell_layer_is_highlighted(cell);
+  GColor ink = selected ? PBL_IF_COLOR_ELSE(GColorWhite, bg()) : fg();
+  int inset = PBL_IF_ROUND_ELSE(24, 6);
+  if (i->row == 0) {
+    int w = b.size.w - 2 * inset;
+    int y = PBL_IF_ROUND_ELSE(30, 6);
+    GTextAlignment al = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
+    graphics_context_set_text_color(g, accent());
+    graphics_draw_text(g, p->name, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD), GRect(inset, y - 4, w, 32), GTextOverflowModeTrailingEllipsis, al, NULL);
+    graphics_context_set_text_color(g, fg());
+    GSize st = graphics_text_layout_get_content_size(p->status, fonts_get_system_font(FONT_KEY_GOTHIC_24), GRect(0, 0, w, 200), GTextOverflowModeWordWrap, al);
+    graphics_draw_text(g, p->status, fonts_get_system_font(FONT_KEY_GOTHIC_24), GRect(inset, y + 30, w, st.h + 4), GTextOverflowModeWordWrap, al, NULL);
+    if (p->detail[0]) graphics_draw_text(g, p->detail, fonts_get_system_font(FONT_KEY_GOTHIC_18), GRect(inset, y + 34 + st.h, w, 200), GTextOverflowModeWordWrap, al, NULL);
+    // A hint that there's more below.
+    graphics_context_set_fill_color(g, accent());
+    graphics_fill_rect(g, GRect(b.size.w / 2 - 10, b.size.h - 4, 20, 3), 1, GCornersAll);
+    return;
+  }
+  PersonAction *a = &s_actions[i->row - 1];
+  draw_nudge_icon(g, GRect(inset + 2, (b.size.h - 28) / 2, 28, 28), a->kind, ink);
+  graphics_context_set_text_color(g, ink);
+  const char *label = (i->row == s_sent_row) ? "Sent" : a->label;
+  graphics_draw_text(g, label, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD), GRect(inset + 38, 4, b.size.w - inset * 2 - 38, 30),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+}
+
+static void sent_clear(void *ctx) {
+  s_sent_timer = NULL;
+  s_sent_row = -1;
+  if (s_person_menu) menu_layer_reload_data(s_person_menu);
+}
+
+static void person_select(ClickRecognizerRef r, void *ctx) {
+  int row = menu_layer_get_selected_index(s_person_menu).row;
+  if (row == 0) { menu_layer_set_selected_next(s_person_menu, false, MenuRowAlignCenter, true); return; }
+  PersonAction *a = &s_actions[row - 1];
+  strncpy(s_target_id, s_people[s_person_idx].id, sizeof(s_target_id) - 1);
+  if (strcmp(a->kind, "seen") == 0) send_cmd(C_SEEN, s_target_id, NULL, NULL, 0);
+  else send_cmd(C_REQUEST, s_target_id, a->kind, NULL, 0);
+  vibes_short_pulse();
+  s_sent_row = row;
+  menu_layer_reload_data(s_person_menu);
+  if (s_sent_timer) app_timer_cancel(s_sent_timer);
+  s_sent_timer = app_timer_register(1500, sent_clear, NULL);
+}
+
+static void person_up(ClickRecognizerRef r, void *ctx) { menu_layer_set_selected_next(s_person_menu, true, MenuRowAlignCenter, true); }
+static void person_down(ClickRecognizerRef r, void *ctx) { menu_layer_set_selected_next(s_person_menu, false, MenuRowAlignCenter, true); }
 
 static void person_clicks(void *ctx) {
+  window_single_repeating_click_subscribe(BUTTON_ID_UP, 150, person_up);
+  window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 150, person_down);
   window_single_click_subscribe(BUTTON_ID_SELECT, person_select);
   hold_subscribe(700);
 }
 
 static void person_load(Window *w) {
   Layer *root = window_get_root_layer(w);
-  GRect b = layer_get_bounds(root);
-  int inset = PBL_IF_ROUND_ELSE(24, 6);
-  int top = PBL_IF_ROUND_ELSE(30, 8);
-  s_person_name = text_layer_create(GRect(inset, top, b.size.w - 2 * inset, 32));
-  s_person_status = text_layer_create(GRect(inset, top + 34, b.size.w - 2 * inset, 50));
-  s_person_detail = text_layer_create(GRect(inset, top + 86, b.size.w - 2 * inset, b.size.h - top - 90));
-  TextLayer *ls[] = {s_person_name, s_person_status, s_person_detail};
-  for (int i = 0; i < 3; i++) {
-    text_layer_set_background_color(ls[i], GColorClear);
-    text_layer_set_text_color(ls[i], fg());
-    text_layer_set_overflow_mode(ls[i], GTextOverflowModeWordWrap);
-    text_layer_set_text_alignment(ls[i], PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
-    layer_add_child(root, text_layer_get_layer(ls[i]));
-  }
-  text_layer_set_text_color(s_person_name, accent());
-  text_layer_set_font(s_person_name, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
-  text_layer_set_font(s_person_status, fonts_get_system_font(FONT_KEY_GOTHIC_24));
-  text_layer_set_font(s_person_detail, fonts_get_system_font(FONT_KEY_GOTHIC_18));
+  s_person_menu = menu_layer_create(layer_get_bounds(root));
+  menu_layer_set_callbacks(s_person_menu, NULL, (MenuLayerCallbacks){
+                                                    .get_num_rows = person_rows,
+                                                    .get_cell_height = person_row_height,
+                                                    .draw_row = person_draw_row,
+                                                });
+  menu_layer_set_normal_colors(s_person_menu, bg(), fg());
+  menu_layer_set_highlight_colors(s_person_menu, highlight(), PBL_IF_COLOR_ELSE(GColorWhite, bg()));
+  layer_add_child(root, menu_layer_get_layer(s_person_menu));
 }
 
 static void person_show(void) {
-  Person *p = &s_people[s_person_idx];
-  text_layer_set_text(s_person_name, p->name);
-  text_layer_set_text(s_person_status, p->status);
-  text_layer_set_text(s_person_detail, p->detail);
+  if (!s_person_menu) return;
+  person_build(&s_people[s_person_idx]);
+  menu_layer_reload_data(s_person_menu);
 }
 
 static void person_appear(Window *w) { hold_attach(w); }
 
 static void person_unload(Window *w) {
-  text_layer_destroy(s_person_name);
-  text_layer_destroy(s_person_status);
-  text_layer_destroy(s_person_detail);
+  if (s_sent_timer) { app_timer_cancel(s_sent_timer); s_sent_timer = NULL; }
+  menu_layer_destroy(s_person_menu);
+  s_person_menu = NULL;
 }
 
 static void open_person(int idx) {
   s_person_idx = idx;
+  s_sent_row = -1;
   if (!s_person) {
     s_person = window_create();
     window_set_click_config_provider(s_person, person_clicks);
@@ -674,6 +812,8 @@ static void open_person(int idx) {
   window_set_background_color(s_person, bg());
   window_stack_push(s_person, true);
   person_show();
+  // Start on the details; Down goes to the first thing to send.
+  menu_layer_set_selected_index(s_person_menu, MenuIndex(0, 0), MenuRowAlignTop, false);
 }
 
 // ---------------------------------------------------------------- radar and maps

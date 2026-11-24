@@ -180,16 +180,16 @@ const isDriving = (m) => !!(m.loc && m.loc.driving && !m.paused && Date.now() - 
 
 function describe(m) {
   if (isDriving(m) && !m.sosSince) {
-    return `Driving · ${ago(m.loc.time)}` + (m.loc.battery >= 0 ? ` · ${m.loc.battery}%${m.loc.charging ? " ⚡" : ""}` : "");
+    return `Driving · ${ago(m.loc.time)}` + (m.loc.battery >= 0 ? ` · ${m.loc.battery}%${m.loc.charging ? ", charging" : ""}` : "");
   }
   if (m.place && !m.sosSince && !m.paused && m.loc) {
-    return `At ${m.place} · ${ago(m.loc.time)}` + (m.loc.battery >= 0 ? ` · ${m.loc.battery}%${m.loc.charging ? " ⚡" : ""}` : "");
+    return `At ${m.place} · ${ago(m.loc.time)}` + (m.loc.battery >= 0 ? ` · ${m.loc.battery}%${m.loc.charging ? ", charging" : ""}` : "");
   }
   if (m.sosSince) return `SOS since ${new Date(m.sosSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` + (m.loc ? ` · ${ago(m.loc.time)}` : "");
   if (m.paused) return "Sharing paused";
   if (!m.loc) return "No location yet";
   const parts = [ago(m.loc.time)];
-  if (m.loc.battery >= 0) parts.push(`${m.loc.battery}%${m.loc.charging ? " ⚡" : m.loc.saving ? " (saving battery)" : ""}`);
+  if (m.loc.battery >= 0) parts.push(`${m.loc.battery}%${m.loc.charging ? ", charging" : m.loc.saving ? " (saving battery)" : ""}`);
   if (m.loc.watch > 0) parts.push(`watch ${m.loc.watch}%`);
   return parts.join(" · ");
 }
@@ -956,11 +956,9 @@ const moduleOn = (id) => !modulesLoaded || !!(moduleInfo(id) || {}).enabled;
 
 // What's coming in each module, for its placeholder page.
 const MODULE_PLANS = {
-  chat: ["A family group chat, plus one-to-one chats.", "Photos, read receipts, and new messages as notifications through the same always-on connection SOS alerts use.", "Parents can see their children's chats; children are told this in the app.", "Children sign in with a join code from you: no password to forget."],
-  calendar: ["A shared family calendar, with CalDAV so phone calendars and other apps can sync both ways.", "Events stored as Markdown in your family's notes folder, so AI agents and Obsidian can read and edit them."],
-  todos: ["Quick to-dos and shared lists (shopping, packing) from the app, the web, a Pebble or the Index 01 ring.", "Stored as Markdown task lists (- [ ] Milk) in your family's notes folder."],
-  chores: ["A chore chart: who does what, how often, ticked off on phones or the family display.", "Optional points or stars for children.", "Each chore is a Markdown note linked to the people who do it, so it shows up in Obsidian's graph."],
-  meals: ["Weekly meal plans and recipes, with ingredients added to the shopping list.", "One Markdown note per week, easy for an AI agent to plan or adjust."],
+  calendar: ["Shared calendar with CalDAV sync.", "Events kept as Markdown in the vault."],
+  todos: ["To-dos and shared lists.", "Kept as Markdown task lists in the vault."],
+  meals: ["Weekly meal plans and recipes.", "Ingredients go to the shopping list."],
 };
 
 let view = "";
@@ -1033,7 +1031,7 @@ function renderHome() {
   for (const m of modules) {
     if (m.id === "thereabouts" || !m.enabled || !MODULE_ICONS[m.id] || !document.querySelector(`.rail a[data-view="${m.id}"]`)) continue;
     const unread = m.id === "chat" ? chatUnread() : 0;
-    cards.push(card("#/" + m.id, MODULE_ICONS[m.id], displayName(m) + (unread ? ` · ${unread} new` : ""), m.available ? m.description : "Coming soon. " + m.description));
+    cards.push(card("#/" + m.id, MODULE_ICONS[m.id], displayName(m) + (unread ? ` · ${unread} new` : ""), m.available ? m.description : "Coming soon"));
   }
   const quiet = lastMembers.filter((m) => m.silent || (m.issues || []).length).length;
   cards.push(card("#/family", "people", "Family", "People, parents and children, invites."));
@@ -1335,12 +1333,12 @@ function renderDevices() {
   list.replaceChildren(...lastMembers.map((m) => el("li", {},
     avatarOf(m),
     el("div", { class: "grow" },
-      el("div", { class: "title" }, `${m.name}'s phone`),
+      el("div", { class: "title" }, `${m.name}'s ${{ tablet: "Tablet", display: "Family display" }[m.device] || "Phone"}`),
       m.app || m.lastContact ? health(m) : el("div", { class: "sub" }, "Hasn't reported yet")),
-    moreButton(`Options for ${m.name}'s phone`, [
-      ["Sign out this phone (new sign-in link)…", () => resetSignIn(m)],
+    moreButton(`Options for ${m.name}'s device`, [
+      ["Sign out this device (new sign-in link)…", () => resetSignIn(m)],
     ]))));
-  if (!lastMembers.length) list.append(el("li", { class: "muted" }, "No phones yet."));
+  if (!lastMembers.length) list.append(el("li", { class: "muted" }, "No devices yet."));
 }
 
 // Settings: Modules, Server, AI & API.
@@ -1718,19 +1716,27 @@ async function renderUpkeep(box, force = false) {
 
   // Add a chore.
   const title = el("input", { placeholder: "e.g. Unload the dishwasher", maxlength: "80" });
-  const who = el("div", { class: "acc-opts" }, ...people.map((m) => el("label", {}, el("input", { type: "checkbox", value: m.id }), m.name)));
+  // Who it's for: a toggle button per person (lit when chosen), like the app.
+  const who = el("div", { class: "toggles" }, ...people.map((m) => {
+    const b = el("button", { type: "button", class: "toggle", "data-id": m.id, "aria-pressed": "false" }, avatarOf(m), el("span", {}, m.name));
+    b.addEventListener("click", () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"));
+    return b;
+  }));
   const every = el("select", {}, ...REPEATS.map(([k, v]) => el("option", { value: k }, v)));
   const due = el("input", { type: "date", value: today });
-  const stars = el("input", { type: "number", min: "0", max: "100", value: "0", style: "width:5em" });
+  const stars = el("input", { type: "number", min: "0", max: "100", value: "0", style: "width:4.5em" });
+  const nudge = (n) => { const b = el("button", { type: "button", class: "secondary small" }, (n > 0 ? "+" : "−") + Math.abs(n));
+    b.addEventListener("click", () => { stars.value = Math.max(0, Math.min(100, (Number(stars.value) || 0) + n)); }); return b; };
+  const starPicker = el("div", { class: "stars-pick" }, el("span", {}, "Stars"), nudge(-10), nudge(-5), nudge(-1), stars, nudge(1), nudge(5), nudge(10));
   const notes = el("textarea", { rows: "2", placeholder: "Details (optional)", maxlength: "2000" });
   const add = el("form", { class: "upkeep-add" },
     el("label", {}, "Chore ", title), el("div", { class: "muted small" }, "For"), who,
-    el("div", { class: "row" }, el("label", {}, "Repeats ", every), el("label", {}, "From ", due), el("label", {}, "Stars ", stars)),
+    el("div", { class: "row" }, el("label", {}, "Repeats ", every), el("label", {}, "From ", due)), starPicker,
     notes, el("div", { class: "row" }, el("button", { type: "submit" }, "Add chore")));
   add.addEventListener("submit", (ev) => {
     ev.preventDefault();
     if (!title.value.trim()) return;
-    act("POST", "/api/chores", { title: title.value.trim(), who: [...who.querySelectorAll("input:checked")].map((i) => i.value),
+    act("POST", "/api/chores", { title: title.value.trim(), who: [...who.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.id),
       every: every.value, due: due.value, stars: Number(stars.value) || 0, notes: notes.value });
   });
 
@@ -1773,11 +1779,12 @@ async function renderUpkeep(box, force = false) {
     const n = data.stars[m.id] || 0;
     const btn = (label, body) => { const b = el("button", { type: "button", class: "secondary" }, label); b.addEventListener("click", () => act("POST", `/api/members/${m.id}/stars`, body)); return b; };
     return el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "title" }, m.name), el("div", { class: "sub" }, `★ ${n}`)),
-      btn("+1", { add: 1 }), btn("−1", { add: -1 }), btn("Spend all", { set: 0 }));
+      el("div", { class: "stars-pick" }, btn("−10", { add: -10 }), btn("−5", { add: -5 }), btn("−1", { add: -1 }),
+        btn("+1", { add: 1 }), btn("+5", { add: 5 }), btn("+10", { add: 10 }), btn("Spend all", { set: 0 })));
   };
 
   box.replaceChildren(
-    ...section("Due now", now, "Nothing due. 🎉"),
+    ...section("Due now", now, "Nothing due."),
     ...section("Coming up", later, "Nothing coming up."),
     ...(finished.length ? section("Done", finished, "") : []),
     ...(data.canEdit ? [el("h2", {}, "Add a chore"), add] : []),

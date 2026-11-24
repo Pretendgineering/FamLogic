@@ -79,8 +79,13 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Steward API keys:** the console (Settings → AI & API) makes named keys with scopes (people, chores, feed, location), shown once, logged and revocable; agents act as a grown-up named after the key. An OpenAPI description at `/api/v1/openapi.json`, and rules for agents in the vault guide. ("Tell Sam to unload the dishwasher" works today with an agent like Hermes; talking to it from the app comes with Steward.)
 - **Home:** the map tile takes any size (a plain preview when it's one tile wide or tall, its title bar from 2×2); dragging a tile now makes room wherever you hold it; the resize bars are easier to grab near the screen edge without triggering Back. Module switches live only in the console now: on a phone, tiles you don't want go in the drawer.
 
+### Design rules
+- **Say it short.** Descriptions, hints and empty states are one plain line; details live in the wiki.
+- **No emoji in text.** Emoji are for people's own icons and nudges, never in labels, descriptions or "nothing here" messages.
+- **The second colour is for small accents** (tile icons, the family name, selected chips and switches); the main colour is for actions.
+
 ### Design rule: tiles grow into mini versions
-A module's home tile is a **shortcut when small** (an icon, a name, a count) and a **live mini version when 2×2 or larger**: Upkeep shows the chores due, ticked right on the tile; Odds & Ends will show its lists and Datebook the next few events the same way. Opening the tile still goes to the full screen.
+A module's home tile is a **shortcut when small** (an icon, a name, a count) and a **live mini version when 2×2 or larger**: Upkeep shows the chores due, ticked right on the tile; Odds & Ends will show its lists and Datebook the next few events the same way. Opening the tile still goes to the full screen. One tile wide or tall, a tile becomes a strip of its newest items (across or down) with as many as fit.
 
 ### ✅ Back to cards (0.26.0)
 - After trying the flat, edge-to-edge look, the app and console go back to **rounded cards with a little depth** (Material You): settings in cards, home tiles as spaced cards; every arranging behaviour stays (tap to select, edge bars, gliding tiles, the drawer). The map's pull-up sheet stays.
