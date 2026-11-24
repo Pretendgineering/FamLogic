@@ -3,6 +3,7 @@ package io.github.pretendgineering.famlogic
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -142,6 +143,32 @@ fun StewardScreen(prefs: Prefs, onBack: () -> Unit) {
                 OutlinedTextField(draft, { draft = it.take(1000) }, Modifier.weight(1f), placeholder = { Text("Say or type…") }, maxLines = 4, shape = RoundedCornerShape(24.dp))
                 if (draft.isBlank()) TalkButton(prefs, 52.dp, onText = { if (it.isNotBlank()) say(it, spoken = true) })
                 else IconButton(onClick = { say(draft, spoken = false) }) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send") }
+            }
+        }
+    }
+}
+
+/**
+ * "Where's my ride?": whoever said "On my way" to you, how far they are and about
+ * how long until they get there (from their speed, or 40 km/h if they're stopped).
+ */
+@Composable
+fun RideBanner(members: List<Member>, me: String, onOpen: (String) -> Unit) {
+    val mine = members.find { it.id == me }?.loc ?: return
+    members.filter { it.rideTo == me && it.loc != null && !it.paused }.forEach { d ->
+        val loc = d.loc!!
+        val dist = FloatArray(1).also { android.location.Location.distanceBetween(mine.lat, mine.lon, loc.lat, loc.lon, it) }[0].toDouble()
+        val speed = maxOf(loc.speed, 11.0) // m/s; 40 km/h when stopped at lights
+        val mins = maxOf(1, (dist / speed / 60).toInt())
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer).clickable { onOpen(d.id) }.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Avatar(d.name, d.emoji, d.color, 40)
+            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                Text("${d.name} is on the way", style = MaterialTheme.typography.titleMedium)
+                Text("${Units.distance(dist)} away · about $mins min", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

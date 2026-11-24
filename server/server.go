@@ -152,6 +152,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/chores/{id}/undo", s.choreAuth(s.handleChoreUndo))
 	mux.HandleFunc("POST /api/members/{id}/stars", s.choreAuth(s.handleStars))
 	mux.HandleFunc("GET /api/rewards", s.choreAuth(s.handleRewards))
+	mux.HandleFunc("GET /api/checkplans", s.choreAuth(s.handleCheckPlans))
+	mux.HandleFunc("POST /api/checkplans", s.choreAuth(s.handleAddCheckPlan))
+	mux.HandleFunc("DELETE /api/checkplans/{id}", s.choreAuth(s.handleDeleteCheckPlan))
+	mux.HandleFunc("POST /api/checkplans/{id}/delete", s.choreAuth(s.handleDeleteCheckPlan))
 	mux.HandleFunc("GET /api/steward", s.device(s.handleStewardGet))
 	mux.HandleFunc("POST /api/steward", s.device(s.handleStewardSay))
 	mux.HandleFunc("DELETE /api/steward", s.device(s.handleStewardClear))
@@ -277,6 +281,9 @@ type publicMember struct {
 	SOSSince int64 `json:"sosSince,omitempty"`
 	// Who has seen it (names).
 	SOSSeenBy []string `json:"sosSeenBy,omitempty"`
+	// A phone number for Call buttons, and who they're driving to ("On my way").
+	Phone  string `json:"phone,omitempty"`
+	RideTo string `json:"rideTo,omitempty"`
 	// Circles: for phones, the ones in common with the viewer; for the dashboard, all of theirs.
 	Circles []string `json:"circles"`
 	// The place they're at (e.g. "Home"), if any.
@@ -289,7 +296,7 @@ type publicMember struct {
 func toPublic(ms []Member) []publicMember {
 	out := make([]publicMember, len(ms))
 	for i, m := range ms {
-		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Voice: m.Voice, Stars: m.Stars, Role: m.role(), Access: m.access(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles}
+		out[i] = publicMember{ID: m.ID, Name: m.Name, Color: m.Color, Emoji: m.Emoji, Voice: m.Voice, Stars: m.Stars, Role: m.role(), Access: m.access(), Paused: m.Paused, Loc: m.Loc, SOSSince: m.SOSSince, Circles: m.Circles, Phone: m.Phone, RideTo: activeRide(&m)}
 		if out[i].Circles == nil {
 			out[i].Circles = []string{}
 		}
@@ -301,7 +308,7 @@ func toPublic(ms []Member) []publicMember {
 // an older server can hide what won't work instead of failing.
 var serverFeatures = []string{"accounts", "instant-alerts", "sos", "checkin", "circles", "places", "trails",
 	"emoji", "status", "schedules", "trips", "driving", "sos-seen", "requests", "nudges", "reminders", "index01",
-	"modules", "roles", "kids", "chat-moderation", "access-levels", "grandparents", "unlock", "nudges2"}
+	"modules", "roles", "kids", "chat-moderation", "access-levels", "grandparents", "unlock", "nudges2", "rides", "checkplans", "phones"}
 
 func (s *Server) serverInfo() map[string]any {
 	features := slices.Clone(serverFeatures)
@@ -839,6 +846,7 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 		Color           *string  `json:"color"`
 		Emoji           *string  `json:"emoji"`
 		Voice           *string  `json:"voice"`
+		Phone           *string  `json:"phone"`
 		ShareLowBattery *bool    `json:"shareLowBattery"`
 		ShareArrivals   *bool    `json:"shareArrivals"`
 		TrailHours      *int     `json:"trailHours"`
@@ -906,7 +914,11 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request, me *Membe
 		writeError(w, http.StatusBadRequest, `voice must be "female", "male" or ""`)
 		return
 	}
-	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, Emoji: req.Emoji, Voice: req.Voice, ShareLowBattery: req.ShareLowBattery, ShareArrivals: req.ShareArrivals})
+	if req.Phone != nil && !validPhone(strings.TrimSpace(*req.Phone)) {
+		writeError(w, http.StatusBadRequest, "a phone number, like +44 7700 900123")
+		return
+	}
+	m, err := s.store.UpdateMember(me.ID, MemberPatch{Name: req.Name, Paused: req.Paused, Color: req.Color, Emoji: req.Emoji, Voice: req.Voice, Phone: req.Phone, ShareLowBattery: req.ShareLowBattery, ShareArrivals: req.ShareArrivals})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return

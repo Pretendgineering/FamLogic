@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -211,6 +212,18 @@ fun FenceEditBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp),
             )
+            // Arrive/leave alerts for this fence, right here, with a test.
+            if (draft.id != null) {
+                var alerts by remember(draft.id) { mutableStateOf(draft.id !in prefs.mutedPlaces) }
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Tell me when people arrive or leave", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    androidx.compose.material3.Switch(checked = alerts, colors = accentSwitch(), onCheckedChange = { on ->
+                        alerts = on
+                        prefs.mutedPlaces = if (on) prefs.mutedPlaces - draft.id else prefs.mutedPlaces + draft.id
+                    })
+                }
+                if (alerts) TextButton(onClick = { Alerts.test(context, "Someone arrived at ${draft.name}", "This is what an arrival alert looks like.") }) { Text("Send me a test alert") }
+            }
             if (circles.size > 1) {
                 Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     circles.forEach { c ->

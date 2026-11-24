@@ -51,7 +51,17 @@ data class Member(
     val role: String = "parent",
     /** admin, parent, older_child, younger_child or dependent. */
     val access: String = "parent",
+    /** Their phone number, for Call buttons ("" if they haven't given one). */
+    val phone: String = "",
+    /** Who they're driving to ("On my way"), if anyone. */
+    val rideTo: String = "",
 )
+
+/** Everyone's phone numbers, as last seen (for Call buttons on notifications). */
+object Directory {
+    @Volatile var phones: Map<String, String> = emptyMap()
+    @Volatile var names: Map<String, String> = emptyMap()
+}
 
 /** A note to yourself for arriving at (or leaving) a fence. */
 data class PlaceReminder(val id: String, val placeId: String, val text: String, val onLeave: Boolean)
@@ -289,6 +299,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
         val o = request("GET", "/api/members?since=$since")
         val arr = o.getJSONArray("members")
         val list = (0 until arr.length()).map { parseMember(arr.getJSONObject(it)) }
+        Directory.phones = list.filter { it.phone.isNotEmpty() }.associate { it.id to it.phone }
+        Directory.names = list.associate { it.id to it.name }
         val settings = o.optJSONObject("settings")
         return MembersResponse(
             me = o.getString("me"),
@@ -588,6 +600,29 @@ class Api(private val baseUrl: String, private val token: String = "") {
             done = (0 until (done?.length() ?: 0)).map { done!!.getJSONObject(it).let { d -> d.optString("date") to d.optString("by") } },
         )
     }
+
+    /** Your phone number, for others' Call buttons ("" removes it). */
+    suspend fun setPhone(phone: String) {
+        request("POST", "/api/me", JSONObject().put("phone", phone))
+    }
+
+    /** The parent-set check-in windows (a child sees their own). */
+    suspend fun checkPlans(): List<CheckPlan> {
+        val arr = request("GET", "/api/checkplans").optJSONArray("plans")
+        return (0 until (arr?.length() ?: 0)).map { i ->
+            arr!!.getJSONObject(i).let { o ->
+                CheckPlan(o.optString("id"), o.optString("memberId"), o.optString("placeId"),
+                    o.optJSONArray("days")?.let { d -> (0 until d.length()).map { d.getInt(it) } }.orEmpty(), o.optString("from"), o.optString("until"))
+            }
+        }
+    }
+
+    suspend fun addCheckPlan(memberId: String, placeId: String, days: List<Int>, from: String, until: String) {
+        request("POST", "/api/checkplans", JSONObject().put("memberId", memberId).put("placeId", placeId)
+            .put("days", org.json.JSONArray(days)).put("from", from).put("until", until))
+    }
+
+    suspend fun deleteCheckPlan(id: String) { request("POST", "/api/checkplans/" + enc(id) + "/delete") }
 
     /** The voice your messages are read aloud in: "female", "male" or "". */
     suspend fun setVoice(voice: String) {
@@ -946,6 +981,8 @@ class Api(private val baseUrl: String, private val token: String = "") {
             trips = o.optBoolean("trips", false),
             role = o.optString("role", "parent").ifEmpty { "parent" },
             access = o.optString("access", "parent").ifEmpty { "parent" },
+            phone = o.optString("phone"),
+            rideTo = o.optString("rideTo"),
             loc = l?.let {
                 MemberLocation(
                     lat = it.getDouble("lat"),
@@ -1026,6 +1063,9 @@ data class Chore(
     /** The times it was done, latest first: (date, member id). */
     val done: List<Pair<String, String>>,
 )
+
+/** A check-in window: a child should be at a fence between two times on some days. */
+data class CheckPlan(val id: String, val memberId: String, val placeId: String, val days: List<Int>, val from: String, val until: String)
 
 data class Reward(val id: String, val title: String, val cost: Int)
 data class RewardAsk(val id: String, val title: String, val cost: Int, val memberId: String, val time: Long, val status: String)

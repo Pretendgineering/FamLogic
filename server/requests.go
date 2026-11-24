@@ -61,7 +61,7 @@ var RequestKinds = map[string]bool{"pickup": true, "call": true, "where": true, 
 	// More nudges (0.20): a wave, a smile, "come home", and a few for fun.
 	"wave": true, "smile": true, "comehome": true, "cowboy": true, "alien": true, "ogre": true,
 	// Between adults only.
-	"eggplant": true, "peach": true}
+	"eggplant": true, "peach": true, "coming": true}
 
 // adultNudges go only from one adult (a parent or grandparent) to another.
 var adultNudges = map[string]bool{"eggplant": true, "peach": true}
@@ -92,6 +92,9 @@ func (s *Store) Request(fromID, toID, kind string, loc *Location) error {
 		return ErrNotAllowed
 	}
 	s.applyFixLocked(from, loc)
+	if kind == "coming" {
+		s.startRideLocked(from, to) // "On my way": their app shows how far you are
+	}
 	e := Event{Type: EventRequest, MemberID: from.ID, Name: from.Name, To: to.ID, Kind: kind}
 	// The location sent with the request (shared with this one person even while
 	// paused), else their last one unless they've paused sharing.

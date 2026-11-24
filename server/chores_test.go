@@ -331,3 +331,44 @@ func TestSteward(t *testing.T) {
 		t.Fatalf("history: %v", h)
 	}
 }
+
+func TestRidesAndCheckPlans(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	now := time.Now().UnixMilli()
+	e.status("POST", "/api/location", f.kid, map[string]any{"lat": 51.5, "lon": -0.1, "acc": 10, "battery": 80, "time": now})
+	e.status("POST", "/api/location", f.mom, map[string]any{"lat": 51.6, "lon": -0.1, "acc": 10, "battery": 80, "time": now})
+	if st, out := e.status("POST", "/api/requests", f.mom, map[string]any{"to": f.kidID, "kind": "coming"}); st >= 300 {
+		t.Fatalf("on my way: %d %v", st, out)
+	}
+	ride := func() any {
+		_, m := e.status("GET", "/api/members", f.kid, nil)
+		for _, x := range m["members"].([]any) {
+			if x.(map[string]any)["id"] == f.momID {
+				return x.(map[string]any)["rideTo"]
+			}
+		}
+		return nil
+	}
+	if ride() != f.kidID {
+		t.Fatal("mom should be on her way to the kid")
+	}
+	e.status("POST", "/api/location", f.mom, map[string]any{"lat": 51.5005, "lon": -0.1, "acc": 10, "battery": 80, "time": now + 1000})
+	if ride() != nil {
+		t.Fatal("arrived: the ride ends")
+	}
+	if st, _ := e.status("PATCH", "/api/me", f.mom, map[string]any{"phone": "+44 7700 900123"}); st != 200 {
+		t.Fatalf("phone: %d", st)
+	}
+	if st, _ := e.status("PATCH", "/api/me", f.mom, map[string]any{"phone": "call me maybe"}); st != 400 {
+		t.Fatalf("bad phone: %d", st)
+	}
+	// A check-in window: a child can't set one; a parent can.
+	plan := map[string]any{"memberId": f.kidID, "placeId": "nope", "days": []int{1, 2}, "from": "08:00", "until": "08:45"}
+	if st, _ := e.status("POST", "/api/checkplans", f.kid, plan); st != 403 {
+		t.Fatalf("children don't set these: %d", st)
+	}
+	if st, _ := e.status("POST", "/api/checkplans", f.mom, plan); st != 404 {
+		t.Fatalf("unknown fence: %d", st)
+	}
+}

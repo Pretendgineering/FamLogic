@@ -20,6 +20,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Talk to send a message (push to talk in chat) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- To find the Pebble phone app (PebbleKit 2) -->
     <queries>
@@ -45,6 +46,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FamLogic">
 
+        <!-- Someone's SOS, full screen even over the lock screen. -->
+        <activity
+            android:name=".SosAlertActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.FamLogic" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

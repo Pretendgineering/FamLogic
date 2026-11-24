@@ -101,6 +101,10 @@ type Member struct {
 
 	// Who has seen their current SOS (member ids), see requests.go.
 	SOSSeenBy []string `json:"sosSeenBy,omitempty"`
+	// Safety: a phone number for Call buttons, and who they\'re driving to ("On my way").
+	Phone     string `json:"phone,omitempty"`
+	RideTo    string `json:"rideTo,omitempty"`
+	RideSince int64  `json:"rideSince,omitempty"`
 	// Index 01 ring webhooks (see index01.go): the secret in their URLs, and the
 	// optional signing secret.
 	IndexToken  string `json:"indexToken,omitempty"`
@@ -169,8 +173,9 @@ type data struct {
 	ParentPIN string `json:"parentPin,omitempty"`
 
 	// Recent alerts for phones to pick up (see events.go).
-	LastEventID int64   `json:"lastEventId"`
-	Events      []Event `json:"events,omitempty"`
+	LastEventID int64       `json:"lastEventId"`
+	Events      []Event     `json:"events,omitempty"`
+	CheckPlans  []CheckPlan `json:"checkPlans,omitempty"`
 }
 
 // Store keeps everything in memory and writes it to one JSON file.
@@ -429,6 +434,7 @@ func (s *Store) UpdateLocation(id string, loc Location) error {
 	s.checkDrivingLocked(m, wasDriving, loc)
 	s.checkBatteryLocked(m, loc)
 	s.checkPlacesLocked(m, loc)
+	s.checkRideLocked(m, loc)
 	s.addTrailPointLocked(m, loc)
 	return s.saveLocked()
 }
@@ -440,6 +446,7 @@ type MemberPatch struct {
 	Color           *string
 	Emoji           *string
 	Voice           *string
+	Phone           *string
 	ShareLowBattery *bool
 	ShareArrivals   *bool
 }
@@ -461,6 +468,9 @@ func (s *Store) UpdateMember(id string, p MemberPatch) (*Member, error) {
 	}
 	if p.Voice != nil {
 		m.Voice = *p.Voice
+	}
+	if p.Phone != nil {
+		m.Phone = strings.TrimSpace(*p.Phone)
 	}
 	if p.Emoji != nil {
 		m.Emoji = *p.Emoji

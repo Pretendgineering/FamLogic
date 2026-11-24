@@ -138,6 +138,7 @@ func main() {
 		go app.vault.Keep(bg, store)
 	}
 	go app.KeepChoreReminders(bg)
+	go app.KeepCheckPlans(bg)
 
 	go func() {
 		log.Printf("FamLogic %s listening on %s (data in %s, vault in %s, running as %d:%d)", version, cfg.Listen, cfg.DataDir, cfg.VaultDir, os.Getuid(), os.Getgid())

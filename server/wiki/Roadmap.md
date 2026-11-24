@@ -106,12 +106,12 @@ The map, chat and safety features are what families use every day. Next, each ge
 - Photos: a full-screen viewer (pinch to zoom, save), several sent at once.
 - Voice messages (tap the mic when the box is empty); search across your chats; a "new messages" button when you've scrolled back; "is typing…".
 
-### 🔨 3. Safety
-- SOS: a clearer full-screen alert for everyone else (who, where, how long ago, call and directions buttons), with "I'm on my way" replies the sender sees.
-- Check-ins: scheduled check-in reminders for children ("check in when you get to school"), missed check-in alerts to parents.
-- Arrive/leave alerts that are easier to set up from a fence, with a test button.
-- "Where's my ride?": whoever is driving to you, and how far away.
-- Low-battery and quiet-phone alerts with a single tap to call.
+### ✅ 3. Safety, 0.33.0
+- **SOS** opens full screen on everyone else's phone, even locked, with an alarm that rings on silent: who, where, how long ago, how far, and Call, Directions, I'm on my way and I've seen it.
+- **Check-in times** for children (a parent sets them on the child's card): a fence, days and a window; the child is reminded at the start, parents are told if they haven't arrived or checked in by the end.
+- **Fence alerts** switched on or off right in the fence editor, with a test alert.
+- **Where's my ride?** Answer a "Pick me up" (or an SOS) with "On my way" and the other person sees how far you are and about how long until you get there.
+- **Call buttons** on SOS, pick-up, low-battery, quiet-phone and missed check-in alerts, for everyone who adds their number (Settings → You).
 
 ### ⏳ 4. Guided setup (the on-ramp)
 A walkthrough in the web console that sets everything up properly the first time, by asking questions rather than showing settings, and can be run again later (Settings → Run setup again) to revisit any step:

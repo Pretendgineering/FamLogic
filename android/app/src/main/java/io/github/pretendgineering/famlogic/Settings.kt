@@ -1016,6 +1016,31 @@ private fun AccountPage(
         }
         nameMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
+    // Your number, for the Call buttons on others' alerts (SOS, pick-ups, low battery).
+    if (!Access.younger) SettingsCard("Your Phone Number") {
+        var phone by remember { mutableStateOf(Directory.phones[prefs.memberId].orEmpty()) }
+        var phoneMsg by remember { mutableStateOf<String?>(null) }
+        Hint("Your family's Call buttons use it. Only your family can see it.")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = phone, onValueChange = { phone = it.take(24); phoneMsg = null },
+                placeholder = { Text("+44 7700 900123") }, singleLine = true, modifier = Modifier.weight(1f),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+            )
+            Button(onClick = {
+                scope.launch {
+                    phoneMsg = try {
+                        Api(prefs.serverUrl, prefs.token).setPhone(phone.trim())
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                        if (phone.isBlank()) "Removed" else "Saved"
+                    } catch (e: IOException) {
+                        e.message ?: "Couldn't save"
+                    }
+                }
+            }) { Text("Save") }
+        }
+        phoneMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
 }
 
 /** Your icon (an emoji and a colour), at the top of Customize. */

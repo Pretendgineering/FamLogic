@@ -29,6 +29,22 @@ class SeenReceiver : BroadcastReceiver() {
             }
             return
         }
+        if (intent.action == ACTION_COMING) {
+            // "On my way": to an SOS or a pick-up request. Their app shows how far you are.
+            NotificationManagerCompat.from(context).cancel(intent.getIntExtra(EXTRA_ID, 0))
+            NotificationManagerCompat.from(context).cancel(Alerts.sosId(memberId))
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val api = Api(prefs.serverUrl, prefs.token)
+                    if (intent.getBooleanExtra(EXTRA_SOS, false)) runCatching { api.sosSeen(memberId) }
+                    runCatching { api.request(memberId, "coming", currentLocation(context)) }
+                } finally {
+                    pending.finish()
+                }
+            }
+            return
+        }
         if (intent.action == ACTION_HERE) {
             NotificationManagerCompat.from(context).cancel(intent.getIntExtra(EXTRA_ID, 0))
             val pending = goAsync()
@@ -58,6 +74,8 @@ class SeenReceiver : BroadcastReceiver() {
         const val EXTRA_ID = "id"
         const val ACTION_HERE = "io.github.pretendgineering.famlogic.HERE"
         const val ACTION_NUDGE = "io.github.pretendgineering.famlogic.NUDGE"
+        const val ACTION_COMING = "io.github.pretendgineering.famlogic.COMING"
+        const val EXTRA_SOS = "sos"
         const val EXTRA_KIND = "kind"
     }
 }

@@ -238,6 +238,7 @@ fun HomeScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            if (!editing) RideBanner(members, prefs.memberId) { onOpen(Tab.Map) }
             if (sosActive) {
                 Row(
                     Modifier.fillMaxWidth().padding(12.dp),

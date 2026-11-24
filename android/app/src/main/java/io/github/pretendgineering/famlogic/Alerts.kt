@@ -68,7 +68,7 @@ object Alerts {
                 // The server raises one alert at 15% and one at 10%; show the one this phone asked for.
                 if (!prefs.notifyLowBattery || e.level != prefs.lowBatteryThreshold || e.memberId in prefs.mutedPeople) return
                 val pct = if (e.battery >= 0) "${e.battery}%" else "low"
-                notify(context, CHANNEL_ALERTS, eventId(e), "${e.name}'s battery is at $pct", "Their phone may turn off soon.", e.memberId)
+                notify(context, CHANNEL_ALERTS, eventId(e), "${e.name}'s battery is at $pct", "Their phone may turn off soon.", e.memberId, callFor = e.memberId)
             }
             "sos" -> {
                 if (!prefs.notifySos) return
@@ -82,8 +82,10 @@ object Alerts {
                 val said = if (e.note.isNotEmpty()) " They said: \u201c${e.note}\u201d" else ""
                 val hr = if (e.heartRate > 0) " Heart rate ${e.heartRate}." else ""
                 notify(
-                    context, CHANNEL_SOS, sosId(e.memberId), "🆘 SOS from ${e.name}$from",
+                    context, CHANNEL_SOS, sosId(e.memberId), "SOS from ${e.name}$from",
                     "${e.name} needs help.$said$hr $where", e.memberId, sos = true, seenFor = e.memberId,
+                    comingFor = e.memberId, callFor = e.memberId,
+                    fullScreen = SosAlertActivity.intent(context, e.memberId, e.name),
                 )
             }
             "sos_remote" -> {
@@ -103,7 +105,8 @@ object Alerts {
             "request" -> {
                 if (e.memberId in prefs.mutedPeople) return
                 val (title, text) = requestText(e)
-                notify(context, CHANNEL_ALERTS, eventId(e), title, text, e.memberId, hereFor = if (e.kind == "where") e.memberId else "")
+                notify(context, CHANNEL_ALERTS, eventId(e), title, text, e.memberId, hereFor = if (e.kind == "where") e.memberId else "",
+                    comingFor = if (e.kind == "pickup") e.memberId else "", callFor = if (e.kind == "pickup" || e.kind == "call") e.memberId else "")
             }
             "chat" -> ChatNotify.show(context, e)
             "reminder" -> {
@@ -135,6 +138,10 @@ object Alerts {
                 "approved" -> notify(context, CHANNEL_ALERTS, eventId(e), "Yes: ${e.title}", "${e.name} said yes. ★ ${e.level} spent.", "", upkeep = true)
                 else -> notify(context, CHANNEL_ALERTS, eventId(e), "Not this time", "${e.name} said no to ${e.title}.", "", upkeep = true)
             }
+            // Safety: check-in windows and rides.
+            "checkin_remind" -> notify(context, CHANNEL_ALERTS, eventId(e), "Check in when you get to ${e.place}", "Tap Check in on FamLogic when you're there.", "")
+            "checkin_missed" -> notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} hasn't got to ${e.place} yet", "Their check-in time has passed. Tap to see where they are.", e.memberId, callFor = e.memberId)
+            "ride_here" -> notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} is here", "Your ride has arrived.", e.memberId)
             "checkin" -> {
                 if (!prefs.notifyCheckIn || e.memberId in prefs.mutedPeople) return
                 val text = e.note.ifBlank { "Tap to see where." }
@@ -174,6 +181,7 @@ object Alerts {
                 notify(
                     context, CHANNEL_ALERTS, eventId(e), "${e.name}'s phone hasn't been in touch for a while",
                     "It may be off, out of battery or offline, or FamLogic was stopped.$battery Tap to see where it was last.", e.memberId,
+                    callFor = e.memberId,
                 )
             }
             // Unknown types come from a newer server: ignore them.
@@ -189,10 +197,14 @@ object Alerts {
     }
 
     /** Requests ("pick me up", "call me") and nudges (where are you, heart, thumbs up, here I am). */
+    /** A sample alert, so people can check alerts reach them. */
+    fun test(context: Context, title: String, text: String) = notify(context, CHANNEL_ALERTS, 999_999, title, text, "")
+
     fun requestText(e: AppEvent): Pair<String, String> = when (e.kind) {
         "call" -> "${e.name} asks you to call them" to "Tap to see where they are."
         "where" -> "${e.name} asks where you are" to "Tap \"Send where I am\" to tell just them."
         "comehome" -> "${e.name}: come home" to "Tap to see where they are."
+        "coming" -> "${e.name} is on the way" to "Tap to see how far away they are."
         in Nudges.all.map { it.kind } -> "${e.name} sent you ${Nudges.byKind(e.kind)!!.emoji}" to "Just a nudge."
         "here" -> "${e.name}: here I am" to (if (e.place.isNotEmpty()) "At ${e.place}. " else "") + "Tap to see them on the map."
         else -> "${e.name} asks you to pick them up" to "Tap to see where they are."
@@ -257,6 +269,12 @@ object Alerts {
         nudgeFor: String = "",
         /** Tapping opens Upkeep instead of the map. */
         upkeep: Boolean = false,
+        /** Adds an "On my way" button (to their SOS or pick-up request). */
+        comingFor: String = "",
+        /** Adds a "Call" button, if they've given their number. */
+        callFor: String = "",
+        /** Opens full screen, even over the lock screen (an SOS). */
+        fullScreen: Intent? = null,
     ) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -295,6 +313,24 @@ object Alerts {
                 )
                 b.addAction(0, Nudges.byKind(kind)!!.emoji, reply)
             }
+        }
+        if (comingFor.isNotEmpty()) {
+            val coming = PendingIntent.getBroadcast(
+                context, id * 4 + 3, Intent(context, SeenReceiver::class.java)
+                    .setAction(SeenReceiver.ACTION_COMING).putExtra(SeenReceiver.EXTRA_MEMBER, comingFor).putExtra(SeenReceiver.EXTRA_ID, id).putExtra(SeenReceiver.EXTRA_SOS, sos),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            b.addAction(0, "On my way", coming)
+        }
+        Directory.phones[callFor]?.let { phone ->
+            val call = PendingIntent.getActivity(
+                context, id * 4 + 2, Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:$phone")),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            b.addAction(0, "Call", call)
+        }
+        fullScreen?.let {
+            b.setFullScreenIntent(PendingIntent.getActivity(context, id, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE), true)
         }
         if (hereFor.isNotEmpty()) {
             val here = PendingIntent.getBroadcast(

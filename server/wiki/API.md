@@ -55,6 +55,8 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `GET /api/feed?from=<ms>&to=<ms>` | `Bearer <token>`, a key with `feed` | The family feed (default the last 24 hours, at most 8 days): `{items:[event]}` newest first, the same visibility as alerts |
 | `GET /api/steward`; `POST /api/steward {text}`; `DELETE /api/steward` | `Bearer <token>` (grown-ups, or everyone if the admin allows) | Talk to Steward: the server asks the family's model (Settings → AI & API), which acts as you through the same handlers and permissions. Feature `steward` (and `steward-kids`) |
 | `GET`/`PUT /api/admin/steward {enabled, url, model, key?, everyone}`; `POST /api/admin/steward/test` | admin session | The model Steward talks through: any OpenAI-compatible address (Ollama, a Hermes server, a cloud provider). The key is never sent back |
+| `GET /api/checkplans`; `POST /api/checkplans {memberId, placeId, days, from, until}`; `DELETE /api/checkplans/{id}` | parents set them; a child sees their own | Check-in times: a reminder at `from`, parents told (`checkin_missed`) if the child hasn't arrived or checked in by `until` |
+| `POST /api/requests {to, kind: "coming"}` | `Bearer <token>` | "On my way": you show as driving to them (`rideTo`) until you're within 150 m or 90 minutes pass |
 | `GET /api/v1/people` | a key with `people` | Everyone's id, name, role, access, stars and voice (no locations) |
 | `GET /api/v1/openapi.json` | none | The OpenAPI description of what keys can use |
 | `GET`/`POST /api/admin/keys` `{name, scopes, days?}`, `DELETE /api/admin/keys/{id}` | admin session | Steward keys: list (with the recent-use log), make one (the key is returned once), revoke |

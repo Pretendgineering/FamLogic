@@ -94,6 +94,8 @@ fun PersonSheet(
                     DirectionsButton(onDirections)
                 }
             }
+            // Parents: a child's check-in times.
+            if (!isMe && m.role == "child" && prefs.role == "parent" && "checkplans" in prefs.serverFeatures) CheckWindows(prefs, m)
             if (!isMe && canRequests) {
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
                 val context = LocalContext.current
