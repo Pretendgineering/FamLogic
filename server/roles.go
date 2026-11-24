@@ -133,8 +133,7 @@ func (s *Store) AddDependent(name string) (*Member, error) {
 }
 
 // RedeemDeviceCode signs a device in for someone without a password (a younger
-// child): the parent's one-time code is enough. Any other device of theirs is
-// signed out.
+// child): the parent's one-time code is enough. Their other devices stay signed in.
 func (s *Store) RedeemDeviceCode(code string) (*Member, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

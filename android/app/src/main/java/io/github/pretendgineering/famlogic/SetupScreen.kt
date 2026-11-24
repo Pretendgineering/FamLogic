@@ -169,7 +169,7 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
             )
             when (signedOut) {
                 Prefs.SIGNED_OUT_ELSEWHERE -> Text(
-                    "You signed in on another device, so this one was signed out. Sign in again to use FamLogic here.",
+                    "This device was signed out. Sign in again to use FamLogic here.",
                     color = MaterialTheme.colorScheme.error,
                 )
                 Prefs.SIGNED_OUT_REMOVED -> Text(

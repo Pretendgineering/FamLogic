@@ -78,6 +78,8 @@ type Member struct {
 	// Tokens of phones that were signed out by a newer sign-in, so they can be
 	// told why instead of just "unknown device". Newest last, a few kept.
 	OldTokenHashes []string `json:"oldTokenHashes,omitempty"`
+	// Devices signed in as this person (TokenHash is from before there could be several).
+	Devices []Device `json:"devices,omitempty"`
 
 	// Feature switches this person controls from their phone. Pointers so that a
 	// missing value (older data files) means "on" by default.
@@ -225,6 +227,9 @@ func OpenStore(path string) (*Store, error) {
 	if s.d.Reminders == nil {
 		s.d.Reminders = map[string]*Reminder{}
 	}
+	for _, m := range s.d.Members {
+		m.migrateDevicesLocked() // one token each, from before several devices
+	}
 	if s.d.Secret == "" {
 		s.d.Secret = randomString(32)
 	}
@@ -329,7 +334,7 @@ func (s *Store) Join(code, name, username, passwordHash string) (*Member, string
 		ID:           randomString(9),
 		Name:         name,
 		Color:        palette[len(s.d.Members)%len(palette)],
-		TokenHash:    hashToken(token),
+		Devices:      []Device{{ID: "d" + randomString(6), Hash: hashToken(token), Created: now, LastSeen: now}},
 		CreatedAt:    now,
 		Username:     username,
 		PasswordHash: passwordHash,
@@ -351,15 +356,21 @@ func (s *Store) Join(code, name, username, passwordHash string) (*Member, string
 }
 
 func (s *Store) MemberByToken(token string) (*Member, bool) {
-	m, _ := s.lookupToken(token)
+	m, _, _ := s.lookupDevice(token)
 	return m, m != nil
 }
 
-// lookupToken finds the member a device token belongs to. If it's an old token
-// that a newer sign-in replaced, it returns signedOutBy = true instead.
+// lookupToken finds the member a device token belongs to (see lookupDevice).
 func (s *Store) lookupToken(token string) (m *Member, signedOut bool) {
+	m, _, signedOut = s.lookupDevice(token)
+	return m, signedOut
+}
+
+// lookupDevice finds the member and device a token belongs to. If it's an old
+// token that was signed out, it returns signedOut = true instead.
+func (s *Store) lookupDevice(token string) (m *Member, deviceID string, signedOut bool) {
 	if token == "" {
-		return nil, false
+		return nil, "", false
 	}
 	h := hashToken(token)
 	s.mu.RLock()
@@ -367,7 +378,13 @@ func (s *Store) lookupToken(token string) (m *Member, signedOut bool) {
 	for _, mm := range s.d.Members {
 		if mm.TokenHash == h {
 			cp := *mm
-			return &cp, false
+			return &cp, "", false
+		}
+		for _, d := range mm.Devices {
+			if d.Hash == h {
+				cp := *mm
+				return &cp, d.ID, false
+			}
 		}
 		for _, old := range mm.OldTokenHashes {
 			if old == h {
@@ -375,7 +392,7 @@ func (s *Store) lookupToken(token string) (m *Member, signedOut bool) {
 			}
 		}
 	}
-	return nil, signedOut
+	return nil, "", signedOut
 }
 
 // Members returns copies sorted by name.

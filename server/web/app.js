@@ -1357,15 +1357,30 @@ $("#family-invite").addEventListener("click", () => $("#invite-btn").click());
 
 function renderDevices() {
   const list = $("#device-list");
-  list.replaceChildren(...lastMembers.map((m) => el("li", {},
-    avatarOf(m),
-    el("div", { class: "grow" },
-      el("div", { class: "title" }, `${m.name}'s ${{ tablet: "Tablet", display: "Family display" }[m.device] || "Phone"}`),
-      m.app || m.lastContact ? health(m) : el("div", { class: "sub" }, "Hasn't reported yet")),
-    moreButton(`Options for ${m.name}'s device`, [
-      ["Sign out this device (new sign-in link)…", () => resetSignIn(m)],
-    ]))));
-  if (!lastMembers.length) list.append(el("li", { class: "muted" }, "No devices yet."));
+  const kindName = (k) => ({ tablet: "Tablet", display: "Family display" }[k] || "Phone");
+  const rows = [];
+  for (const m of lastMembers) {
+    const devs = m.devices || [];
+    if (!devs.length) {
+      if (m.role !== "dependent") rows.push(el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "title" }, m.name), el("div", { class: "sub" }, "Not signed in anywhere"))));
+      continue;
+    }
+    devs.forEach((d, i) => {
+      const out = el("button", { type: "button", class: "secondary" }, "Sign out");
+      out.addEventListener("click", async () => {
+        if (!confirm(`Sign out ${m.name}'s ${kindName(d.kind).toLowerCase()}? They can sign in again with their password (or a new join code).`)) return;
+        try { await api("DELETE", `/api/admin/members/${m.id}/devices/${d.id}`); await refresh(); } catch (err) { alert(err.message); }
+      });
+      rows.push(el("li", {}, i === 0 ? avatarOf(m) : el("div", { class: "avatar-space" }),
+        el("div", { class: "grow" },
+          el("div", { class: "title" }, `${m.name}'s ${kindName(d.kind)}`),
+          el("div", { class: "sub" }, [d.app ? "app " + d.app : null, d.lastSeen ? "last seen " + ago(d.lastSeen) : "not seen yet", "signed in " + new Date(d.created).toLocaleDateString()].filter(Boolean).join(" · ")),
+          i === 0 && (m.app || m.lastContact) ? health(m) : null),
+        out));
+    });
+  }
+  list.replaceChildren(...rows);
+  if (!rows.length) list.append(el("li", { class: "muted" }, "No devices yet."));
 }
 
 // Settings: Modules, Server, AI & API.

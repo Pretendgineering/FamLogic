@@ -884,3 +884,4 @@ input.switch:checked::after { transform: translateX(16px); background: var(--sur
 .upkeep-add .stars-pick > span { font-size: .85rem; color: var(--muted); font-weight: 600; margin-right: 4px; }
 .upkeep-reward label { flex-direction: row; align-items: center; color: var(--muted); font-weight: 600; font-size: .85rem; }
 .upkeep-add label input, .upkeep-add label select, .upkeep-reward label input { font-weight: 400; color: var(--text); font-size: 1rem; }
+.avatar-space { width: 40px; flex: none; }

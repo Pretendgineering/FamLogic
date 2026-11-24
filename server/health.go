@@ -51,7 +51,7 @@ func (s *Store) SetStatus(id, app, device string, issues []string) error {
 
 // Touch notes that a phone was just in touch. It's kept in memory and written
 // with the next save, except when it ends a silence (then saved right away).
-func (s *Store) Touch(id string) {
+func (s *Store) Touch(id string, deviceID ...string) {
 	now := time.Now().UnixMilli()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -60,6 +60,11 @@ func (s *Store) Touch(id string) {
 		return
 	}
 	m.LastContact = now
+	for i := range m.Devices {
+		if len(deviceID) > 0 && m.Devices[i].ID == deviceID[0] {
+			m.Devices[i].LastSeen = now
+		}
+	}
 	if m.SilentSince != 0 {
 		m.SilentSince = 0
 		_ = s.saveLocked()

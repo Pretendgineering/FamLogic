@@ -8,8 +8,9 @@ import (
 )
 
 // Accounts: each member can have a username and password, so they can sign in
-// again on a new phone or after reinstalling. Only one phone is signed in per
-// person: the latest sign-in wins and the previous phone is signed out.
+// again on a new phone or after reinstalling. A person can be signed in on several
+// devices (a phone and a tablet, say), up to maxDevices; signing in on one more
+// signs out the one used longest ago. A reset link signs out all of them.
 
 var ErrUsernameTaken = errors.New("that username is already taken")
 
@@ -37,19 +38,103 @@ func (s *Store) MemberByUsername(username string) (*Member, bool) {
 	return nil, false
 }
 
-// rotateTokenLocked gives the member a fresh device token, signing out whichever
-// phone had the old one. Caller holds the lock and saves.
-func (s *Store) rotateTokenLocked(m *Member) string {
+const maxDevices = 6
+
+// Device is one signed-in phone, tablet or display.
+type Device struct {
+	ID       string `json:"id"`
+	Hash     string `json:"hash,omitempty"`
+	Kind     string `json:"kind,omitempty"` // phone, tablet or display (what the app reports)
+	App      string `json:"app,omitempty"`
+	Created  int64  `json:"created"`
+	LastSeen int64  `json:"lastSeen,omitempty"`
+}
+
+func (m *Member) retireHashLocked(h string) {
+	if h == "" {
+		return
+	}
+	m.OldTokenHashes = append(m.OldTokenHashes, h)
+	if len(m.OldTokenHashes) > keepOldTokens+maxDevices {
+		m.OldTokenHashes = m.OldTokenHashes[len(m.OldTokenHashes)-keepOldTokens-maxDevices:]
+	}
+}
+
+// migrateDevicesLocked turns a token from before several devices into a device.
+func (m *Member) migrateDevicesLocked() {
 	if m.TokenHash != "" {
-		m.OldTokenHashes = append(m.OldTokenHashes, m.TokenHash)
-		if len(m.OldTokenHashes) > keepOldTokens {
-			m.OldTokenHashes = m.OldTokenHashes[len(m.OldTokenHashes)-keepOldTokens:]
+		m.Devices = append([]Device{{ID: "d" + randomString(6), Hash: m.TokenHash, Kind: m.Device, App: m.App, Created: m.LastSignIn, LastSeen: m.LastContact}}, m.Devices...)
+		m.TokenHash = ""
+	}
+}
+
+// signOutAllLocked signs out every device of the member.
+func (m *Member) signOutAllLocked() {
+	m.migrateDevicesLocked()
+	for _, d := range m.Devices {
+		m.retireHashLocked(d.Hash)
+	}
+	m.Devices = nil
+}
+
+// rotateTokenLocked signs in one more device for the member (the one unused
+// longest goes if there are too many). Caller holds the lock and saves.
+func (s *Store) rotateTokenLocked(m *Member) string {
+	m.migrateDevicesLocked()
+	for len(m.Devices) >= maxDevices {
+		oldest := 0
+		for i, d := range m.Devices {
+			if max(d.LastSeen, d.Created) < max(m.Devices[oldest].LastSeen, m.Devices[oldest].Created) {
+				oldest = i
+			}
 		}
+		m.retireHashLocked(m.Devices[oldest].Hash)
+		m.Devices = append(m.Devices[:oldest], m.Devices[oldest+1:]...)
 	}
 	token := randomString(32)
-	m.TokenHash = hashToken(token)
-	m.LastSignIn = time.Now().UnixMilli()
+	now := time.Now().UnixMilli()
+	m.Devices = append(m.Devices, Device{ID: "d" + randomString(6), Hash: hashToken(token), Created: now, LastSeen: now})
+	m.LastSignIn = now
 	return token
+}
+
+// SignOutDevice signs out one of a member's devices.
+func (s *Store) SignOutDevice(memberID, deviceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, ok := s.d.Members[memberID]
+	if !ok {
+		return ErrNotFound
+	}
+	m.migrateDevicesLocked()
+	for i, d := range m.Devices {
+		if d.ID == deviceID {
+			m.retireHashLocked(d.Hash)
+			m.Devices = append(m.Devices[:i], m.Devices[i+1:]...)
+			return s.saveLocked()
+		}
+	}
+	return ErrNotFound
+}
+
+// SetDeviceStatus records what one device reports about itself.
+func (s *Store) SetDeviceStatus(memberID, deviceID, kind, app string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, ok := s.d.Members[memberID]
+	if !ok {
+		return
+	}
+	for i := range m.Devices {
+		if m.Devices[i].ID == deviceID {
+			if kind == "phone" || kind == "tablet" || kind == "display" {
+				m.Devices[i].Kind = kind
+			}
+			if len(app) <= 20 {
+				m.Devices[i].App = app
+			}
+		}
+	}
 }
 
 // SignIn issues a new device token for a member whose password was just checked.
@@ -156,6 +241,7 @@ func (s *Store) RedeemReset(code, username, passwordHash string) (*Member, strin
 		m.Username = username
 	}
 	m.PasswordHash = passwordHash
+	m.signOutAllLocked() // a reset link: a lost phone stops working
 	token := s.rotateTokenLocked(m)
 	delete(s.d.Invites, code)
 	cp := *m
@@ -234,4 +320,31 @@ func minutesText(d time.Duration) string {
 		return "about a minute"
 	}
 	return "about " + strconv.Itoa(m) + " minutes"
+}
+
+// deferToPhone: this device isn't a phone and one of the person's phones has
+// been in touch in the last half hour, so its location wins.
+func (s *Store) deferToPhone(memberID, deviceID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	m, ok := s.d.Members[memberID]
+	if !ok || deviceID == "" {
+		return false
+	}
+	var this *Device
+	for i := range m.Devices {
+		if m.Devices[i].ID == deviceID {
+			this = &m.Devices[i]
+		}
+	}
+	if this == nil || this.Kind == "phone" || this.Kind == "" {
+		return false
+	}
+	cut := time.Now().Add(-30 * time.Minute).UnixMilli()
+	for _, d := range m.Devices {
+		if d.ID != deviceID && d.Kind == "phone" && d.LastSeen > cut {
+			return true
+		}
+	}
+	return false
 }

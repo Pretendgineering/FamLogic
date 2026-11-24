@@ -261,7 +261,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
         return parseSignedIn(request("POST", "/api/join", body))
     }
 
-    /** Signs this phone in as an existing person. Any other phone they were using is signed out. */
+    /** Signs this device in as an existing person (their other devices stay signed in). */
     suspend fun signIn(username: String, password: String): JoinResponse {
         val body = JSONObject().put("username", username).put("password", password)
         return parseSignedIn(request("POST", "/api/signin", body))

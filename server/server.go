@@ -182,6 +182,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /api/admin/members/{id}", s.admin(s.handleAdminPatchMember))
 	mux.HandleFunc("DELETE /api/admin/members/{id}", s.admin(s.handleAdminDeleteMember))
 	mux.HandleFunc("POST /api/admin/members/{id}/reset", s.admin(s.handleAdminResetSignIn))
+	mux.HandleFunc("DELETE /api/admin/members/{id}/devices/{dev}", s.admin(s.handleAdminSignOutDevice))
+	mux.HandleFunc("POST /api/admin/members/{id}/devices/{dev}/delete", s.admin(s.handleAdminSignOutDevice))
 	mux.HandleFunc("GET /api/admin/members/{id}/trail", s.admin(s.handleAdminTrail))
 	mux.HandleFunc("GET /api/admin/members/{id}/trips", s.admin(s.handleAdminTrips))
 	mux.HandleFunc("GET /api/admin/geocode", s.admin(s.handleAdminGeocode))
@@ -359,7 +361,7 @@ func (s *Server) device(h deviceHandler) http.HandlerFunc {
 		if s.agentRequest(w, r, strings.TrimSpace(token), h) {
 			return
 		}
-		me, signedOut := s.store.lookupToken(strings.TrimSpace(token))
+		me, devID, signedOut := s.store.lookupDevice(strings.TrimSpace(token))
 		if me == nil {
 			// 401 tells the app this phone is no longer signed in, and why.
 			if signedOut {
@@ -371,8 +373,8 @@ func (s *Server) device(h deviceHandler) http.HandlerFunc {
 			}
 			return
 		}
-		s.store.Touch(me.ID)
-		h(w, r, me)
+		s.store.Touch(me.ID, devID)
+		h(w, r.WithContext(context.WithValue(r.Context(), deviceKey{}, devID)), me)
 	}
 }
 
@@ -800,6 +802,17 @@ func (s *Server) handleLocation(w http.ResponseWriter, r *http.Request, me *Memb
 		writeError(w, http.StatusBadRequest, "lat/lon out of range")
 		return
 	}
+	// Several devices: a tablet's fix is ignored while the person's phone is
+	// reporting (the phone goes where they go; the tablet usually stays home).
+	if s.store.deferToPhone(me.ID, deviceOf(r)) {
+		if since, ok := sinceParam(r); ok {
+			events, cursor := s.store.EventsFor(me.ID, since)
+			writeJSON(w, http.StatusOK, map[string]any{"events": events, "cursor": cursor})
+		} else {
+			w.WriteHeader(http.StatusNoContent)
+		}
+		return
+	}
 	// While paused, a fix that was still in flight is dropped (the store ignores it).
 	// The app un-pauses explicitly with PATCH /api/me.
 	if err := s.store.UpdateLocation(me.ID, l); err != nil {
@@ -995,6 +1008,11 @@ func (s *Server) handleIndexSettings(w http.ResponseWriter, r *http.Request, me 
 	})
 }
 
+// deviceKey: the request's device id, in its context.
+type deviceKey struct{}
+
+func deviceOf(r *http.Request) string { id, _ := r.Context().Value(deviceKey{}).(string); return id }
+
 // handleStatus: the phone reports its app version and anything that could stop it sharing.
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request, me *Member) {
 	var req struct {
@@ -1005,6 +1023,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request, me *Member
 	if !readJSON(w, r, &req) {
 		return
 	}
+	s.store.SetDeviceStatus(me.ID, deviceOf(r), req.Device, req.App)
 	if err := s.store.SetStatus(me.ID, req.App, req.Device, req.Issues); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
@@ -1213,6 +1232,7 @@ type adminMember struct {
 	// Phone health
 	App         string   `json:"app,omitempty"`
 	Device      string   `json:"device,omitempty"`
+	Devices     []Device `json:"devices"`
 	Issues      []string `json:"issues"`
 	StatusAt    int64    `json:"statusAt,omitempty"`
 	LastContact int64    `json:"lastContact,omitempty"`
@@ -1231,7 +1251,7 @@ func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
 	out := make([]adminMember, len(ms))
 	for i, m := range ms {
 		out[i] = adminMember{pub[i], m.Username, m.PasswordHash != "", m.LastSignIn, append([]string{}, m.HiddenFrom...),
-			m.App, m.Device, append([]string{}, m.Issues...), m.StatusAt, m.LastContact, m.SilentSince != 0}
+			m.App, m.Device, publicDevices(m.Devices), append([]string{}, m.Issues...), m.StatusAt, m.LastContact, m.SilentSince != 0}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"members": out, "circles": s.store.Circles(), "places": s.store.AllPlaces(), "server": s.serverInfo()})
 }
@@ -1696,4 +1716,23 @@ func (s *Server) handleJoinPage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = joinTmpl.Execute(w, data)
+}
+
+// publicDevices: a member's devices without their token hashes.
+func publicDevices(ds []Device) []Device {
+	out := make([]Device, 0, len(ds))
+	for _, d := range ds {
+		d.Hash = ""
+		out = append(out, d)
+	}
+	return out
+}
+
+// DELETE /api/admin/members/{id}/devices/{dev}: sign out one device.
+func (s *Server) handleAdminSignOutDevice(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.SignOutDevice(r.PathValue("id"), r.PathValue("dev")); err != nil {
+		writeError(w, http.StatusNotFound, "no such device")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -13,7 +13,7 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 |---|---|---|
 | `GET /api/invites/<code>` | invite code | What a code is for: `join`, or `reset` for an existing person |
 | `POST /api/join` `{code, name, username, password}` | invite code | Join, or redeem a reset link. Returns a device token |
-| `POST /api/signin` `{username, password}` | password | Sign this phone in. The previous phone is signed out |
+| `POST /api/signin` `{username, password}` | password | Sign this device in. Other devices stay signed in (up to 6; the one unused longest goes). Phones' locations win over tablets' |
 | `POST /api/me/password` `{currentPassword, newPassword, username?}` | `Bearer <token>` | Set or change your password |
 | `POST /api/me/circles/<id>` `{sharing}` | `Bearer <token>` | Share or stop sharing your location with one group |
 | `POST /api/me/circles/join` `{code}` | `Bearer <token>` | Join another group with an invite code |
@@ -27,6 +27,7 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `GET /api/members?since=<cursor>` | `Bearer <token>` | Everyone's latest position, map settings, your feature settings (including `kid`: what you may use, `home` and `pinSet`), and new alerts |
 | `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?, home?, big?, pictures?, voice?}` | `Bearer <token>` | Rename yourself / pause / feature switches / arrange your home screen (adults; parents arrange children's) |
 | `DELETE /api/me` | `Bearer <token>` | Leave |
+| `DELETE /api/admin/members/{id}/devices/{dev}` | admin session | Sign out one device (the console's Devices page lists each one) |
 | `/api/admin/*` | console login cookie | Admin pages (invites, members, roles, modules, backups). `GET /api/admin/session` says who's logged in |
 | `/api/chat`, `/api/chat/{id}/messages`, … | `Bearer <token>` or a parent's console session | Chat: see [Architecture](Architecture.md#chat-built-in-0160) |
 | `POST /api/chat/{id}/moderate` `{action}` | a parent | `approve`, `pause`, `resume`, `block`, `unblock` or `delete` a chat with a child in it (the main admin: `/api/admin/chat/{id}/moderate`, any chat but the family chat) |

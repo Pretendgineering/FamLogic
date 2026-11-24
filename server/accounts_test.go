@@ -116,14 +116,14 @@ func TestAccountsFlow(t *testing.T) {
 		t.Fatalf("sign-in errors differ: %v vs %v", a, b)
 	}
 
-	// New phone: sign in. Same member, and the old phone is signed out with a reason.
+	// Another device: sign in. Same member, and the first phone stays signed in.
 	st, signed := e.status("POST", "/api/signin", "", map[string]string{"username": " Taylor ", "password": pw})
 	if st != 200 || signed["member"].(map[string]any)["id"] != id {
 		t.Fatalf("sign-in: %d %v", st, signed)
 	}
 	phone2 := signed["token"].(string)
-	if st, out := e.status("GET", "/api/members", phone1, nil); st != 401 || out["reason"] != "signed_in_elsewhere" {
-		t.Fatalf("old phone: %d %v", st, out)
+	if st, out := e.status("GET", "/api/members", phone1, nil); st != 200 {
+		t.Fatalf("the first phone stays signed in: %d %v", st, out)
 	}
 	if st, _ := e.status("GET", "/api/members", phone2, nil); st != 200 {
 		t.Fatalf("new phone not signed in: %d", st)
@@ -239,5 +239,60 @@ func TestResetPageAndDeletedMember(t *testing.T) {
 	e.do("DELETE", "/api/admin/members/"+id, "", nil)
 	if st, _ := e.status("GET", "/api/invites/"+reset["code"].(string), "", nil); st != 404 {
 		t.Fatalf("reset link survived member removal: %d", st)
+	}
+}
+
+func TestSeveralDevices(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	// Mom signs in on a tablet too (she has a password from newChatFamily's join).
+	if st, out := e.status("POST", "/api/me/password", f.mom, map[string]string{"username": "mom", "newPassword": "blue canoe at midnight"}); st >= 300 {
+		t.Fatalf("set password: %d %v", st, out)
+	}
+	_, signed := e.status("POST", "/api/signin", "", map[string]string{"username": "mom", "password": "blue canoe at midnight"})
+	tablet, _ := signed["token"].(string)
+	if tablet == "" {
+		t.Skipf("no password in this family: %v", signed)
+	}
+	e.status("POST", "/api/me/status", f.mom, map[string]any{"app": "1", "device": "phone"})
+	e.status("POST", "/api/me/status", tablet, map[string]any{"app": "1", "device": "tablet"})
+	e.status("POST", "/api/location", f.mom, map[string]any{"lat": 51.5, "lon": -0.1, "acc": 10, "battery": 80, "time": time.Now().UnixMilli()})
+	e.status("POST", "/api/location", tablet, map[string]any{"lat": 40.0, "lon": -70.0, "acc": 10, "battery": 80, "time": time.Now().UnixMilli()})
+	_, after := e.status("GET", "/api/members", f.dad, nil)
+	for _, x := range after["members"].([]any) {
+		mm := x.(map[string]any)
+		if mm["id"] == f.momID && mm["loc"].(map[string]any)["lat"].(float64) != 51.5 {
+			t.Fatalf("the tablet's fix should defer to the phone: %v", mm["loc"])
+		}
+	}
+	// The console lists both and can sign one out.
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	_, adm := e.status("GET", "/api/admin/members", "", nil)
+	var devs []any
+	for _, x := range adm["members"].([]any) {
+		if x.(map[string]any)["id"] == f.momID {
+			devs = x.(map[string]any)["devices"].([]any)
+		}
+	}
+	if len(devs) != 2 {
+		t.Fatalf("devices: %v", devs)
+	}
+	var tabletID string
+	for _, d := range devs {
+		if d.(map[string]any)["kind"] == "tablet" {
+			tabletID = d.(map[string]any)["id"].(string)
+		}
+		if _, leak := d.(map[string]any)["hash"]; leak {
+			t.Fatal("hashes stay on the server")
+		}
+	}
+	if st, _ := e.status("DELETE", "/api/admin/members/"+f.momID+"/devices/"+tabletID, "", nil); st != 204 {
+		t.Fatalf("sign out: %d", st)
+	}
+	if st, _ := e.status("GET", "/api/members", tablet, nil); st != 401 {
+		t.Fatalf("the tablet is signed out: %d", st)
+	}
+	if st, _ := e.status("GET", "/api/members", f.mom, nil); st != 200 {
+		t.Fatalf("the phone isn't: %d", st)
 	}
 }
