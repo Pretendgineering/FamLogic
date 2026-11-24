@@ -139,6 +139,8 @@ fun MapScreen(
     openSettings: String? = null,
     onSettingsHandled: () -> Unit = {},
     onSettingsClosed: () -> Unit = {},
+    /** Opens a chat (by id) in Chitchat. */
+    onOpenChat: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -582,6 +584,13 @@ fun MapScreen(
             canRequests = features?.contains("requests") == true && Access.can("requests"),
             canNudges = features?.contains("nudges") == true,
             onDirections = { m.loc?.let { openDirections(context, m.name, it) } },
+            onMessage = if (onOpenChat != null && m.role != "dependent" && Access.can("chat") && Access.can("chat_start") && features?.contains("module:chat") == true) ({
+                scope.launch {
+                    runCatching { Api(prefs.serverUrl, prefs.token).chatDirect(m.id) }
+                        .onSuccess { c -> sheetFor = null; onOpenChat(c.id) }
+                        .onFailure { android.widget.Toast.makeText(context, "Couldn't open a chat: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
+                }
+            }) else null,
             onShowTrip = { t ->
                 sheetFor = null
                 selected = m.id

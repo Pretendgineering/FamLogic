@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
                                 onSettingsHandled = { settingsRequest = null },
                                 // Someone without the map came here only for settings: back home after.
                                 onSettingsClosed = { if (Tab.Map !in visibleTabs(features, prefs)) tab = Tab.Home },
+                                onOpenChat = { id -> openChat = id; tab = Tab.Chat },
                             )
                         }
                     }

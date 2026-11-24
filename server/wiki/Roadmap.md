@@ -101,12 +101,10 @@ The map, chat and safety features are what families use every day. Next, each ge
 - **Trips** as a day **timeline** of stops and drives; **Share** a trip to a chat.
 - **Resting** phones update less often and wake on movement (the significant-motion sensor); "last seen" worded the same everywhere, and honest about old locations.
 
-### 🔨 2. Chat (Chitchat)
-- "Message" from a person's card on the map; reply to a specific message; reactions with the nudge set.
-- Photos: a proper viewer (pinch to zoom, save), several at once.
-- Voice messages (record and play), building on the built-in voice.
-- Search, and a "jump to unread" button; typing indicators.
-- Quick replies from the Pebble and the Index 01 ring.
+### ✅ 2. Chat (Chitchat), 0.32.0
+- "Message" from a person's card on the map; reply to a message; reactions (the friendly nudges).
+- Photos: a full-screen viewer (pinch to zoom, save), several sent at once.
+- Voice messages (tap the mic when the box is empty); search across your chats; a "new messages" button when you've scrolled back; "is typing…".
 
 ### 🔨 3. Safety
 - SOS: a clearer full-screen alert for everyone else (who, where, how long ago, call and directions buttons), with "I'm on my way" replies the sender sees.

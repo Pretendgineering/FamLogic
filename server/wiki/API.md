@@ -30,6 +30,8 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `DELETE /api/admin/members/{id}/devices/{dev}` | admin session | Sign out one device (the console's Devices page lists each one) |
 | `/api/admin/*` | console login cookie | Admin pages (invites, members, roles, modules, backups). `GET /api/admin/session` says who's logged in |
 | `/api/chat`, `/api/chat/{id}/messages`, … | `Bearer <token>` or a parent's console session | Chat: see [Architecture](Architecture.md#chat-built-in-0160) |
+| `POST /api/chat/{id}/messages` `{text, replyTo?}` or multipart (`photo` or `audio` + `audioMs`, `text`, `replyTo`) | `Bearer <token>` | Send a message, a photo or a voice message (AAC .m4a, Ogg or WAV, up to 4 MB) |
+| `POST /api/chat/{id}/messages/{mid}/react` `{kind}`; `POST /api/chat/{id}/typing`; `GET /api/chat/search?q=` | `Bearer <token>` | React with a nudge (`""` takes it back); say you're typing (shown for 6 s in `typing` on the messages); search the chats you can read |
 | `POST /api/chat/{id}/moderate` `{action}` | a parent | `approve`, `pause`, `resume`, `block`, `unblock` or `delete` a chat with a child in it (the main admin: `/api/admin/chat/{id}/moderate`, any chat but the family chat) |
 | `DELETE /api/chat/{id}/messages/{mid}` (or `POST …/delete`) | `Bearer <token>` | Delete your own message, or (parents) any message in a chat with a child in it |
 | `POST /api/voice/transcribe` (body: 16 kHz mono 16-bit WAV, up to a minute) | `Bearer <token>` | Speech to text on the server: `{text}` (`""` if nothing was understood). Feature `voice-stt` |

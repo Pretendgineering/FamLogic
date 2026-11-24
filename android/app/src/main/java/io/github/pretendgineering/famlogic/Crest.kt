@@ -49,7 +49,7 @@ fun FamilyCrest(size: Int, modifier: Modifier = Modifier, color: String = "") {
     val name = Prefs(LocalContext.current).familyName
     val initial = familyInitial(name)
     Box(
-        modifier.size(size.dp).clip(CircleShape).background(runCatching { Color(android.graphics.Color.parseColor(color)) }.getOrDefault(MaterialTheme.colorScheme.primary))
+        modifier.size(size.dp).clip(CircleShape).background(color.takeIf { it.length > 1 }?.let { c -> runCatching { Color(android.graphics.Color.parseColor(c)) }.getOrNull() } ?: MaterialTheme.colorScheme.primary)
             .border((size / 18f).coerceAtLeast(2f).dp, Accent2, CircleShape),
         contentAlignment = Alignment.Center,
     ) {

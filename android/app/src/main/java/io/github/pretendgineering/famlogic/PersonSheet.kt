@@ -1,5 +1,6 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
@@ -54,6 +55,8 @@ fun PersonSheet(
     onDirections: () -> Unit,
     onShowTrip: (Trip) -> Unit,
     onDismiss: () -> Unit,
+    /** Opens a one-to-one chat with them (null: no chat for you). */
+    onMessage: (() -> Unit)? = null,
 ) {
     var muted by remember(m.id) { mutableStateOf(m.id in prefs.mutedPeople) }
     var trips by remember(m.id) { mutableStateOf<List<Trip>?>(null) }
@@ -81,6 +84,11 @@ fun PersonSheet(
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
                     Text(if (isMe) "${m.name} (you)" else m.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (!isMe && onMessage != null) {
+                    androidx.compose.material3.FilledTonalIconButton(onClick = onMessage) {
+                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Email.let { it }, contentDescription = "Message ${m.name}", tint = Accent2)
+                    }
                 }
                 if (!isMe && m.loc != null && !m.paused && !Access.isChild) {
                     DirectionsButton(onDirections)

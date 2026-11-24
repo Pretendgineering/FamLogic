@@ -66,9 +66,9 @@ private fun parseSteward(o: JSONObject): List<StewardMsg> {
     return (0 until arr.length()).map { arr.getJSONObject(it).let { m -> StewardMsg(m.optString("role"), m.optString("text"), m.optLong("time")) } }
 }
 
-suspend fun Api.steward(): List<StewardMsg> = parseSteward(raw("GET", "/api/steward"))
-suspend fun Api.stewardSay(text: String): List<StewardMsg> = parseSteward(raw("POST", "/api/steward", JSONObject().put("text", text)))
-suspend fun Api.stewardClear() { raw("DELETE", "/api/steward") }
+suspend fun Api.steward(): List<StewardMsg> = parseSteward(call("GET", "/api/steward"))
+suspend fun Api.stewardSay(text: String): List<StewardMsg> = parseSteward(call("POST", "/api/steward", JSONObject().put("text", text)))
+suspend fun Api.stewardClear() { call("DELETE", "/api/steward") }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -707,28 +707,52 @@ class Api(private val baseUrl: String, private val token: String = "") {
             messages = (0 until (msgs?.length() ?: 0)).map { parseMessage(msgs!!.getJSONObject(it)) },
             reads = reads?.keys()?.asSequence()?.associateWith { reads.optLong(it) } ?: emptyMap(),
             canPost = o.optBoolean("canPost", false),
+            typing = o.optJSONArray("typing")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
         )
     }
 
-    suspend fun chatSend(conv: String, text: String): ChatMessage =
-        parseMessage(request("POST", "/api/chat/${enc(conv)}/messages", JSONObject().put("text", text)))
+    suspend fun chatSend(conv: String, text: String, replyTo: Long = 0): ChatMessage =
+        parseMessage(request("POST", "/api/chat/${enc(conv)}/messages", JSONObject().put("text", text).put("replyTo", replyTo)))
+
+    /** Sends a voice message (AAC in an .m4a file). */
+    suspend fun chatSendVoice(conv: String, audio: ByteArray, ms: Long, replyTo: Long = 0): ChatMessage =
+        chatSendFile(conv, "audio", "voice.m4a", "audio/mp4", audio, "", replyTo, ms)
 
     /** Sends a photo (JPEG bytes) with an optional caption. */
-    suspend fun chatSendPhoto(conv: String, jpeg: ByteArray, text: String): ChatMessage = withContext(Dispatchers.IO) {
+    suspend fun chatSendPhoto(conv: String, jpeg: ByteArray, text: String, replyTo: Long = 0): ChatMessage =
+        chatSendFile(conv, "photo", "photo.jpg", "image/jpeg", jpeg, text, replyTo, 0)
+
+    private suspend fun chatSendFile(conv: String, field: String, file: String, type: String, data: ByteArray, text: String, replyTo: Long, ms: Long): ChatMessage = withContext(Dispatchers.IO) {
         val boundary = "famlogic" + System.nanoTime()
         val body = java.io.ByteArrayOutputStream().apply {
             fun line(s: String) = write((s + "\r\n").toByteArray())
-            if (text.isNotBlank()) {
-                line("--$boundary"); line("Content-Disposition: form-data; name=\"text\""); line(""); line(text)
-            }
-            line("--$boundary"); line("Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\""); line("Content-Type: image/jpeg"); line("")
-            write(jpeg); line("")
+            fun field(name: String, value: String) { line("--$boundary"); line("Content-Disposition: form-data; name=\"$name\""); line(""); line(value) }
+            if (text.isNotBlank()) field("text", text)
+            if (replyTo > 0) field("replyTo", replyTo.toString())
+            if (ms > 0) field("audioMs", ms.toString())
+            line("--$boundary"); line("Content-Disposition: form-data; name=\"$field\"; filename=\"$file\""); line("Content-Type: $type"); line("")
+            write(data); line("")
             line("--$boundary--")
         }.toByteArray()
         val (code, bytes) = raw("POST", "/api/chat/${enc(conv)}/messages", body, "multipart/form-data; boundary=$boundary")
         val text2 = String(bytes)
         if (code >= 400) throw ApiException(code, runCatching { JSONObject(text2).getString("error") }.getOrNull() ?: "Couldn't send ($code)")
         parseMessage(JSONObject(text2))
+    }
+
+    /** Reacts to a message with a nudge ("" takes the reaction back). */
+    suspend fun chatReact(conv: String, id: Long, kind: String) {
+        request("POST", "/api/chat/${enc(conv)}/messages/$id/react", JSONObject().put("kind", kind))
+    }
+
+    suspend fun chatTyping(conv: String) {
+        request("POST", "/api/chat/${enc(conv)}/typing", JSONObject())
+    }
+
+    suspend fun chatSearch(q: String): List<ChatMessage> {
+        val o = request("GET", "/api/chat/search?q=" + enc(q))
+        val arr = o.optJSONArray("messages")
+        return (0 until (arr?.length() ?: 0)).map { parseMessage(arr!!.getJSONObject(it)) }
     }
 
     suspend fun chatRead(conv: String, upTo: Long) {
@@ -764,6 +788,11 @@ class Api(private val baseUrl: String, private val token: String = "") {
     private fun parseMessage(o: JSONObject) = ChatMessage(
         id = o.getLong("id"), conv = o.optString("conv"), sender = o.optString("sender"),
         text = o.optString("text"), photo = o.optString("photo"), time = o.optLong("time"),
+        replyTo = o.optLong("replyTo"), replySender = o.optString("replySender"), replyText = o.optString("replyText"),
+        audio = o.optString("audio"), audioMs = o.optLong("audioMs"),
+        reactions = o.optJSONObject("reactions")?.let { r ->
+            r.keys().asSequence().associateWith { k -> r.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty() }
+        }.orEmpty(),
     )
 
     private fun parseConversation(o: JSONObject): ChatConversation {
@@ -812,7 +841,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
     }
 
     /** Any call, for features kept in their own files (Steward). */
-    suspend fun raw(method: String, path: String, body: JSONObject? = null): JSONObject = request(method, path, body, readTimeoutMs = 130_000)
+    suspend fun call(method: String, path: String, body: JSONObject? = null): JSONObject = request(method, path, body, readTimeoutMs = 130_000)
 
     private suspend fun request(
         method: String,
@@ -938,7 +967,15 @@ class Api(private val baseUrl: String, private val token: String = "") {
 
 // ---- chat
 
-data class ChatMessage(val id: Long, val conv: String, val sender: String, val text: String, val photo: String, val time: Long)
+data class ChatMessage(
+    val id: Long, val conv: String, val sender: String, val text: String, val photo: String, val time: Long,
+    /** A reply: the message it answers, who wrote that and a glimpse of it. */
+    val replyTo: Long = 0, val replySender: String = "", val replyText: String = "",
+    /** A voice message (a file under /api/chat-media/) and its length. */
+    val audio: String = "", val audioMs: Long = 0,
+    /** Reactions: kind (a nudge) → who. */
+    val reactions: Map<String, List<String>> = emptyMap(),
+)
 
 data class ChatConversation(
     val id: String,
@@ -965,6 +1002,8 @@ data class ChatThread(
     /** How far each person has read (message id), for "Seen by". */
     val reads: Map<String, Long>,
     val canPost: Boolean,
+    /** Who's typing right now (not you). */
+    val typing: List<String> = emptyList(),
 )
 
 /** A FamLogic module (Thereabouts, Chitchat…): whether it's built yet, and whether the family has it on. */

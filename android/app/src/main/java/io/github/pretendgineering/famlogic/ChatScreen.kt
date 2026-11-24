@@ -80,6 +80,8 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.KeyboardVoice
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -223,14 +225,54 @@ private fun ConversationList(
             delay(5_000)
         }
     }
+    // Search: every chat you can read.
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var found by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    LaunchedEffect(query) {
+        if (query.trim().length < 2) { found = emptyList(); return@LaunchedEffect }
+        delay(300)
+        found = runCatching { Api(prefs.serverUrl, prefs.token).chatSearch(query.trim()) }.getOrDefault(found)
+    }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(Access.name("chat")) }) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    if (searching) OutlinedTextField(query, { query = it.take(100) }, Modifier.fillMaxWidth(), placeholder = { Text("Search messages") }, singleLine = true, shape = RoundedCornerShape(24.dp))
+                    else Text(Access.name("chat"))
+                },
+                actions = {
+                    if (!Access.younger) IconButton(onClick = { searching = !searching; query = "" }) {
+                        Icon(if (searching) Icons.Filled.Close else Icons.Filled.Search, contentDescription = if (searching) "Stop searching" else "Search")
+                    }
+                },
+            )
+        },
         floatingActionButton = {
-            if (Access.can("chat_start") && expanded == null) {
+            if (Access.can("chat_start") && expanded == null && !searching) {
                 LargeFloatingActionButton(onClick = { newChat = true }) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
             }
         },
     ) { padding ->
+        if (searching) {
+            LazyColumn(Modifier.padding(padding).fillMaxSize()) {
+                if (query.trim().length >= 2 && found.isEmpty()) item { Text("Nothing found.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                items(found.size, key = { found[it].id }) { i ->
+                    val m = found[i]
+                    val c = convs?.find { it.id == m.conv }
+                    val who = people.find { it.id == m.sender }
+                    Row(Modifier.fillMaxWidth().clickable { searching = false; onOpen(m.conv) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Avatar(who?.name ?: "?", who?.emoji.orEmpty(), who?.color ?: "#888888", 36)
+                        Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                            Text("${who?.name ?: "Someone"} in ${c?.title ?: "a chat"}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(m.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(DateFormat.getDateInstance(DateFormat.SHORT).format(Date(m.time)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            return@Scaffold
+        }
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
         val viewport = maxHeight
         // The gap's height grows from nothing (the slice) to almost the whole screen.
@@ -464,6 +506,14 @@ private fun ConversationView(
     LaunchedEffect(convId) { prefs.lastChat = convId }
     DisposableEffect(convId) { Voice.warmUp(context); onDispose { Voice.stop() } }
     var deleting by remember { mutableStateOf<ChatMessage?>(null) }
+    // Long-press on a message: react, reply, copy or delete.
+    var acting by remember { mutableStateOf<ChatMessage?>(null) }
+    var replying by remember(convId) { mutableStateOf<ChatMessage?>(null) }
+    var viewing by remember { mutableStateOf<Bitmap?>(null) }
+    var recording by remember { mutableStateOf<VoiceRecording?>(null) }
+    var recordMs by remember { mutableStateOf(0L) }
+    var lastTyping by remember { mutableStateOf(0L) }
+    var newBelow by remember(convId) { mutableStateOf(0) }
     val listState = rememberLazyListState()
     val api = remember { Api(prefs.serverUrl, prefs.token) }
 
@@ -478,16 +528,22 @@ private fun ConversationView(
         while (true) {
             try {
                 // Now and then a full reload, so messages a parent deleted disappear here too.
-                val full = round++ % 10 == 9
+                val full = round++ % 3 == 2
                 val after = if (full) 0 else messages.lastOrNull()?.id ?: 0
                 val t = api.chatThread(convId, after = after)
                 thread = t
-                if (full) messages.retainAll { m -> t.messages.any { it.id == m.id } || m.id < (t.messages.firstOrNull()?.id ?: 0) }
+                if (full) {
+                    messages.retainAll { m -> t.messages.any { it.id == m.id } || m.id < (t.messages.firstOrNull()?.id ?: 0) }
+                    // Reactions change on messages already shown.
+                    t.messages.forEach { fresh -> val i = messages.indexOfFirst { it.id == fresh.id }; if (i >= 0 && messages[i] != fresh) messages[i] = fresh }
+                }
                 if (t.messages.isNotEmpty()) {
                     val fresh = t.messages.filter { m -> messages.none { it.id == m.id } }
                     val firstLoad = messages.isEmpty()
                     messages += fresh
-                    listState.animateScrollToItem(0)
+                    // Reading further back: don't jump; a button says there's something new.
+                    if (firstLoad || listState.firstVisibleItemIndex <= 2) listState.animateScrollToItem(0)
+                    else if (fresh.any { it.sender != prefs.memberId }) newBelow += fresh.count { it.sender != prefs.memberId }
                     // Younger children hear new messages read aloud as they arrive.
                     if (!firstLoad && readAloud) {
                         fresh.lastOrNull { it.sender != prefs.memberId && Voice.hasWords(it.text) }?.let { m ->
@@ -512,9 +568,10 @@ private fun ConversationView(
             sending = true
             try {
                 val jpeg = withContext(Dispatchers.IO) { shrinkPhoto(context, uri) } ?: throw IOException("Couldn't read that photo")
-                val m = api.chatSendPhoto(convId, jpeg, text.trim())
+                val m = api.chatSendPhoto(convId, jpeg, text.trim(), replying?.id ?: 0)
                 text = ""
                 staged = ""
+                replying = null
                 if (messages.none { it.id == m.id }) messages += m
                 listState.animateScrollToItem(0)
             } catch (e: IOException) {
@@ -524,9 +581,48 @@ private fun ConversationView(
             }
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
-        if (uri != null) staged = uri.toString()
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris: List<Uri> ->
+        when {
+            uris.size == 1 -> staged = uris[0].toString()
+            uris.size > 1 -> scope.launch {
+                // Several: each goes as its own message, in order.
+                sending = true
+                for (u in uris) {
+                    try {
+                        val jpeg = withContext(Dispatchers.IO) { shrinkPhoto(context, u) } ?: continue
+                        val m = api.chatSendPhoto(convId, jpeg, "")
+                        if (messages.none { it.id == m.id }) messages += m
+                    } catch (e: IOException) {
+                        error = e.message
+                    }
+                }
+                sending = false
+                listState.animateScrollToItem(0)
+            }
+        }
     }
+    // A voice message: tap the mic to record, tap again to send (or ✕ to drop it).
+    fun stopRecording(send: Boolean) {
+        val rec = recording ?: return
+        recording = null
+        if (!send) { rec.cancel(); return }
+        val got = rec.finish() ?: return
+        scope.launch {
+            sending = true
+            try {
+                val m = api.chatSendVoice(convId, got.first, got.second, replying?.id ?: 0)
+                replying = null
+                if (messages.none { it.id == m.id }) messages += m
+                listState.animateScrollToItem(0)
+            } catch (e: IOException) {
+                error = e.message
+            } finally {
+                sending = false
+            }
+        }
+    }
+    LaunchedEffect(recording) { while (recording != null) { recordMs = recording?.elapsed ?: 0; delay(200) } }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     // A new photo: the camera app saves it into our private cache, then it's sent like a picked one.
     var cameraFile by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -570,8 +666,9 @@ private fun ConversationView(
         scope.launch {
             sending = true
             try {
-                val m = api.chatSend(convId, t)
+                val m = api.chatSend(convId, t, replying?.id ?: 0)
                 text = ""
+                replying = null
                 if (messages.none { it.id == m.id }) messages += m
                 listState.animateScrollToItem(0)
             } catch (e: IOException) {
@@ -700,7 +797,9 @@ private fun ConversationView(
                         prefs, m, people, mine = m.sender == prefs.memberId, showName = conv?.kind != "direct" || conv.oversight,
                         seenBy = if (m.id == myLast?.id) seenBy else emptyList(),
                         showAvatar = newer == null || newer.sender != m.sender || !sameDay(newer.time, m.time),
-                        onLongPress = if ((m.sender == prefs.memberId && Access.can("chat_delete")) || moderator) ({ deleting = m }) else null,
+                        onLongPress = if (canPost || moderator) ({ acting = m }) else null,
+                        onReact = { kind -> scope.launch { runCatching { api.chatReact(convId, m.id, kind) }; thread = api.chatThread(convId); val i = messages.indexOfFirst { it.id == m.id }; thread?.messages?.find { it.id == m.id }?.let { if (i >= 0) messages[i] = it } } },
+                        onOpenPhoto = { viewing = it },
                         // A small speaker beside every message with words in it: tap to hear it,
                         // in the sender's own voice (male or female, as they chose).
                         onSpeak = if (canHear && Voice.hasWords(m.text)) ({
@@ -710,6 +809,42 @@ private fun ConversationView(
                         }) else null,
                     )
                     if (older == null || !sameDay(older.time, m.time)) DayHeader(m.time)
+                }
+            }
+            LaunchedEffect(listState.firstVisibleItemIndex) { if (listState.firstVisibleItemIndex == 0) newBelow = 0 }
+            if (newBelow > 0) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.FilledTonalButton(onClick = { newBelow = 0; scope.launch { listState.animateScrollToItem(0) } }) {
+                        Text(if (newBelow == 1) "1 new message" else "$newBelow new messages")
+                    }
+                }
+            }
+            // Who's typing.
+            val typingNames = thread?.typing.orEmpty().mapNotNull { id -> people.find { it.id == id }?.name }
+            if (typingNames.isNotEmpty()) Text(
+                typingNames.joinToString(", ") + if (typingNames.size == 1) " is typing…" else " are typing…",
+                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+            )
+            // Replying to a message: a glimpse of it above the box, with ✕ to stop.
+            replying?.let { r ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val who = if (r.sender == prefs.memberId) "yourself" else people.find { it.id == r.sender }?.name ?: "someone"
+                    ReplyQuote("Replying to $who", r.text.ifEmpty { if (r.photo.isNotEmpty()) "Photo" else if (r.audio.isNotEmpty()) "Voice message" else "" }, MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+                    IconButton(onClick = { replying = null }) { Icon(Icons.Filled.Close, contentDescription = "Don't reply") }
+                }
+            }
+            // Recording a voice message.
+            if (recording != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(RoundedCornerShape(24.dp))
+                        .background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { stopRecording(send = false) }) { Icon(Icons.Filled.Close, contentDescription = "Don't send") }
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(SOS_RED))
+                    Text("  Recording " + formatClock(recordMs), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    FilledIconButton(onClick = { stopRecording(send = true) }) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send the voice message") }
                 }
             }
             if (canPost && staged.isNotEmpty()) {
@@ -779,13 +914,29 @@ private fun ConversationView(
                     }
                     OutlinedTextField(
                         value = text,
-                        onValueChange = { text = it.take(4000) },
+                        onValueChange = {
+                            text = it.take(4000)
+                            val now = System.currentTimeMillis()
+                            if (it.isNotBlank() && now - lastTyping > 4_000) { lastTyping = now; scope.launch { runCatching { api.chatTyping(convId) } } }
+                        },
                         placeholder = { Text("Message") },
                         modifier = Modifier.weight(1f),
                         maxLines = 5,
                         shape = RoundedCornerShape(24.dp),
                     )
-                    FilledIconButton(onClick = { send() }, enabled = (text.isNotBlank() || staged.isNotEmpty()) && !sending, modifier = Modifier.padding(start = 6.dp).then(if (big) Modifier.size(64.dp) else Modifier)) {
+                    if (text.isBlank() && staged.isEmpty() && recording == null && Access.can("voice")) {
+                        // Nothing typed: a voice message instead.
+                        IconButton(onClick = {
+                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                askMic.launch(android.Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                Voice.stop()
+                                recording = runCatching { VoiceRecording(context) }.getOrElse { error = "Couldn't start recording"; null }
+                            }
+                        }, modifier = Modifier.padding(start = 6.dp).then(if (big) Modifier.size(64.dp) else Modifier)) {
+                            Icon(Icons.Filled.KeyboardVoice, contentDescription = "Record a voice message", tint = Accent2, modifier = if (big) Modifier.size(32.dp) else Modifier)
+                        }
+                    } else FilledIconButton(onClick = { send() }, enabled = (text.isNotBlank() || staged.isNotEmpty()) && !sending, modifier = Modifier.padding(start = 6.dp).then(if (big) Modifier.size(64.dp) else Modifier)) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", modifier = if (big) Modifier.size(32.dp) else Modifier)
                     }
                 }
@@ -826,6 +977,23 @@ private fun ConversationView(
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }
+    acting?.let { m ->
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        MessageActions(
+            onReact = { kind ->
+                val already = m.reactions[kind]?.contains(prefs.memberId) == true
+                scope.launch {
+                    runCatching { api.chatReact(convId, m.id, if (already) "" else kind) }
+                    runCatching { api.chatThread(convId) }.getOrNull()?.messages?.find { it.id == m.id }?.let { f -> val i = messages.indexOfFirst { it.id == m.id }; if (i >= 0) messages[i] = f }
+                }
+            },
+            onReply = if (canPost) ({ replying = m }) else null,
+            onCopy = if (m.text.isNotEmpty()) ({ clipboard.setText(androidx.compose.ui.text.AnnotatedString(m.text)) }) else null,
+            onDelete = if ((m.sender == prefs.memberId && Access.can("chat_delete")) || moderator) ({ deleting = m }) else null,
+            onDismiss = { acting = null },
+        )
+    }
+    viewing?.let { b -> PhotoViewer(b) { viewing = null } }
     deleting?.let { m ->
         AlertDialog(
             onDismissRequest = { deleting = null },
@@ -897,6 +1065,7 @@ private val STATUS_LABELS = mapOf("pending" to "Needs OK", "paused" to "Paused",
 private fun Bubble(
     prefs: Prefs, m: ChatMessage, people: List<Member>, mine: Boolean, showName: Boolean, seenBy: List<String>,
     showAvatar: Boolean = true, onLongPress: (() -> Unit)? = null, onSpeak: (() -> Unit)? = null,
+    onReact: (String) -> Unit = {}, onOpenPhoto: (Bitmap) -> Unit = {},
 ) {
     val sender = people.find { it.id == m.sender }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
@@ -938,17 +1107,23 @@ private fun Bubble(
                     if (onLongPress != null) {
                         Modifier.combinedClickable(
                             onClick = {},
-                            onLongClickLabel = "Delete", onLongClick = onLongPress,
+                            onLongClickLabel = "More", onLongClick = onLongPress,
                         )
                     } else Modifier,
                 )
                 .padding(if (m.photo.isNotEmpty()) 4.dp else 0.dp),
         ) {
-            if (m.photo.isNotEmpty()) ChatPhoto(prefs, m.photo)
+            if (m.replyTo > 0) {
+                val who = people.find { it.id == m.replySender }
+                ReplyQuote(if (m.replySender == prefs.memberId) "You" else who?.name ?: "Someone", m.replyText, fg)
+            }
+            if (m.photo.isNotEmpty()) ChatPhoto(prefs, m.photo, onOpen = onOpenPhoto)
+            if (m.audio.isNotEmpty()) VoiceBubble(prefs, m.audio, m.audioMs, fg)
             if (m.text.isNotEmpty()) Text(m.text, color = fg, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
         }
         if (!mine) speaker()
         }
+        ReactionChips(m.reactions, prefs.memberId, onReact)
         Text(
             DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(m.time)) + if (seenBy.isNotEmpty()) " · Seen by ${seenBy.joinToString(", ")}" else "",
             style = MaterialTheme.typography.labelSmall,
@@ -983,7 +1158,7 @@ private val photoCache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
 }
 
 @Composable
-private fun ChatPhoto(prefs: Prefs, name: String) {
+private fun ChatPhoto(prefs: Prefs, name: String, onOpen: (Bitmap) -> Unit = {}) {
     var bitmap by remember(name) { mutableStateOf(photoCache.get(name)) }
     LaunchedEffect(name) {
         if (bitmap != null) return@LaunchedEffect
@@ -1002,7 +1177,7 @@ private fun ChatPhoto(prefs: Prefs, name: String) {
     } else {
         Image(
             b.asImageBitmap(), contentDescription = "Photo", contentScale = ContentScale.Fit,
-            modifier = Modifier.widthIn(max = 292.dp).heightIn(max = 360.dp).clip(RoundedCornerShape(14.dp)),
+            modifier = Modifier.widthIn(max = 292.dp).heightIn(max = 360.dp).clip(RoundedCornerShape(14.dp)).clickable(onClickLabel = "Open the photo") { onOpen(b) },
         )
     }
 }
