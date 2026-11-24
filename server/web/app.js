@@ -1478,7 +1478,7 @@ function renderChatList() {
     const last = c.last ? (c.last.text || "Photo") : "No messages yet";
     const who = c.last && c.kind !== "direct" ? nameOf(c.last.sender) + ": " : "";
     return el("li", { class: "clickable" + (c.id === chatOpen ? " active" : ""), onclick: () => openChat(c.id) },
-      el("div", { class: "avatar" + (c.emoji ? " emoji" : "") + (!c.emoji && c.kind === "family" && familyInitial() ? " crest" : ""), style: `background:${c.color || (c.kind === "direct" ? (personById(c.members.find((id) => id !== (me.member || {}).id)) || {}).color || "var(--accent)" : "var(--accent)")}` },
+      el("div", { class: "avatar" + (c.emoji ? " emoji" : "") + (!c.emoji && c.kind === "family" ? " crest" : ""), style: `background:${c.color || (c.kind === "direct" ? (personById(c.members.find((id) => id !== (me.member || {}).id)) || {}).color || "var(--accent)" : "var(--accent)")}` },
         c.emoji || (c.kind === "family" ? (familyInitial() || "★") : (c.title || "?").trim().charAt(0).toUpperCase())),
       el("div", { class: "grow" },
         el("div", { class: "title" }, c.title, c.oversight ? el("span", { class: "badge" }, "Watching") : null,

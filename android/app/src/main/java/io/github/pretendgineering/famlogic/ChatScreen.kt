@@ -336,9 +336,10 @@ private fun ConversationRow(c: ChatConversation, people: List<Member>, me: Strin
     ) {
         when {
             // A chosen icon (the family chat's, or a group's).
+            // The family chat: its emoji if it has one, else the family's crest (in its colour).
+            c.kind == "family" && c.emoji.isEmpty() -> FamilyCrest(size, color = c.color)
             c.kind != "direct" && (c.emoji.isNotEmpty() || c.color.isNotEmpty()) ->
                 Avatar(c.title, c.emoji, c.color.ifEmpty { "#6F5AA8" }, size)
-            c.kind == "family" -> FamilyCrest(size)
             other != null -> Avatar(other.name, other.emoji, other.color, size)
             c.kind == "group" -> {
                 val faces = c.members.filter { it != me }.mapNotNull { id -> people.find { it.id == id } }.take(3)

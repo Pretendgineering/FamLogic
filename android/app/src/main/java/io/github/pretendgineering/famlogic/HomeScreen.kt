@@ -1086,8 +1086,8 @@ private fun ChatTile(
 private fun ConvoFace(c: ChatConversation, members: List<Member>, me: String, size: Int) {
     val other = if (c.kind == "direct") members.find { it.id in c.members && it.id != me } else null
     when {
+        c.kind == "family" && c.emoji.isEmpty() -> FamilyCrest(size, color = c.color)
         c.kind != "direct" && (c.emoji.isNotEmpty() || c.color.isNotEmpty()) -> Avatar(c.title, c.emoji, c.color.ifEmpty { "#6F5AA8" }, size)
-        c.kind == "family" -> FamilyCrest(size)
         other != null -> Avatar(other.name, other.emoji, other.color, size)
         else -> Avatar(c.title, "", "#6F5AA8", size)
     }
