@@ -148,6 +148,7 @@ type data struct {
 	APIKeys    []*APIKey          `json:"apiKeys,omitempty"`
 	Rewards    []Reward           `json:"rewards,omitempty"`
 	RewardAsks []RewardAsk        `json:"rewardAsks,omitempty"`
+	Steward    *StewardConfig     `json:"steward,omitempty"`
 	KeyLog     []KeyUse           `json:"keyLog,omitempty"`
 	Members    map[string]*Member `json:"members"`
 	Invites    map[string]*Invite `json:"invites"`

@@ -141,7 +141,9 @@ where: Smile Dental
 - Writes are atomic (write to a temp file, then rename) and every change is also kept in `backups/`.
 - Conflicts: if a file changed on disk since FamLogic last read it, FamLogic re-reads it before applying an edit, and never overwrites an edit it hasn't seen.
 
-## API and AI agents (keys built in 0.27.0)
+## API and AI agents (keys built in 0.27.0, Steward in the app in 0.30.0)
+
+**Steward in the app:** the console points FamLogic at any OpenAI-compatible model. People talk to it from a pinned "Steward" row in Chitchat (voice or text). The server runs the conversation with a few tools (people, chores, rewards, feed); each tool call goes through the app's own handler as the person talking, so permissions are exactly the app's. History: the last 40 messages per person in `DATA_DIR/steward/`. Keys can expire (30, 90, 365 days).
 
 **Built:** keys (Settings → AI & API in the console) with a name and scopes `people`, `chores`, `feed`, `location`; shown once, stored as SHA-256, every use logged (the last 300), revocable; the `agents` module switches them all off at once. A key acts as a parent named after it (`agent:<id>`, 🤖). `GET /api/v1/people`, the chores and stars endpoints, `GET /api/feed`, and `GET /api/v1/openapi.json` (embedded `server/openapi.json`). Agents' rules live in the vault guide. The design below is the fuller plan.
 

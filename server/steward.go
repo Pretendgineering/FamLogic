@@ -1,0 +1,435 @@
+package main
+
+// Steward, the assistant: the family talks to its own AI model from the app ("tell
+// Sam to unload the dishwasher", "I finished the dishwasher"). An admin points
+// FamLogic at any OpenAI-compatible endpoint (Ollama, a Hermes server, a cloud
+// provider) in the console; FamLogic runs the conversation and gives the model a
+// few tools: who's in the family, the chores, the rewards and the feed. Every
+// tool call runs as the person talking, through the same handlers (and the same
+// permission checks) as the app, so a child can't do through Steward anything they
+// couldn't do with a tap. Each person's conversation is kept (the last 40
+// messages) in DATA_DIR/steward/<id>.json.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+)
+
+// StewardConfig is the model Steward talks through.
+type StewardConfig struct {
+	Enabled  bool   `json:"enabled"`
+	URL      string `json:"url"`   // OpenAI-compatible base, e.g. http://ollama:11434/v1
+	Model    string `json:"model"` // e.g. hermes3, llama3.1
+	Key      string `json:"key,omitempty"`
+	Everyone bool   `json:"everyone"` // children too (otherwise grown-ups only)
+}
+
+func (s *Store) Steward() StewardConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.d.Steward == nil {
+		return StewardConfig{}
+	}
+	return *s.d.Steward
+}
+
+func (s *Store) SetSteward(c StewardConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.d.Steward = &c
+	return s.saveLocked()
+}
+
+// stewardReady: the module is on and a model is set.
+func (s *Server) stewardReady() bool {
+	c := s.store.Steward()
+	return s.store.Modules().Enabled["agents"] && c.Enabled && c.URL != "" && c.Model != ""
+}
+
+func (s *Server) mayTalkToSteward(me *Member) bool {
+	return s.stewardReady() && me.role() != RoleDependent && (isAdult(me) || s.store.Steward().Everyone)
+}
+
+// ---- conversation history
+
+type StewardMsg struct {
+	Role string `json:"role"` // user, assistant
+	Text string `json:"text"`
+	Time int64  `json:"time"`
+}
+
+var stewardFiles sync.Mutex
+
+func (s *Server) stewardPath(id string) string {
+	return filepath.Join(filepath.Dir(s.store.path), "steward", id+".json")
+}
+
+func (s *Server) stewardHistory(id string) []StewardMsg {
+	stewardFiles.Lock()
+	defer stewardFiles.Unlock()
+	out := []StewardMsg{}
+	if b, err := os.ReadFile(s.stewardPath(id)); err == nil {
+		_ = json.Unmarshal(b, &out)
+	}
+	return out
+}
+
+func (s *Server) saveStewardHistory(id string, msgs []StewardMsg) {
+	if len(msgs) > 40 {
+		msgs = msgs[len(msgs)-40:]
+	}
+	stewardFiles.Lock()
+	defer stewardFiles.Unlock()
+	p := s.stewardPath(id)
+	_ = os.MkdirAll(filepath.Dir(p), 0o700)
+	b, _ := json.Marshal(msgs)
+	_ = writeAtomic(p, b)
+}
+
+// ---- tools: each runs through the app's own handler, as the person talking
+
+type stewardTool struct {
+	name, desc string
+	params     map[string]any
+	run        func(s *Server, me *Member, args map[string]any) any
+}
+
+func obj(props map[string]any, required ...string) map[string]any {
+	return map[string]any{"type": "object", "properties": props, "required": required}
+}
+
+func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+
+// callAs runs one of the app's handlers as [me] and returns its JSON answer.
+func (s *Server) callAs(me *Member, h deviceHandler, method, target string, pathVals map[string]string, body any) any {
+	var rd io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		rd = bytes.NewReader(b)
+	}
+	r := httptest.NewRequest(method, target, rd)
+	r.Header.Set("Content-Type", "application/json")
+	for k, v := range pathVals {
+		r.SetPathValue(k, v)
+	}
+	w := httptest.NewRecorder()
+	h(w, r, me)
+	var out any
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		out = strings.TrimSpace(w.Body.String())
+	}
+	if w.Code >= 300 {
+		return map[string]any{"error": out, "status": w.Code}
+	}
+	if out == nil || out == "" {
+		return map[string]any{"ok": true}
+	}
+	return out
+}
+
+// personID finds someone by id or (case-insensitively) by name.
+func (s *Server) personID(who string) string {
+	who = strings.TrimSpace(strings.Trim(who, "[]@"))
+	for _, m := range s.store.Members() {
+		if m.ID == who || strings.EqualFold(m.Name, who) {
+			return m.ID
+		}
+	}
+	return who
+}
+
+func argStr(a map[string]any, k string) string {
+	v, _ := a[k].(string)
+	return strings.TrimSpace(v)
+}
+
+var stewardTools = []stewardTool{
+	{"list_people", "Everyone in the family: id, name, role, stars.", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handlePeople, "GET", "/api/v1/people", nil, nil)
+		}},
+	{"list_chores", "All chores with id, title, who (ids), repeat, due date, stars, and when each was done.", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleChores, "GET", "/api/chores", nil, nil)
+		}},
+	{"add_chore", "Add a chore for someone.", obj(map[string]any{
+		"title": str("Short and plain, e.g. Unload the dishwasher"),
+		"who":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Names or ids of who it's for"},
+		"every": str("Empty for once; day, weekdays, week, 2 weeks, month, or days like mon,thu"),
+		"due":   str("YYYY-MM-DD, empty for today"),
+		"when":  str("Optional time of day: morning, after school, evening, bedtime or HH:MM"),
+		"stars": map[string]any{"type": "integer", "description": "Optional stars (only if a parent asked)"},
+		"notes": str("Optional details"),
+	}, "title"),
+		func(s *Server, me *Member, a map[string]any) any {
+			body := map[string]any{"title": argStr(a, "title"), "every": argStr(a, "every"), "when": argStr(a, "when"), "notes": argStr(a, "notes")}
+			if d := argStr(a, "due"); d != "" {
+				body["due"] = d
+			}
+			if n, ok := a["stars"].(float64); ok {
+				body["stars"] = int(n)
+			}
+			who := []string{}
+			if list, ok := a["who"].([]any); ok {
+				for _, w := range list {
+					if ws, ok := w.(string); ok {
+						who = append(who, s.personID(ws))
+					}
+				}
+			}
+			body["who"] = who
+			return s.callAs(me, s.handleCreateChore, "POST", "/api/chores", nil, body)
+		}},
+	{"complete_chore", "Tick a chore off as done. Only for the person who did it, or when a parent says so.", obj(map[string]any{
+		"chore_id": str("The chore's id (from list_chores)"),
+		"by":       str("Name or id of who did it (empty: the person talking)"),
+	}, "chore_id"),
+		func(s *Server, me *Member, a map[string]any) any {
+			body := map[string]any{}
+			if by := argStr(a, "by"); by != "" {
+				body["by"] = s.personID(by)
+			}
+			id := argStr(a, "chore_id")
+			return s.callAs(me, s.handleChoreDone, "POST", "/api/chores/"+url.PathEscape(id)+"/done", map[string]string{"id": id}, body)
+		}},
+	{"list_rewards", "Rewards stars can buy, and open asks.", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleRewards, "GET", "/api/rewards", nil, nil)
+		}},
+	{"read_feed", "What happened recently: arrivals, check-ins, trips, chores done.", obj(map[string]any{
+		"hours": map[string]any{"type": "integer", "description": "How far back (default 12, at most 48)"},
+	}),
+		func(s *Server, me *Member, a map[string]any) any {
+			h := 12
+			if n, ok := a["hours"].(float64); ok && n > 0 {
+				h = min(int(n), 48)
+			}
+			now := time.Now().UnixMilli()
+			q := fmt.Sprintf("/api/feed?from=%d&to=%d", now-int64(h)*3_600_000, now)
+			return s.callAs(me, s.handleFeed, "GET", q, nil, nil)
+		}},
+}
+
+// ---- the conversation with the model
+
+type llmMsg struct {
+	Role       string        `json:"role"`
+	Content    string        `json:"content"`
+	ToolCalls  []llmToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string        `json:"tool_call_id,omitempty"`
+}
+
+type llmToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
+func (s *Server) stewardSystem(me *Member) string {
+	now := time.Now()
+	people := []string{}
+	for _, m := range s.store.Members() {
+		people = append(people, fmt.Sprintf("%s (%s, id %s)", m.Name, m.access(), m.ID))
+	}
+	return fmt.Sprintf(`You are Steward, the %s family's helper inside FamLogic, their self-hosted family app.
+You are talking with %s (%s). Now: %s.
+Family: %s.
+
+Keep replies short and plain: one or two sentences, no emoji, no markdown. Children may be listening.
+Use the tools to see and change things; never invent chores or say something was done unless a tool said so.
+Rules:
+- Only tick off a chore for the person who says they did it, or when a parent says so. Don't let a child tick off a sibling's chore.
+- Keep chore names short ("Unload the dishwasher"); put details in notes.
+- Only give stars when a parent asks. Never retire chores or change who they're for unless a parent asks.
+- If you're unsure who someone means, ask instead of guessing.
+- If a tool returns an error, say plainly what went wrong.`,
+		s.cfg.FamilyName, me.Name, me.access(), now.Format("Monday 2 January 2006, 15:04"), strings.Join(people, "; "))
+}
+
+var stewardClient = &http.Client{Timeout: 90 * time.Second}
+
+func (s *Server) stewardReply(ctx context.Context, me *Member, history []StewardMsg) (string, error) {
+	c := s.store.Steward()
+	msgs := []llmMsg{{Role: "system", Content: s.stewardSystem(me)}}
+	for _, h := range history {
+		msgs = append(msgs, llmMsg{Role: h.Role, Content: h.Text})
+	}
+	tools := []map[string]any{}
+	for _, t := range stewardTools {
+		tools = append(tools, map[string]any{"type": "function", "function": map[string]any{"name": t.name, "description": t.desc, "parameters": t.params}})
+	}
+	for round := 0; round < 6; round++ {
+		body, _ := json.Marshal(map[string]any{"model": c.Model, "messages": msgs, "tools": tools})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.URL, "/")+"/chat/completions", bytes.NewReader(body))
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if c.Key != "" {
+			req.Header.Set("Authorization", "Bearer "+c.Key)
+		}
+		res, err := stewardClient.Do(req)
+		if err != nil {
+			return "", err
+		}
+		raw, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+		res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("the model answered %d: %.200s", res.StatusCode, raw)
+		}
+		var out struct {
+			Choices []struct {
+				Message llmMsg `json:"message"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil || len(out.Choices) == 0 {
+			return "", fmt.Errorf("the model's answer didn't make sense")
+		}
+		m := out.Choices[0].Message
+		if len(m.ToolCalls) == 0 {
+			return strings.TrimSpace(m.Content), nil
+		}
+		msgs = append(msgs, llmMsg{Role: "assistant", Content: m.Content, ToolCalls: m.ToolCalls})
+		for _, call := range m.ToolCalls {
+			var result any = map[string]any{"error": "no such tool"}
+			for _, t := range stewardTools {
+				if t.name == call.Function.Name {
+					args := map[string]any{}
+					_ = json.Unmarshal([]byte(call.Function.Arguments), &args)
+					result = t.run(s, me, args)
+				}
+			}
+			b, _ := json.Marshal(result)
+			if len(b) > 12000 {
+				b = b[:12000]
+			}
+			msgs = append(msgs, llmMsg{Role: "tool", ToolCallID: call.ID, Content: string(b)})
+		}
+	}
+	return "", fmt.Errorf("the model kept calling tools without answering")
+}
+
+// ---- HTTP
+
+// GET /api/steward: your conversation.
+func (s *Server) handleStewardGet(w http.ResponseWriter, r *http.Request, me *Member) {
+	if !s.mayTalkToSteward(me) {
+		writeError(w, http.StatusForbidden, "Steward isn't set up for you")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"messages": s.stewardHistory(me.ID)})
+}
+
+// POST /api/steward {text}: say something; the answer comes back with the conversation.
+func (s *Server) handleStewardSay(w http.ResponseWriter, r *http.Request, me *Member) {
+	if !s.mayTalkToSteward(me) {
+		writeError(w, http.StatusForbidden, "Steward isn't set up for you")
+		return
+	}
+	var body struct {
+		Text string `json:"text"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	text := strings.TrimSpace(body.Text)
+	if text == "" || utf8.RuneCountInString(text) > 1000 {
+		writeError(w, http.StatusBadRequest, "say something (up to 1000 characters)")
+		return
+	}
+	hist := append(s.stewardHistory(me.ID), StewardMsg{Role: "user", Text: text, Time: time.Now().UnixMilli()})
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+	recent := hist
+	if len(recent) > 16 {
+		recent = recent[len(recent)-16:]
+	}
+	reply, err := s.stewardReply(ctx, me, recent)
+	if err != nil {
+		reply = "I can't reach my brain right now (" + err.Error() + "). Try again in a bit."
+	} else if reply == "" {
+		reply = "Done."
+	}
+	hist = append(hist, StewardMsg{Role: "assistant", Text: reply, Time: time.Now().UnixMilli()})
+	s.saveStewardHistory(me.ID, hist)
+	writeJSON(w, http.StatusOK, map[string]any{"messages": s.stewardHistory(me.ID), "reply": reply})
+}
+
+// DELETE /api/steward: start over.
+func (s *Server) handleStewardClear(w http.ResponseWriter, r *http.Request, me *Member) {
+	s.saveStewardHistory(me.ID, []StewardMsg{})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// GET/PUT /api/admin/steward: the model settings (the key is never sent back).
+func (s *Server) handleAdminSteward(w http.ResponseWriter, r *http.Request) {
+	c := s.store.Steward()
+	hasKey := c.Key != ""
+	c.Key = ""
+	writeJSON(w, http.StatusOK, map[string]any{"config": c, "hasKey": hasKey})
+}
+
+func (s *Server) handleAdminSetSteward(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		StewardConfig
+		ClearKey bool `json:"clearKey"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	c := body.StewardConfig
+	c.URL = strings.TrimSpace(c.URL)
+	if c.URL != "" {
+		u, err := url.Parse(c.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			writeError(w, http.StatusBadRequest, "the address starts with http:// or https://, e.g. http://ollama:11434/v1")
+			return
+		}
+	}
+	if len(c.Model) > 100 || len(c.Key) > 500 {
+		writeError(w, http.StatusBadRequest, "that's too long")
+		return
+	}
+	old := s.store.Steward()
+	if c.Key == "" && !body.ClearKey {
+		c.Key = old.Key // keep the saved one
+	}
+	if err := s.store.SetSteward(c); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	s.handleAdminSteward(w, r)
+}
+
+// POST /api/admin/steward/test: one short exchange, to check the settings work.
+func (s *Server) handleAdminTestSteward(w http.ResponseWriter, r *http.Request) {
+	if s.store.Steward().URL == "" {
+		writeError(w, http.StatusBadRequest, "set the address and model first")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	start := time.Now()
+	reply, err := s.stewardReply(ctx, &Member{ID: "admin", Name: "Admin", Role: RoleParent}, []StewardMsg{{Role: "user", Text: "Say hello in five words or fewer."}})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reply": reply, "ms": strconv.FormatInt(time.Since(start).Milliseconds(), 10)})
+}

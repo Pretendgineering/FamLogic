@@ -811,6 +811,9 @@ class Api(private val baseUrl: String, private val token: String = "") {
         return wrapped.getJSONArray("items")
     }
 
+    /** Any call, for features kept in their own files (Steward). */
+    suspend fun raw(method: String, path: String, body: JSONObject? = null): JSONObject = request(method, path, body, readTimeoutMs = 130_000)
+
     private suspend fun request(
         method: String,
         path: String,

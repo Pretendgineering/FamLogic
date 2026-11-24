@@ -34,6 +34,7 @@ type APIKey struct {
 	Created  int64    `json:"created"`
 	LastUsed int64    `json:"lastUsed,omitempty"`
 	Uses     int      `json:"uses,omitempty"`
+	Expires  int64    `json:"expires,omitempty"` // unix ms; 0 = never
 }
 
 // KeyUse is one request made with a key (the latest few hundred are kept).
@@ -75,11 +76,14 @@ func hashKey(k string) string {
 }
 
 // CreateKey makes a key; the plain key is returned only this once.
-func (s *Store) CreateKey(name string, scopes []string) (APIKey, string, error) {
+func (s *Store) CreateKey(name string, scopes []string, days int) (APIKey, string, error) {
 	b := make([]byte, 20)
 	rand.Read(b)
 	plain := keyPrefix + strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
 	k := APIKey{ID: randomString(8), Name: name, Hash: hashKey(plain), Prefix: plain[:7], Scopes: scopes, Created: time.Now().UnixMilli()}
+	if days > 0 {
+		k.Expires = time.Now().AddDate(0, 0, days).UnixMilli()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.d.APIKeys = append(s.d.APIKeys, &k)
@@ -117,6 +121,9 @@ func (s *Store) useKey(plain string, r *http.Request) *APIKey {
 	defer s.mu.Unlock()
 	for _, k := range s.d.APIKeys {
 		if k.Hash == h {
+			if k.Expires > 0 && time.Now().UnixMilli() > k.Expires {
+				return nil // expired: as good as revoked
+			}
 			k.LastUsed = time.Now().UnixMilli()
 			k.Uses++
 			s.d.KeyLog = append(s.d.KeyLog, KeyUse{Time: k.LastUsed, Key: k.ID, Method: r.Method, Path: r.URL.Path})
@@ -154,7 +161,7 @@ func (s *Server) agentRequest(w http.ResponseWriter, r *http.Request, token stri
 	}
 	k := s.store.useKey(token, r)
 	if k == nil {
-		writeError(w, http.StatusUnauthorized, "unknown or revoked API key")
+		writeError(w, http.StatusUnauthorized, "unknown, expired or revoked API key")
 		return true
 	}
 	scope := scopeFor(r.Method, r.URL.Path)
@@ -202,6 +209,7 @@ func (s *Server) handleAdminCreateKey(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name   string   `json:"name"`
 		Scopes []string `json:"scopes"`
+		Days   int      `json:"days"` // 0 = never expires
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -221,7 +229,11 @@ func (s *Server) handleAdminCreateKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "choose at least one thing the key may do")
 		return
 	}
-	k, plain, err := s.store.CreateKey(name, body.Scopes)
+	if body.Days < 0 || body.Days > 3650 {
+		writeError(w, http.StatusBadRequest, "expiry: 0 (never) to 3650 days")
+		return
+	}
+	k, plain, err := s.store.CreateKey(name, body.Scopes, body.Days)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return

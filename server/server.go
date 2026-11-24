@@ -148,6 +148,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/chores/{id}/undo", s.choreAuth(s.handleChoreUndo))
 	mux.HandleFunc("POST /api/members/{id}/stars", s.choreAuth(s.handleStars))
 	mux.HandleFunc("GET /api/rewards", s.choreAuth(s.handleRewards))
+	mux.HandleFunc("GET /api/steward", s.device(s.handleStewardGet))
+	mux.HandleFunc("POST /api/steward", s.device(s.handleStewardSay))
+	mux.HandleFunc("DELETE /api/steward", s.device(s.handleStewardClear))
+	mux.HandleFunc("GET /api/admin/steward", s.admin(s.handleAdminSteward))
+	mux.HandleFunc("PUT /api/admin/steward", s.admin(s.handleAdminSetSteward))
+	mux.HandleFunc("POST /api/admin/steward/test", s.admin(s.handleAdminTestSteward))
 	mux.HandleFunc("POST /api/rewards", s.choreAuth(s.handleAddReward))
 	mux.HandleFunc("PATCH /api/rewards/{id}", s.choreAuth(s.handleUpdateReward))
 	mux.HandleFunc("DELETE /api/rewards/{id}", s.choreAuth(s.handleDeleteReward))
@@ -301,6 +307,12 @@ func (s *Server) serverInfo() map[string]any {
 	}
 	features = append(features, s.store.moduleFeatures()...)
 	features = append(features, s.voice.features()...)
+	if s.stewardReady() {
+		features = append(features, "steward")
+		if s.store.Steward().Everyone {
+			features = append(features, "steward-kids")
+		}
+	}
 	return map[string]any{
 		"name":            s.cfg.FamilyName,
 		"version":         version,

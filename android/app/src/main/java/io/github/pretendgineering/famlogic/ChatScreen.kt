@@ -8,6 +8,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.requiredHeight
@@ -161,6 +162,8 @@ fun ChatScreen(prefs: Prefs, openRequest: String?, onOpenHandled: () -> Unit) {
     if (conv != null) BackHandler { if (fullscreen) fullscreen = false else open = null }
     val portrait = config.screenHeightDp >= config.screenWidthDp
     when {
+        // Steward: the family's AI helper, full screen.
+        conv == "steward" -> StewardScreen(prefs) { open = null }
         // Full screen: by choice, a phone on its side, or (except for younger children,
         // who get the split-open list below) any open chat in portrait.
         conv != null && (fullscreen || (!tablet && !portrait) || (!sideBySide && !Access.younger)) -> ConversationView(
@@ -269,6 +272,22 @@ private fun ConversationList(
                 }
             }
             error?.let { item { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) } }
+            // Steward, pinned at the top when the family has it.
+            if (Steward.available(prefs)) item(key = "steward") {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onOpen("steward") }.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.size(if (Access.big) 56.dp else 44.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Accent2) }
+                    Column(Modifier.padding(start = 14.dp)) {
+                        Text(Access.name("steward"), style = MaterialTheme.typography.titleMedium)
+                        Text(if (Access.isChild) "Tell it when a job's done" else "Your family's helper", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
             val list = convs
             if (list == null) {
                 item { Text("Loading…", modifier = Modifier.padding(16.dp)) }

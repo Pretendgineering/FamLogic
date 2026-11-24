@@ -1873,11 +1873,14 @@ async function renderKeys() {
   const name = el("input", { placeholder: "Who'll use it, e.g. Hermes on the NAS", maxlength: "40" });
   const scopes = el("div", { class: "acc-opts" }, ...data.scopes.map((sc) => el("label", {}, el("input", { type: "checkbox", value: sc.id, ...(sc.id === "location" ? {} : { checked: "" }) }), el("span", {}, el("strong", {}, sc.id), " · ", sc.text))));
   const shown = el("div");
-  const form = el("form", {}, el("label", {}, "Name ", name), el("div", { class: "muted small" }, "It may:"), scopes, el("div", { class: "row" }, el("button", { type: "submit" }, "Make a key")));
+  const days = el("select", {}, ...[["0", "Never"], ["30", "In 30 days"], ["90", "In 90 days"], ["365", "In a year"]].map(([v, t]) => el("option", { value: v }, t)));
+  days.value = "90";
+  const form = el("form", {}, el("label", {}, "Name ", name), el("div", { class: "muted small" }, "It may:"), scopes,
+    el("div", { class: "row" }, el("label", {}, "Expires ", days), el("button", { type: "submit" }, "Make a key")));
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     try {
-      const res = await api("POST", "/api/admin/keys", { name: name.value.trim(), scopes: [...scopes.querySelectorAll("input:checked")].map((i) => i.value) });
+      const res = await api("POST", "/api/admin/keys", { name: name.value.trim(), scopes: [...scopes.querySelectorAll("input:checked")].map((i) => i.value), days: Number(days.value) });
       shown.replaceChildren(el("p", {}, el("strong", {}, "Copy this key now: "), "it won't be shown again."),
         el("div", { class: "copy" }, el("input", { readonly: "", value: res.key }), el("button", { type: "button", onclick: (e) => { navigator.clipboard.writeText(res.key); e.target.textContent = "Copied"; } }, "Copy")));
       renderKeysList(data = await api("GET", "/api/admin/keys"));
@@ -1890,7 +1893,9 @@ async function renderKeys() {
       const revoke = el("button", { type: "button", class: "secondary" }, "Revoke");
       revoke.addEventListener("click", async () => { if (confirm(`Revoke "${k.name}"? It stops working at once.`)) { await api("DELETE", `/api/admin/keys/${k.id}`); renderKeys(); } });
       return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, k.name, " ", el("code", {}, k.prefix + "…")),
-        el("div", { class: "sub" }, `${k.scopes.join(", ")} · made ${new Date(k.created).toLocaleDateString()} · ${k.uses ? `used ${k.uses} times, last ${new Date(k.lastUsed).toLocaleString()}` : "not used yet"}`)), revoke);
+        el("div", { class: "sub" }, [k.scopes.join(", "), `made ${new Date(k.created).toLocaleDateString()}`,
+          k.expires ? (k.expires < Date.now() ? "expired" : `expires ${new Date(k.expires).toLocaleDateString()}`) : "never expires",
+          k.uses ? `used ${k.uses} times, last ${new Date(k.lastUsed).toLocaleString()}` : "not used yet"].join(" · "))), revoke);
     }) : [el("li", { class: "muted" }, "No keys yet.")]));
     const names = Object.fromEntries(d.keys.map((k) => [k.id, k.name]));
     log.replaceChildren(...d.log.slice(-25).reverse().map((u) => el("li", { class: "small" }, `${new Date(u.time).toLocaleString()} · ${names[u.key] || "(revoked key)"} · ${u.method} ${u.path}`)));
@@ -1900,5 +1905,41 @@ async function renderKeys() {
     el("p", {}, "Keys let an AI agent (a Hermes agent, an Ollama-driven tool, a script) work with your family's FamLogic: say \"tell Sam to unload the dishwasher\" and it adds the chore; Sam says \"done\" and it ticks it off. Each key can only do what you tick, every use is logged below, and you can revoke it any time."),
     on ? null : el("p", { class: "banner" }, "Switch on ", el("strong", {}, "Steward"), " in Modules for keys to work."),
     el("p", {}, "For the agent: the API is described at ", el("a", { href: "/api/v1/openapi.json", target: "_blank" }, "/api/v1/openapi.json"), " and the rules it should follow are in the ", el("a", { href: "/api/v1/vault/guide", target: "_blank" }, "vault guide"), " (also AGENTS.md in the vault)."),
+    el("h2", {}, "Steward in the app"), await stewardSettings(),
     el("h2", {}, "Keys"), list, el("h2", {}, "Make a key"), form, shown, el("h2", {}, "Recent uses"), log].filter(Boolean));
+}
+
+// Steward in the app: the family talks to your own AI model (any OpenAI-compatible
+// address: Ollama, a Hermes server, a cloud provider) from Chitchat.
+async function stewardSettings() {
+  let d;
+  try { d = await api("GET", "/api/admin/steward"); } catch (err) { return el("p", {}, err.message); }
+  const c = d.config;
+  const enabled = el("input", { type: "checkbox", class: "switch", role: "switch", ...(c.enabled ? { checked: "" } : {}) });
+  const everyone = el("input", { type: "checkbox", class: "switch", role: "switch", ...(c.everyone ? { checked: "" } : {}) });
+  const url = el("input", { placeholder: "http://ollama:11434/v1", value: c.url || "" });
+  const model = el("input", { placeholder: "e.g. hermes3 or llama3.1", value: c.model || "" });
+  const key = el("input", { type: "password", placeholder: d.hasKey ? "Saved (leave empty to keep it)" : "Only if the address needs one", autocomplete: "off" });
+  const status = el("p", { class: "muted small" });
+  const save = el("button", { type: "submit" }, "Save");
+  const test = el("button", { type: "button", class: "secondary" }, "Test");
+  const form = el("form", { class: "upkeep-add" },
+    el("label", { class: "switch-label" }, enabled, "Let the family talk to Steward in Chitchat"),
+    el("label", {}, "Model address (OpenAI-compatible)", url),
+    el("div", { class: "row" }, el("label", { class: "grow" }, "Model", model), el("label", { class: "grow" }, "Key", key)),
+    el("label", { class: "switch-label" }, everyone, "Children too (they can only do what they could in the app)"),
+    el("div", { class: "row" }, save, test), status);
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      await api("PUT", "/api/admin/steward", { enabled: enabled.checked, everyone: everyone.checked, url: url.value.trim(), model: model.value.trim(), key: key.value });
+      key.value = ""; status.textContent = "Saved.";
+    } catch (err) { status.textContent = err.message; }
+  });
+  test.addEventListener("click", async () => {
+    status.textContent = "Asking the model…";
+    try { const r = await api("POST", "/api/admin/steward/test"); status.textContent = `It said: "${r.reply}" (${r.ms} ms)`; }
+    catch (err) { status.textContent = "Couldn't reach it: " + err.message; }
+  });
+  return el("div", {}, el("p", { class: "muted small" }, "Steward answers as itself and acts as whoever is talking: everything it does goes through the same permissions as the app."), form);
 }

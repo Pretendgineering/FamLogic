@@ -50,9 +50,11 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `GET /api/rewards`; `POST /api/rewards {title, cost}`; `DELETE /api/rewards/{id}` | anyone with Upkeep; parents and keys change the list | Rewards stars can buy, and asks (everyone's for parents, your own for children) |
 | `POST /api/rewards/{id}/ask`; `POST /api/rewards/asks/{id}/approve` or `/decline` | the child asks; a parent answers | Approving takes the stars (409 if there aren't enough) and goes on the feed |
 | `GET /api/feed?from=<ms>&to=<ms>` | `Bearer <token>`, a key with `feed` | The family feed (default the last 24 hours, at most 8 days): `{items:[event]}` newest first, the same visibility as alerts |
+| `GET /api/steward`; `POST /api/steward {text}`; `DELETE /api/steward` | `Bearer <token>` (grown-ups, or everyone if the admin allows) | Talk to Steward: the server asks the family's model (Settings → AI & API), which acts as you through the same handlers and permissions. Feature `steward` (and `steward-kids`) |
+| `GET`/`PUT /api/admin/steward {enabled, url, model, key?, everyone}`; `POST /api/admin/steward/test` | admin session | The model Steward talks through: any OpenAI-compatible address (Ollama, a Hermes server, a cloud provider). The key is never sent back |
 | `GET /api/v1/people` | a key with `people` | Everyone's id, name, role, access, stars and voice (no locations) |
 | `GET /api/v1/openapi.json` | none | The OpenAPI description of what keys can use |
-| `GET`/`POST /api/admin/keys` `{name, scopes}`, `DELETE /api/admin/keys/{id}` | admin session | Steward keys: list (with the recent-use log), make one (the key is returned once), revoke |
+| `GET`/`POST /api/admin/keys` `{name, scopes, days?}`, `DELETE /api/admin/keys/{id}` | admin session | Steward keys: list (with the recent-use log), make one (the key is returned once), revoke |
 
 **API keys** (`Authorization: Bearer fl_…`) work only while the family's `agents` module (Steward) is on, and only for their scopes.
 

@@ -1,6 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -279,5 +283,51 @@ func TestWhenClock(t *testing.T) {
 	}
 	if _, _, ok := whenClock("whenever"); ok {
 		t.Error("no time")
+	}
+}
+
+// A fake model: first it asks for add_chore, then it answers.
+func TestSteward(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	calls := 0
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		msgs := req["messages"].([]any)
+		last := msgs[len(msgs)-1].(map[string]any)
+		if last["role"] == "tool" {
+			if !strings.Contains(last["content"].(string), "Unload the dishwasher") {
+				t.Errorf("tool result: %v", last["content"])
+			}
+			fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"Done. I asked Kid to unload the dishwasher."}}]}`)
+			return
+		}
+		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"1","type":"function","function":{"name":"add_chore","arguments":"{\"title\":\"Unload the dishwasher\",\"who\":[\"kid\"]}"}}]}}]}`)
+	}))
+	defer llm.Close()
+	if st, _ := e.status("POST", "/api/steward", f.mom, map[string]any{"text": "hi"}); st != 403 {
+		t.Fatalf("not set up yet: %d", st)
+	}
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	e.status("PUT", "/api/admin/modules", "", map[string]any{"enabled": map[string]bool{"thereabouts": true, "chat": true, "chores": true, "agents": true}, "setupDone": true})
+	if st, c := e.status("PUT", "/api/admin/steward", "", map[string]any{"enabled": true, "url": llm.URL, "model": "test", "key": "secret"}); st != 200 || c["hasKey"] != true {
+		t.Fatalf("config: %d %v", st, c)
+	}
+	if st, _ := e.status("POST", "/api/steward", f.kid, map[string]any{"text": "hi"}); st != 403 {
+		t.Fatalf("grown-ups only by default: %d", st)
+	}
+	st, res := e.status("POST", "/api/steward", f.mom, map[string]any{"text": "Tell Kid to unload the dishwasher"})
+	if st != 200 || !strings.Contains(res["reply"].(string), "Done") || calls != 2 {
+		t.Fatalf("say: %d %v (%d calls)", st, res, calls)
+	}
+	_, list := e.status("GET", "/api/chores", f.mom, nil)
+	ch := list["chores"].([]any)[0].(map[string]any)
+	if ch["title"] != "Unload the dishwasher" || ch["who"].([]any)[0] != f.kidID {
+		t.Fatalf("chore: %v", ch)
+	}
+	if _, h := e.status("GET", "/api/steward", f.mom, nil); len(h["messages"].([]any)) != 2 {
+		t.Fatalf("history: %v", h)
 	}
 }
