@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -228,3 +229,32 @@ func TestChat(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestChatExtras(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	_, first := e.status("POST", "/api/chat/family/messages", f.mom, map[string]any{"text": "Who wants pancakes?"})
+	id := int64(first["id"].(float64))
+	st, reply := e.status("POST", "/api/chat/family/messages", f.teen, map[string]any{"text": "Me!", "replyTo": id})
+	if st != 200 || reply["replyText"] != "Who wants pancakes?" || reply["replySender"] != f.momID {
+		t.Fatalf("reply: %d %v", st, reply)
+	}
+	if st, _ := e.status("POST", fmt.Sprintf("/api/chat/family/messages/%d/react", id), f.dad, map[string]any{"kind": "heart"}); st != 204 {
+		t.Fatalf("react: %d", st)
+	}
+	if st, _ := e.status("POST", fmt.Sprintf("/api/chat/family/messages/%d/react", id), f.dad, map[string]any{"kind": "eggplant"}); st != 400 {
+		t.Fatalf("not a reaction: %d", st)
+	}
+	e.status("POST", "/api/chat/family/typing", f.kid, nil)
+	_, got := e.status("GET", "/api/chat/family/messages", f.mom, nil)
+	msgs := got["messages"].([]any)
+	if r := msgs[len(msgs)-2].(map[string]any)["reactions"].(map[string]any)["heart"].([]any); len(r) != 1 || r[0] != f.dadID {
+		t.Fatalf("reactions: %v", msgs)
+	}
+	if ty := got["typing"].([]any); len(ty) != 1 || ty[0] != f.kidID {
+		t.Fatalf("typing: %v", got["typing"])
+	}
+	if _, found := e.status("GET", "/api/chat/search?q=pancake", f.kid, nil); len(found["messages"].([]any)) != 1 {
+		t.Fatalf("search: %v", found)
+	}
+}

@@ -9,10 +9,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
 )
 
 // EventChat tells one person about a new message (To = them).
-const EventChat = "chat"
+const (
+	EventChat       = "chat"
+	EventChatUpdate = "chat_update" // a chat changed quietly (a reaction): apps refresh it
+)
 
 // convView is a conversation as one person sees it.
 type convView struct {
@@ -185,6 +191,7 @@ func (s *Server) handleChatMessages(w http.ResponseWriter, r *http.Request, me *
 	reads, _ := s.chat.Reads(conv.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"conversation": s.view(conv, me.ID, !post, people), "messages": msgs, "reads": reads, "canPost": post,
+		"typing": s.typing.who(conv.ID, me.ID),
 	})
 }
 
@@ -207,7 +214,8 @@ func (s *Server) handleChatPost(w http.ResponseWriter, r *http.Request, me *Memb
 		}
 		return
 	}
-	var text, photo string
+	var text, photo, audio string
+	var replyTo, audioMs int64
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
 		r.Body = http.MaxBytesReader(w, r.Body, maxPhotoBytes+(1<<20))
 		if err := r.ParseMultipartForm(4 << 20); err != nil {
@@ -215,6 +223,22 @@ func (s *Server) handleChatPost(w http.ResponseWriter, r *http.Request, me *Memb
 			return
 		}
 		text = r.FormValue("text")
+		replyTo, _ = strconv.ParseInt(r.FormValue("replyTo"), 10, 64)
+		// A voice message.
+		if f, _, err := r.FormFile("audio"); err == nil {
+			data, err := io.ReadAll(io.LimitReader(f, maxAudioBytes+1))
+			f.Close()
+			if err != nil || len(data) > maxAudioBytes {
+				writeError(w, http.StatusRequestEntityTooLarge, "that recording is too long")
+				return
+			}
+			if audio, err = s.chat.SaveAudio(data); err != nil {
+				writeError(w, http.StatusBadRequest, capitalize(err.Error()))
+				return
+			}
+			audioMs, _ = strconv.ParseInt(r.FormValue("audioMs"), 10, 64)
+			audioMs = max(0, min(audioMs, 5*60_000))
+		}
 		if f, _, err := r.FormFile("photo"); err == nil {
 			if !me.can("chat_photos") {
 				f.Close()
@@ -234,23 +258,25 @@ func (s *Server) handleChatPost(w http.ResponseWriter, r *http.Request, me *Memb
 		}
 	} else {
 		var body struct {
-			Text string `json:"text"`
+			Text    string `json:"text"`
+			ReplyTo int64  `json:"replyTo"`
 		}
 		if !readJSON(w, r, &body) {
 			return
 		}
-		text = body.Text
+		text, replyTo = body.Text, body.ReplyTo
 	}
 	text, okLen := cleanMessage(text)
 	if !okLen {
 		writeError(w, http.StatusBadRequest, "that message is too long")
 		return
 	}
-	if text == "" && photo == "" {
+	if text == "" && photo == "" && audio == "" {
 		writeError(w, http.StatusBadRequest, "an empty message")
 		return
 	}
-	msg, err := s.chat.Post(conv.ID, me.ID, text, photo)
+	msg, err := s.chat.PostFull(&Message{Conv: conv.ID, SenderID: me.ID, Text: text, Photo: photo, ReplyTo: replyTo, Audio: audio, AudioMs: audioMs})
+	s.typing.stop(conv.ID, me.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not send")
 		return
@@ -264,6 +290,9 @@ func (s *Server) announce(conv *Conversation, from *Member, msg *Message, people
 	preview := msg.Text
 	if msg.Photo != "" && preview == "" {
 		preview = "Photo"
+	}
+	if msg.Audio != "" && preview == "" {
+		preview = "Voice message"
 	}
 	if r := []rune(preview); len(r) > 140 {
 		preview = string(r[:140]) + "…"
@@ -608,4 +637,131 @@ func openChatNextTo(dataFile string) *ChatStore {
 		return nil
 	}
 	return c
+}
+
+// ---- reactions, typing, search
+
+// POST /api/chat/{id}/messages/{mid}/react {kind}: react with a nudge ("" takes it back).
+func (s *Server) handleChatReact(w http.ResponseWriter, r *http.Request, me *Member) {
+	if !s.chatReady(w) {
+		return
+	}
+	conv, people, post, ok := s.loadConv(w, r, me)
+	if !ok {
+		return
+	}
+	if !post {
+		writeError(w, http.StatusForbidden, "you can read this chat, but not react in it")
+		return
+	}
+	var body struct {
+		Kind string `json:"kind"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	if body.Kind != "" && !reactionKinds[body.Kind] {
+		writeError(w, http.StatusBadRequest, "unknown reaction")
+		return
+	}
+	mid, _ := strconv.ParseInt(r.PathValue("mid"), 10, 64)
+	if err := s.chat.React(conv.ID, mid, me.ID, body.Kind); err != nil {
+		writeError(w, http.StatusNotFound, "no such message")
+		return
+	}
+	// Everyone else's chat refreshes (quietly: no notification for a reaction).
+	var to []string
+	for _, id := range conv.Members {
+		if id != me.ID {
+			to = append(to, id)
+		}
+	}
+	s.store.ChatQuiet(to, conv.ID)
+	_ = people
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/chat/{id}/typing: "I'm typing" (it lasts a few seconds).
+func (s *Server) handleChatTyping(w http.ResponseWriter, r *http.Request, me *Member) {
+	if !s.chatReady(w) {
+		return
+	}
+	conv, _, post, ok := s.loadConv(w, r, me)
+	if !ok || !post {
+		if ok {
+			w.WriteHeader(http.StatusNoContent)
+		}
+		return
+	}
+	s.typing.start(conv.ID, me.ID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// GET /api/chat/search?q=: messages you can read that contain q, newest first.
+func (s *Server) handleChatSearch(w http.ResponseWriter, r *http.Request, me *Member) {
+	if !s.chatReady(w) {
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if utf8.RuneCountInString(q) < 2 {
+		writeJSON(w, http.StatusOK, map[string]any{"messages": []Message{}})
+		return
+	}
+	users, people := s.chatUsers()
+	all, err := s.chat.allConversations(users)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not search")
+		return
+	}
+	ids := []string{}
+	for i := range all {
+		if _, read := access(me, &all[i], people); read {
+			ids = append(ids, all[i].ID)
+		}
+	}
+	msgs, err := s.chat.Search(ids, q, 50)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not search")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"messages": msgs})
+}
+
+// reactionKinds: the friendly nudges, as reactions.
+var reactionKinds = map[string]bool{"thumbs": true, "heart": true, "smile": true, "wave": true, "cowboy": true, "alien": true}
+
+// typingNow remembers who's typing where, for a few seconds (memory only).
+type typingNow struct {
+	mu   sync.Mutex
+	seen map[string]map[string]time.Time // conv → member → when
+}
+
+func (t *typingNow) start(conv, member string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.seen == nil {
+		t.seen = map[string]map[string]time.Time{}
+	}
+	if t.seen[conv] == nil {
+		t.seen[conv] = map[string]time.Time{}
+	}
+	t.seen[conv][member] = time.Now()
+}
+
+func (t *typingNow) stop(conv, member string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.seen[conv], member)
+}
+
+func (t *typingNow) who(conv, except string) []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := []string{}
+	for id, at := range t.seen[conv] {
+		if id != except && time.Since(at) < 6*time.Second {
+			out = append(out, id)
+		}
+	}
+	return out
 }

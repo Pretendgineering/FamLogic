@@ -35,6 +35,7 @@ const (
 	familyConvID   = "family"
 	maxMessageLen  = 4000
 	maxPhotoBytes  = 15 << 20
+	maxAudioBytes  = 4 << 20 // a few minutes of AAC
 	maxPhotoSide   = 1600
 	messagesPerGet = 50
 )
@@ -78,6 +79,15 @@ type Message struct {
 	Text     string `json:"text"`
 	Photo    string `json:"photo,omitempty"` // file name under /api/chat-media/
 	Time     int64  `json:"time"`
+	// A reply: the message it answers, and a glimpse of it.
+	ReplyTo     int64  `json:"replyTo,omitempty"`
+	ReplySender string `json:"replySender,omitempty"`
+	ReplyText   string `json:"replyText,omitempty"`
+	// A voice message: a file under /api/chat-media/ and its length.
+	Audio   string `json:"audio,omitempty"`
+	AudioMs int64  `json:"audioMs,omitempty"`
+	// Reactions: kind (a nudge, e.g. "heart") → who.
+	Reactions map[string][]string `json:"reactions,omitempty"`
 }
 
 func OpenChat(dir string) (*ChatStore, error) {
@@ -131,6 +141,22 @@ INSERT OR IGNORE INTO conversations (id, kind, name, created_at) VALUES ('family
 			db.Close()
 			return nil, err
 		}
+	}
+	// Added in 0.32: replies, voice messages and reactions.
+	for _, col := range []string{`reply_to INTEGER NOT NULL DEFAULT 0`, `audio TEXT NOT NULL DEFAULT ''`, `audio_ms INTEGER NOT NULL DEFAULT 0`} {
+		if _, err := db.Exec(`ALTER TABLE messages ADD COLUMN ` + col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			db.Close()
+			return nil, err
+		}
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS reactions (
+  message_id INTEGER NOT NULL,
+  member_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  PRIMARY KEY (message_id, member_id)
+)`); err != nil {
+		db.Close()
+		return nil, err
 	}
 	// Added in 0.19: parents' approval and moderation.
 	if _, err := db.Exec(`ALTER TABLE conversations ADD COLUMN status TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
@@ -382,34 +408,96 @@ func (c *ChatStore) removePhotos(names []string) {
 }
 
 func (c *ChatStore) Post(conv, sender, text, photo string) (*Message, error) {
-	now := time.Now().UnixMilli()
-	res, err := c.db.Exec(`INSERT INTO messages (conv_id, sender_id, body, photo, created_at) VALUES (?, ?, ?, ?, ?)`,
-		conv, sender, text, photo, now)
+	return c.PostFull(&Message{Conv: conv, SenderID: sender, Text: text, Photo: photo})
+}
+
+// PostFull posts a message with any of its extras (a reply, a voice message).
+func (c *ChatStore) PostFull(m *Message) (*Message, error) {
+	m.Time = time.Now().UnixMilli()
+	if m.ReplyTo > 0 {
+		// Only a message in the same conversation can be replied to.
+		var conv string
+		if c.db.QueryRow(`SELECT conv_id FROM messages WHERE id = ?`, m.ReplyTo).Scan(&conv); conv != m.Conv {
+			m.ReplyTo = 0
+		}
+	}
+	res, err := c.db.Exec(`INSERT INTO messages (conv_id, sender_id, body, photo, created_at, reply_to, audio, audio_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.Conv, m.SenderID, m.Text, m.Photo, m.Time, m.ReplyTo, m.Audio, m.AudioMs)
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
+	m.ID, _ = res.LastInsertId()
 	// Sending a message means you've read the conversation up to it.
-	c.MarkRead(conv, sender, id)
-	return &Message{ID: id, Conv: conv, SenderID: sender, Text: text, Photo: photo, Time: now}, nil
+	c.MarkRead(m.Conv, m.SenderID, m.ID)
+	c.fillExtras([]*Message{m})
+	return m, nil
 }
 
-// Messages returns up to limit messages, oldest first: the newest ones, or those
-// before `before` (scrolling back), or those after `after` (catching up).
-func (c *ChatStore) Messages(conv string, before, after int64, limit int) ([]Message, error) {
-	if limit <= 0 || limit > 200 {
-		limit = messagesPerGet
+// fillExtras adds reply glimpses and reactions to messages.
+func (c *ChatStore) fillExtras(ms []*Message) {
+	for _, m := range ms {
+		if m.ReplyTo > 0 {
+			var body, photo, audio string
+			if c.db.QueryRow(`SELECT sender_id, body, photo, audio FROM messages WHERE id = ?`, m.ReplyTo).Scan(&m.ReplySender, &body, &photo, &audio) == nil {
+				switch {
+				case body != "":
+					if r := []rune(body); len(r) > 80 {
+						body = string(r[:80]) + "…"
+					}
+					m.ReplyText = body
+				case photo != "":
+					m.ReplyText = "Photo"
+				case audio != "":
+					m.ReplyText = "Voice message"
+				}
+			} else {
+				m.ReplyText = "A deleted message"
+			}
+		}
+		rows, err := c.db.Query(`SELECT member_id, kind FROM reactions WHERE message_id = ? ORDER BY rowid`, m.ID)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var who, kind string
+			if rows.Scan(&who, &kind) == nil {
+				if m.Reactions == nil {
+					m.Reactions = map[string][]string{}
+				}
+				m.Reactions[kind] = append(m.Reactions[kind], who)
+			}
+		}
+		rows.Close()
 	}
-	var rows *sql.Rows
-	var err error
-	switch {
-	case after > 0:
-		rows, err = c.db.Query(`SELECT id, conv_id, sender_id, body, photo, created_at FROM messages WHERE conv_id = ? AND id > ? ORDER BY id ASC LIMIT ?`, conv, after, limit)
-	case before > 0:
-		rows, err = c.db.Query(`SELECT id, conv_id, sender_id, body, photo, created_at FROM messages WHERE conv_id = ? AND id < ? ORDER BY id DESC LIMIT ?`, conv, before, limit)
-	default:
-		rows, err = c.db.Query(`SELECT id, conv_id, sender_id, body, photo, created_at FROM messages WHERE conv_id = ? ORDER BY id DESC LIMIT ?`, conv, limit)
+}
+
+// React sets (or with kind "", removes) someone's reaction to a message.
+func (c *ChatStore) React(conv string, id int64, member, kind string) error {
+	var got string
+	if err := c.db.QueryRow(`SELECT conv_id FROM messages WHERE id = ?`, id).Scan(&got); err != nil || got != conv {
+		return ErrNotFound
 	}
+	if kind == "" {
+		_, err := c.db.Exec(`DELETE FROM reactions WHERE message_id = ? AND member_id = ?`, id, member)
+		return err
+	}
+	_, err := c.db.Exec(`INSERT INTO reactions (message_id, member_id, kind) VALUES (?, ?, ?) ON CONFLICT (message_id, member_id) DO UPDATE SET kind = excluded.kind`, id, member, kind)
+	return err
+}
+
+// Search finds messages containing text in the given conversations, newest first.
+func (c *ChatStore) Search(convs []string, q string, limit int) ([]Message, error) {
+	if len(convs) == 0 || strings.TrimSpace(q) == "" {
+		return []Message{}, nil
+	}
+	args := []any{"%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(q) + "%"}
+	marks := make([]string, len(convs))
+	for i, id := range convs {
+		marks[i] = "?"
+		args = append(args, id)
+	}
+	args = append(args, limit)
+	rows, err := c.db.Query(`SELECT id, conv_id, sender_id, body, photo, created_at FROM messages WHERE body LIKE ? ESCAPE '\' AND conv_id IN (`+strings.Join(marks, ",")+`) ORDER BY id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -422,10 +510,50 @@ func (c *ChatStore) Messages(conv string, before, after int64, limit int) ([]Mes
 		}
 		out = append(out, m)
 	}
+	return out, rows.Err()
+}
+
+// Messages returns up to limit messages, oldest first: the newest ones, or those
+// before `before` (scrolling back), or those after `after` (catching up).
+func (c *ChatStore) Messages(conv string, before, after int64, limit int) ([]Message, error) {
+	if limit <= 0 || limit > 200 {
+		limit = messagesPerGet
+	}
+	var rows *sql.Rows
+	var err error
+	switch {
+	case after > 0:
+		rows, err = c.db.Query(`SELECT id, conv_id, sender_id, body, photo, created_at, reply_to, audio, audio_ms FROM messages WHERE conv_id = ? AND id > ? ORDER BY id ASC LIMIT ?`, conv, after, limit)
+	case before > 0:
+		rows, err = c.db.Query(`SELECT id, conv_id, sender_id, body, photo, created_at, reply_to, audio, audio_ms FROM messages WHERE conv_id = ? AND id < ? ORDER BY id DESC LIMIT ?`, conv, before, limit)
+	default:
+		rows, err = c.db.Query(`SELECT id, conv_id, sender_id, body, photo, created_at, reply_to, audio, audio_ms FROM messages WHERE conv_id = ? ORDER BY id DESC LIMIT ?`, conv, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Message{}
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.Conv, &m.SenderID, &m.Text, &m.Photo, &m.Time, &m.ReplyTo, &m.Audio, &m.AudioMs); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
 	if after == 0 {
 		slices.Reverse(out)
 	}
-	return out, rows.Err()
+	ptrs := make([]*Message, len(out))
+	for i := range out {
+		ptrs[i] = &out[i]
+	}
+	c.fillExtras(ptrs)
+	return out, nil
 }
 
 func (c *ChatStore) Last(conv string) (*Message, error) {
@@ -470,7 +598,7 @@ AND id > coalesce((SELECT last_read FROM reads WHERE conv_id = ? AND member_id =
 // PhotoConversation finds which conversation a photo belongs to (for access checks).
 func (c *ChatStore) PhotoConversation(name string) (string, error) {
 	var conv string
-	err := c.db.QueryRow(`SELECT conv_id FROM messages WHERE photo = ? LIMIT 1`, name).Scan(&conv)
+	err := c.db.QueryRow(`SELECT conv_id FROM messages WHERE photo = ? OR audio = ? LIMIT 1`, name, name).Scan(&conv)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	}
@@ -479,6 +607,26 @@ func (c *ChatStore) PhotoConversation(name string) (string, error) {
 
 // SavePhoto shrinks a picture to at most maxPhotoSide pixels and saves it as JPEG.
 // Re-encoding also drops any location and camera details the photo carried.
+// SaveAudio keeps a voice message (AAC in MP4/M4A, Ogg or WAV), at most maxAudioBytes.
+func (c *ChatStore) SaveAudio(data []byte) (string, error) {
+	ext := ""
+	switch {
+	case len(data) > 12 && string(data[4:8]) == "ftyp":
+		ext = ".m4a"
+	case len(data) > 4 && string(data[:4]) == "OggS":
+		ext = ".ogg"
+	case len(data) > 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WAVE":
+		ext = ".wav"
+	default:
+		return "", fmt.Errorf("not a recording we can play")
+	}
+	name := randomString(16) + ext
+	if err := os.WriteFile(filepath.Join(c.mediaDir, name), data, 0o600); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
 func (c *ChatStore) SavePhoto(data []byte) (string, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {

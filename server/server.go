@@ -30,6 +30,7 @@ const (
 )
 
 type Server struct {
+	typing typingNow
 	cfg    Config
 	store  *Store
 	static fs.FS
@@ -126,6 +127,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/chat/{id}/messages", s.device(s.handleChatMessages))
 	mux.HandleFunc("POST /api/chat/{id}/messages", s.device(s.handleChatPost))
 	mux.HandleFunc("POST /api/chat/{id}/read", s.device(s.handleChatRead))
+	mux.HandleFunc("POST /api/chat/{id}/messages/{mid}/react", s.device(s.handleChatReact))
+	mux.HandleFunc("POST /api/chat/{id}/typing", s.device(s.handleChatTyping))
+	mux.HandleFunc("GET /api/chat/search", s.device(s.handleChatSearch))
 	mux.HandleFunc("GET /api/chat-media/{name}", s.handleChatMedia)
 	mux.HandleFunc("POST /api/chat/{id}/moderate", s.device(s.handleChatModerate))
 	mux.HandleFunc("DELETE /api/chat/{id}/messages/{mid}", s.device(s.handleChatDeleteMessage))

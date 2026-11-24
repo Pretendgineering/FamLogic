@@ -153,6 +153,17 @@ func (s *Store) EventsFor(memberID string, since int64) ([]Event, int64) {
 	return out, cursor
 }
 
+// ChatQuiet tells people's apps a chat changed (a reaction), without a notification.
+func (s *Store) ChatQuiet(to []string, conv string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range to {
+		if _, ok := s.d.Members[id]; ok {
+			s.addEventLocked(Event{Type: EventChatUpdate, To: id, Conv: conv})
+		}
+	}
+}
+
 // ChatEvents tells each recipient about a new chat message (one event each).
 func (s *Store) ChatEvents(to []string, fromID, fromName, conv, title, preview string, msgID int64) {
 	if len(to) == 0 {
