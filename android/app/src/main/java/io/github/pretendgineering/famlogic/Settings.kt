@@ -1,5 +1,7 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
@@ -382,10 +384,17 @@ private fun ReadingVoiceCard(prefs: Prefs, current: String, onChanged: () -> Uni
     }
 }
 
-/** A small dot of a theme's main colour beside its name. */
+/** A theme's look in a dot: its background, with its main and second colours as a split inside. */
 @Composable
-private fun ThemeSwatch(p: Palette) {
-    Box(Modifier.size(28.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Color(p.swatch)))
+private fun ThemeSwatch(p: Palette, size: Int = 28) {
+    val (bg, accent, second) = p.swatches
+    androidx.compose.foundation.Canvas(Modifier.size(size.dp)) {
+        val r = this.size.minDimension / 2
+        drawCircle(androidx.compose.ui.graphics.Color(bg), r)
+        drawArc(androidx.compose.ui.graphics.Color(accent), 90f, 180f, true, topLeft = androidx.compose.ui.geometry.Offset(r * .25f, r * .25f), size = androidx.compose.ui.geometry.Size(r * 1.5f, r * 1.5f))
+        drawArc(androidx.compose.ui.graphics.Color(second), 270f, 180f, true, topLeft = androidx.compose.ui.geometry.Offset(r * .25f, r * .25f), size = androidx.compose.ui.geometry.Size(r * 1.5f, r * 1.5f))
+        drawCircle(androidx.compose.ui.graphics.Color(0x33000000), r, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+    }
 }
 
 /** About → Advanced: things hardly anyone changes, folded away. */
@@ -906,34 +915,49 @@ private fun LookCards(prefs: Prefs) {
         }
     }
     SettingsCard("Colours") {
-        // A drop-down: the current theme with a preview, the rest one tap away.
+        // The current theme; tap to pull open the whole collection (each with its little story),
+        // like a shade, and pick one to watch the app recolour.
         var open by remember { mutableStateOf(false) }
-        Box {
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f), RoundedCornerShape(12.dp))
-                    .clickable { open = true }.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ThemeSwatch(ThemeState.palette)
-                Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(ThemeState.palette.title, style = MaterialTheme.typography.titleMedium)
-                    Hint(ThemeState.palette.description)
-                }
-                Icon(if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = "Choose colours")
+        val turn by androidx.compose.animation.core.animateFloatAsState(if (open) 180f else 0f, label = "caret")
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (open) .55f else .3f))
+                .clickable { open = !open }.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ThemeSwatch(ThemeState.palette, 36)
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(ThemeState.palette.title, style = MaterialTheme.typography.titleMedium)
+                Hint(if (open) "Pick one: the whole app changes at once." else ThemeState.palette.description)
             }
-            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = if (open) "Close" else "See all the colours", modifier = Modifier.graphicsLayer { rotationZ = turn })
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = open,
+            enter = androidx.compose.animation.expandVertically(androidx.compose.animation.core.spring(dampingRatio = .85f, stiffness = 320f)) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(220)) + androidx.compose.animation.fadeOut(),
+        ) {
+            Column(Modifier.padding(top = 6.dp)) {
                 Palette.entries.forEach { p ->
-                    androidx.compose.material3.DropdownMenuItem(
-                        leadingIcon = { ThemeSwatch(p) },
-                        text = { Text(p.title, fontWeight = if (p == ThemeState.palette) FontWeight.Bold else FontWeight.Normal) },
-                        onClick = {
-                            open = false
-                            if (ThemeState.palette != p) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                            prefs.appTheme = p.id
-                            ThemeState.palette = p // the whole app recolours straight away
-                        },
-                    )
+                    val on = ThemeState.palette == p
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(if (on) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent)
+                            .clickable {
+                                if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                prefs.appTheme = p.id
+                                ThemeState.palette = p // the whole app recolours straight away
+                            }
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ThemeSwatch(p, 30)
+                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                            Text(p.title, style = MaterialTheme.typography.titleMedium, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                            Hint(p.description)
+                        }
+                        if (on) Icon(Icons.Filled.Check, contentDescription = "In use", tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }

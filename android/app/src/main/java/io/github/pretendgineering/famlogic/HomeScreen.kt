@@ -565,11 +565,24 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
         editing?.onChange?.invoke(current.map { if (it.id == id) it.copy(size = size) else it })
     }
     // Dragging: whichever tile is under the finger trades places with the one being moved.
+    fun columnPx(): Pair<Float, Float> {
+        val gapPx = with(density) { gap.toPx() }
+        return (boardSize.width - with(density) { (pad * 2).toPx() } - gapPx * (cols - 1)) / cols to gapPx
+    }
+    // (Judged by where tiles are going, not where they are mid-glide.)
+    fun slot(p: Placed): Rect {
+        val (colPx, gapPx) = columnPx()
+        val unitPx = with(density) { unit.toPx() }
+        val left = boardAt.x + with(density) { pad.toPx() } + p.col * (colPx + gapPx)
+        val top = boardAt.y + with(density) { pad.toPx() } - scroll.value + p.row * (unitPx + gapPx)
+        return Rect(left, top, left + p.w * colPx + (p.w - 1) * gapPx, top + p.h * unitPx + (p.h - 1) * gapPx)
+    }
     fun follow() {
         val id = dragging ?: return
-        skip?.let { s -> if (bounds[s]?.contains(finger) != true) skip = null }
-        if (bounds[id]?.contains(finger) == true) return
-        val over = bounds.entries.firstOrNull { (k, r) -> k != id && k != skip && r.contains(finger) }?.key ?: return
+        val slots = spots.filterKeys { k -> current.any { it.id == k } }.mapValues { slot(it.value) }
+        skip?.let { s -> if (slots[s]?.contains(finger) != true) skip = null }
+        if (slots[id]?.contains(finger) == true) return
+        val over = slots.entries.firstOrNull { (k, r) -> k != id && k != skip && r.contains(finger) }?.key ?: return
         skip = over
         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
         move(id, over)
@@ -579,10 +592,6 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
     // under the finger and nothing can flip back and forth.
     var resizeStart by remember { mutableStateOf(Rect.Zero) }
     var resizeEdge by remember { mutableStateOf('r') }
-    fun columnPx(): Pair<Float, Float> {
-        val gapPx = with(density) { gap.toPx() }
-        return (boardSize.width - with(density) { (pad * 2).toPx() } - gapPx * (cols - 1)) / cols to gapPx
-    }
     /** The outline while resizing (root coordinates). */
     fun ghost(): Rect {
         val r = resizeStart
@@ -763,9 +772,15 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
                             val h = unit * p.h + gap * (p.h - 1)
                             val isDragged = dragging == t.id
                             DisposableEffect(t.id) { onDispose { bounds.remove(t.id); closes.remove(t.id) } }
+                            // Tiles glide to their new places (and sizes) instead of jumping.
+                            val glide = androidx.compose.animation.core.spring<Dp>(dampingRatio = 0.85f, stiffness = 380f)
+                            val x by androidx.compose.animation.core.animateDpAsState((colW + gap) * p.col, glide, label = "x")
+                            val y by androidx.compose.animation.core.animateDpAsState((unit + gap) * p.row, glide, label = "y")
+                            val w by androidx.compose.animation.core.animateDpAsState(colW * p.w + gap * (p.w - 1), glide, label = "w")
+                            val hh by androidx.compose.animation.core.animateDpAsState(h, glide, label = "h")
                             Box(
-                                Modifier.offset(x = (colW + gap) * p.col, y = (unit + gap) * p.row)
-                                    .size(colW * p.w + gap * (p.w - 1), h)
+                                Modifier.offset(x = x, y = y)
+                                    .size(w, hh)
                                     .onGloballyPositioned { bounds[t.id] = it.boundsInRoot() }
                                     // Being carried: drawn floating above everything (below), its slot left empty.
                                     .graphicsLayer { alpha = if (isDragged) 0f else 1f }

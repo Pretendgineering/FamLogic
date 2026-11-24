@@ -51,6 +51,9 @@ enum class Palette(val id: String, val title: String, val description: String) {
     /** Its main colour, for the picker. */
     val swatch: Long get() = tokens(this, false).accent
 
+    /** Its look in three colours (dark background, main and second colour), for the picker. */
+    val swatches: Triple<Long, Long, Long> get() = tokens(this, true).let { Triple(it.background, it.accent, it.secondary) }
+
     companion object {
         fun byId(id: String) = entries.find { it.id == id } ?: Dracula
     }
