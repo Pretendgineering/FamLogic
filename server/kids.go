@@ -91,7 +91,11 @@ var kidFeatures = []kidSwitch{
 // "coming soon"); "convo.<id>" is a shortcut to one chat.
 var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward"}
 
+// "2x1@0": 2 columns, 1 row, in the first column.
+var gridSize = regexp.MustCompile(`^[1-3]x[12]@[0-2]$`)
+
 var convoTile = regexp.MustCompile(`^convo\.[A-Za-z0-9_-]{1,64}$`)
+
 // Tile sizes: "WxH" (1-3 columns wide, 1-2 rows tall), and the older half/wide/big.
 var tileSizes = []string{"1x1", "2x1", "3x1", "1x2", "2x2", "3x2", "half", "wide", "big"}
 
@@ -197,7 +201,7 @@ func cleanHome(tiles []string) ([]string, bool) {
 	seen := []string{}
 	for _, t := range tiles {
 		id, size, sized := strings.Cut(t, ":")
-		if !(slices.Contains(homeTiles, id) || convoTile.MatchString(id)) || (sized && !slices.Contains(tileSizes, size)) {
+		if !(slices.Contains(homeTiles, id) || convoTile.MatchString(id)) || (sized && !slices.Contains(tileSizes, size) && !gridSize.MatchString(size)) {
 			return nil, false
 		}
 		if !slices.Contains(seen, id) {

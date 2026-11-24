@@ -929,7 +929,7 @@ fun MapScreen(
                     mapCard(Modifier.fillMaxSize())
                     if (fenceDraft == null) PullUpSheet(
                         // Peeking: the first couple of people under the buttons.
-                        peekExtra = (62 * (if (shown.size >= 2) 2 else 1) + 10).dp,
+                        peekExtra = 72.dp, // one person
                         onCovered = { mapCovered = it },
                         header = { actions() },
                         footer = { sosBar() },

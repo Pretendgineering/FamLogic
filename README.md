@@ -141,6 +141,6 @@ Official APKs are signed with one project key and published by CI when the versi
 
 FamLogic is free software under the [GNU Affero General Public License v3.0](LICENSE) (versions up to 0.17.0 were released under GPLv3). Running a modified version as a service for others requires offering them its source; every FamLogic server links to its source in the web console and the app.
 
-Voice uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and OpenAI's Whisper *small.en* model (MIT), [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) with ONNX Runtime (MIT), the [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) voice model (Apache-2.0) and espeak-ng's data (GPLv3), all inside the server image.
+The family chat's monogram uses [UnifrakturMaguntia](https://unifraktur.sourceforge.net) (SIL OFL). Voice uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and OpenAI's Whisper *small.en* model (MIT), [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) with ONNX Runtime (MIT), the [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) voice model (Apache-2.0) and espeak-ng's data (GPLv3), all inside the server image.
 
 Headings use [Liberation Serif](https://github.com/liberationfonts/liberation-fonts) (SIL Open Font License 1.1; see `server/web/fonts/OFL.txt`). The common-password list in `server/commonpasswords.txt` comes from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, © 2018 Daniel Miessler).

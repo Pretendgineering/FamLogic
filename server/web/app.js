@@ -1136,6 +1136,14 @@ function peopleSig() {
   return lastMembers.map((m) => [m.id, m.name, m.access, m.role, m.emoji, m.color, m.voice, m.username, m.hasPassword].join("|")).join(";");
 }
 
+// The family's initial ("The Smiths" → S), for the family chat's crest; null if the name has no surname.
+function familyInitial() {
+  const skip = new Set(["the", "our", "family", "famlogic", "household", "home", "clan", "house", "crew", "of", "and", "&"]);
+  const word = ($("#family-name").textContent || "").split(/[\s\-_]+/).find((w) => w && !skip.has(w.toLowerCase()));
+  const ch = word && [...word].find((x) => /\p{L}/u.test(x));
+  return ch ? ch.toUpperCase() : null;
+}
+
 function renderAccess() {
   drawnSig.access = peopleSig();
   const focus = location.hash.split("/")[2];
@@ -1264,10 +1272,11 @@ function drawAccess(m, body) {
 }
 
 function homeEditor(d, save) {
-  const parse = (t) => { const [id, size] = t.split(":"); const sz = size || (id === "map" || id === "chat" ? "wide" : "half"); return { id, size: OLD_SIZES[sz] || sz }; };
+  // "2x1@0" keeps its column (set in the app) but the menu shows the size part.
+  const parse = (t) => { const [id, size] = t.split(":"); const sz = size || (id === "map" || id === "chat" ? "wide" : "half"); const [dims, col] = (OLD_SIZES[sz] || sz).split("@"); return { id, size: dims, col }; };
   let on = d.home.map(parse);
   const all = () => on.concat(d.tiles.filter((t) => !on.some((x) => x.id === t)).map((t) => ({ ...parse(t), off: true })));
-  const commit = () => save(on.map((t) => `${t.id}:${t.size}`));
+  const commit = () => save(on.map((t) => `${t.id}:${t.size}${t.col !== undefined ? "@" + t.col : ""}`));
   const list = el("ul", { class: "tiles" });
   let dragging = null;
   const draw = () => list.replaceChildren(...all().map((t) => {
@@ -1463,8 +1472,8 @@ function renderChatList() {
     const last = c.last ? (c.last.text || "Photo") : "No messages yet";
     const who = c.last && c.kind !== "direct" ? nameOf(c.last.sender) + ": " : "";
     return el("li", { class: "clickable" + (c.id === chatOpen ? " active" : ""), onclick: () => openChat(c.id) },
-      el("div", { class: "avatar" + (c.emoji ? " emoji" : ""), style: `background:${c.color || (c.kind === "direct" ? (personById(c.members.find((id) => id !== (me.member || {}).id)) || {}).color || "var(--accent)" : "var(--accent)")}` },
-        c.emoji || (c.kind === "family" ? "★" : (c.title || "?").trim().charAt(0).toUpperCase())),
+      el("div", { class: "avatar" + (c.emoji ? " emoji" : "") + (!c.emoji && c.kind === "family" && familyInitial() ? " crest" : ""), style: `background:${c.color || (c.kind === "direct" ? (personById(c.members.find((id) => id !== (me.member || {}).id)) || {}).color || "var(--accent)" : "var(--accent)")}` },
+        c.emoji || (c.kind === "family" ? (familyInitial() || "★") : (c.title || "?").trim().charAt(0).toUpperCase())),
       el("div", { class: "grow" },
         el("div", { class: "title" }, c.title, c.oversight ? el("span", { class: "badge" }, "Watching") : null,
           c.status ? el("span", { class: "badge warn" }, STATUS_LABELS[c.status] || c.status) : null),

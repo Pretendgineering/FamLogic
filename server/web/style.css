@@ -854,3 +854,6 @@ aside { padding: 12px 0 12px 12px; gap: 6px; }
 .chat-page .panel { border-top: none; }
 .chat-page .chat-list { border-right: 1px solid var(--line); }
 .acc-head { box-shadow: none !important; border-radius: 0; }
+/* The family chat's crest: its initial in an ornate blackletter, in a gold ring (as in the app). */
+@font-face { font-family: "UnifrakturMaguntia"; src: url("/fonts/UnifrakturMaguntia.ttf") format("truetype"); font-display: swap; }
+.avatar.crest { font-family: "UnifrakturMaguntia", var(--serif); font-weight: 400; font-size: 1.35rem; box-shadow: inset 0 0 0 2px #d4af37; }

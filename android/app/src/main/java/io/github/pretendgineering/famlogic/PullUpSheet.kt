@@ -46,8 +46,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Where a pull-up sheet rests: just peeking, half way, or nearly full height. */
-enum class SheetStop { Peek, Half, Full }
+/** Where a pull-up sheet rests: nearly full height, half way, peeking (a person or two), or tucked away (just its handle and buttons). */
+enum class SheetStop { Full, Half, Peek, Tucked }
 
 /**
  * A sheet that sits over the map and pulls up: drag its handle (or tap it), or
@@ -75,9 +75,11 @@ fun PullUpSheet(
         var footerH by remember { mutableIntStateOf(0) }
         val extra = with(density) { peekExtra.toPx() }
         val full = h * 0.1f
-        val peek = (h - headerH - footerH - extra).coerceIn(h * 0.35f, h - with(density) { 72.dp.toPx() })
+        // Tucked away: only the handle, the buttons and the SOS bar; the map gets the rest.
+        val tucked = (h - headerH - footerH).coerceIn(h * 0.5f, h - with(density) { 56.dp.toPx() })
+        val peek = (tucked - extra).coerceIn(h * 0.5f, tucked)
         val half = (h * 0.5f).coerceIn(full, peek)
-        val anchors = listOf(full, half, peek)
+        val anchors = listOf(full, half, peek, tucked)
         var offset by remember { mutableFloatStateOf(Float.NaN) }
         var stop by remember { mutableIntStateOf(SheetStop.Peek.ordinal) }
         // Keep resting at the same stop when the sizes change (rotation, header measured).
@@ -87,7 +89,7 @@ fun PullUpSheet(
         fun settle(velocity: Float) {
             val target = when {
                 velocity < -900f -> anchors.filter { it < offset - 1f }.maxOrNull() ?: full
-                velocity > 900f -> anchors.filter { it > offset + 1f }.minOrNull() ?: peek
+                velocity > 900f -> anchors.filter { it > offset + 1f }.minOrNull() ?: tucked
                 else -> anchors.minBy { abs(it - offset) }
             }
             stop = anchors.indexOf(target)
@@ -98,13 +100,13 @@ fun PullUpSheet(
             }
         }
         fun dragBy(dy: Float): Float {
-            val new = (offset + dy).coerceIn(full, peek)
+            val new = (offset + dy).coerceIn(full, tucked)
             val used = new - offset
             offset = new
             moving.value = true
             return used
         }
-        val nested = remember(full, peek) {
+        val nested = remember(full, tucked) {
             object : NestedScrollConnection {
                 // Pushing up: raise the sheet first, then scroll the list.
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
@@ -148,7 +150,8 @@ fun PullUpSheet(
                     // The handle: drag it, or tap to step up (and back down from the top).
                     Box(
                         Modifier.fillMaxWidth().clickable(onClickLabel = "Show more or less") {
-                            val next = if (stop == SheetStop.Full.ordinal) SheetStop.Peek.ordinal else stop - 1
+                            // Tap: one step up each time, and from the top all the way back down.
+                            val next = if (stop == SheetStop.Full.ordinal) SheetStop.Tucked.ordinal else stop - 1
                             stop = next
                             moving.value = true
                             scope.launch {
