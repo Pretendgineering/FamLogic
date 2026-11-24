@@ -1,5 +1,6 @@
 package io.github.pretendgineering.famlogic
 
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.offset
@@ -519,8 +520,9 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
     // edge, divided by hairlines, so the home screen reads as one surface.
     // Going in and out of arranging eases between the two looks instead of jumping.
     val arranging by androidx.compose.animation.core.animateFloatAsState(if (edit != null) 1f else 0f, androidx.compose.animation.core.tween(320), label = "arrange")
-    val gap = 10.dp * arranging
-    val pad = 12.dp * arranging
+    // Tiles are rounded cards with a little depth, spaced apart (Material You).
+    val gap = 12.dp
+    val pad = 12.dp
     // Each tile's column and size as laid out, for resizing.
     val spots = remember { mutableStateMapOf<String, Placed>() }
     // Where everything is on screen (root coordinates), for the gestures.
@@ -784,17 +786,9 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
                                     .onGloballyPositioned { bounds[t.id] = it.boundsInRoot() }
                                     // Being carried: drawn floating above everything (below), its slot left empty.
                                     .graphicsLayer { alpha = if (isDragged) 0f else 1f }
-                                    .then(
-                                        if (edit != null) Modifier.clip(RoundedCornerShape(12.dp * arranging))
-                                        // Edge to edge: a hairline on the right (unless at the edge) and along the bottom.
-                                        else Modifier.drawWithContent {
-                                            drawContent()
-                                            if (arranging > 0f) return@drawWithContent
-                                            val px = 1.dp.toPx()
-                                            if (p.col + p.w < cols) drawRect(line, Offset(size.width - px, 0f), androidx.compose.ui.geometry.Size(px, size.height))
-                                            drawRect(line, Offset(0f, size.height - px), androidx.compose.ui.geometry.Size(size.width, px))
-                                        },
-                                    ),
+                                    .shadow(if (isDragged) 0.dp else 3.dp, RoundedCornerShape(22.dp))
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
                             ) {
                                 tile(t, h)
                                 if (edit != null) Box(Modifier.matchParentSize().graphicsLayer { alpha = arranging }) {
@@ -842,8 +836,8 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
             Canvas(Modifier.fillMaxSize()) {
                 val o = Offset(r.left - boardAt.x, r.top - boardAt.y)
                 val sz = androidx.compose.ui.geometry.Size(r.width, r.height)
-                drawRoundRect(color.copy(alpha = .14f), o, sz, androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()))
-                drawRoundRect(color, o, sz, androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()),
+                drawRoundRect(color.copy(alpha = .14f), o, sz, androidx.compose.ui.geometry.CornerRadius(22.dp.toPx()))
+                drawRoundRect(color, o, sz, androidx.compose.ui.geometry.CornerRadius(22.dp.toPx()),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(18f, 12f))))
             }
         }

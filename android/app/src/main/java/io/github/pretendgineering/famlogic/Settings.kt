@@ -164,7 +164,7 @@ fun SettingsScreen(
             )
         },
     ) { padding ->
-        FitScrollColumn(page, Modifier.padding(padding).fillMaxSize()) {
+        FitScrollColumn(page, Modifier.padding(padding).fillMaxSize().padding(horizontal = 16.dp, vertical = 4.dp)) {
             when (page) {
                 null -> {
                     val pages = SettingsPage.entries.filter {
@@ -173,10 +173,12 @@ fun SettingsScreen(
                             else -> true
                         } && (!limited || it in CHILD_PAGES)
                     }
-                    pages.forEachIndexed { i, p ->
-                        if (i > 0) HorizontalDivider(Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
-                        MenuRow(p.icon, p.title, menuSummary(p, prefs, sharing, circles, places, trailHours, username, hasPassword, perms, tripDays)) {
-                            pageName = p.name
+                    SettingsCard {
+                        pages.forEachIndexed { i, p ->
+                            if (i > 0) HorizontalDivider(Modifier.padding(start = 56.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
+                            MenuRow(p.icon, p.title, menuSummary(p, prefs, sharing, circles, places, trailHours, username, hasPassword, perms, tripDays)) {
+                                pageName = p.name
+                            }
                         }
                     }
                 }
@@ -404,7 +406,7 @@ private fun AdvancedCard() {
     val haptics = LocalHapticFeedback.current
     var open by rememberSaveable { mutableStateOf(Access.isDisplay) }
     Row(
-        Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 4.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Advanced", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
@@ -1171,24 +1173,31 @@ private fun AboutPage(prefs: Prefs, perms: PermissionState, serverVersion: Strin
  */
 @Composable
 internal fun SettingsCard(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        if (title != null) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = squeezed(14.dp)),
-            )
+    // A rounded card with a little depth (Material You), with space under it.
+    ElevatedCard(
+        Modifier.fillMaxWidth().padding(bottom = squeezed(12.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = androidx.compose.material3.CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = squeezed(12.dp))) {
+            if (title != null) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            content()
         }
-        Column(Modifier.padding(horizontal = 16.dp, vertical = squeezed(6.dp))) { content() }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
     }
 }
 
 @Composable
 private fun MenuRow(icon: ImageVector, title: String, summary: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = squeezed(14.dp)),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = squeezed(12.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(40.dp)) {

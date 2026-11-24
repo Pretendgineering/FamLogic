@@ -73,6 +73,9 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Home screen:** 2 or 3 tiles across (Look and Feel), tiles 1 to 3 columns wide and 1 or 2 rows tall.
 - **Console:** the same edge-to-edge design language as the app (flat sections, hairlines, the map to the edges).
 
+### ✅ Back to cards (0.26.0)
+- After trying the flat, edge-to-edge look, the app and console go back to **rounded cards with a little depth** (Material You): settings in cards, home tiles as spaced cards; every arranging behaviour stays (tap to select, edge bars, gliding tiles, the drawer). The map's pull-up sheet stays.
+
 ## Focus: the core three, polished first
 
 The map, chat and safety features are what families use every day. Next, each gets a round of real-use polish before any new module starts. After that, modules come **one at a time**, each finished (app, console, watch, docs) before the next.
