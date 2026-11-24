@@ -42,17 +42,18 @@ import java.util.Calendar
 import java.util.Date
 
 /**
- * Home, with the family feed one swipe to the right (like a phone's news feed
- * beside its home screen). Swiping is off while tiles are being arranged.
+ * Home, with the family feed to its left: swipe right from Home to get there
+ * (like a phone's news feed beside its home screen). Swiping is off while tiles
+ * are being arranged.
  */
 @Composable
 fun HomePager(prefs: Prefs, home: @Composable () -> Unit) {
-    val pager = rememberPagerState(pageCount = { 2 })
+    val pager = rememberPagerState(initialPage = 1, pageCount = { 2 })
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // Back from the feed goes to Home.
-    androidx.activity.compose.BackHandler(pager.currentPage == 1) { scope.launch { pager.animateScrollToPage(0) } }
+    androidx.activity.compose.BackHandler(pager.currentPage == 0) { scope.launch { pager.animateScrollToPage(1) } }
     HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !HomeEditor.arranging, beyondViewportPageCount = 0) { page ->
-        if (page == 0) home() else FeedScreen(prefs, visible = pager.currentPage == 1)
+        if (page == 1) home() else FeedScreen(prefs, visible = pager.currentPage == 0)
     }
 }
 

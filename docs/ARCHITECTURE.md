@@ -256,3 +256,31 @@ Press-to-talk and read-aloud are meant to be a main way of using FamLogic on eve
 ## Watches and the ring
 
 The Pebble watchapp, Family watchface and Index 01 webhooks belong to the Thereabouts module today (see [PEBBLE.md](PEBBLE.md)). Next, as modules arrive: quick to-dos and list items from the watch and ring ("add milk to the shopping list"), chat quick replies, and chores ticked off from the wrist.
+
+
+## Server settings
+
+Environment variables (in `docker-compose.yml` or the container):
+
+| Variable | Default | |
+|---|---|---|
+| `ADMIN_PASSWORD` | *(required)* | The main admin's password for the web console (8+ characters). |
+| `FAMILY_NAME` | `Family` | Shown in the apps and console. |
+| `PUBLIC_URL` | from the request | The address phones use, e.g. `https://family.example.com`. Set it if invite links come out wrong. |
+| `TILE_URL`, `TILE_URL_DARK`, `TILE_ATTRIBUTION` | OpenStreetMap | The default map tiles (any `{z}/{x}/{y}` server). Everyone can also pick their own map style. |
+| `GEOCODER_URL` | OpenStreetMap Nominatim | Address search, done by your server. `off` turns it off. |
+| `INVITE_HOURS` | `72` | How long an invite works. |
+| `BACKUP_DAYS` | `7` | Daily backups kept in `/data/backups`. `0` turns them off. |
+| `SILENCE_HOURS` | `6` | Tell people when a sharing phone has been quiet this long. `0` turns it off. |
+| `VOICE` | on | Talking and reading aloud, built into the image (about 400 MB of memory for a few seconds while someone talks). `off` turns it off. |
+| `PUID`, `PGID` | `65532` | The user and group FamLogic runs as and writes files as. Set them to yours (run `id` on the host) when the notes vault is a folder on the host, so the files are yours and other apps can edit them. |
+| `VAULT_DIR` | `/data/vault` | Where the notes vault is inside the container (see below). |
+| `DATA_DIR`, `LISTEN` | `/data`, `:8080` | Where data lives, and the port inside the container. |
+
+## Credits
+
+FamLogic is free software under the [GNU Affero General Public License v3.0](../LICENSE) (versions up to 0.17.0 were released under GPLv3). Running a modified version as a service for others requires offering them its source; every FamLogic server links to its source in the web console and the app.
+
+The family chat's monogram uses [UnifrakturMaguntia](https://unifraktur.sourceforge.net) (SIL OFL). Voice uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and OpenAI's Whisper *small.en* model (MIT), [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) with ONNX Runtime (MIT), the [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) voice model (Apache-2.0) and espeak-ng's data (GPLv3), all inside the server image.
+
+Headings use [Liberation Serif](https://github.com/liberationfonts/liberation-fonts) (SIL Open Font License 1.1; see `server/web/fonts/OFL.txt`). The common-password list in `server/commonpasswords.txt` comes from [SecLists](https://github.com/danielmiessler/SecLists) (MIT License, © 2018 Daniel Miessler).
