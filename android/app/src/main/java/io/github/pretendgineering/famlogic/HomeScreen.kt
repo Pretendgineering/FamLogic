@@ -272,7 +272,11 @@ fun HomeScreen(
                     }
                 }
             }
-            val unit = (if (big) 176.dp else 148.dp) * (if (cols == 3) .88f else 1f)
+            val base = (if (big) 176.dp else 148.dp) * (if (cols == 3) .88f else 1f)
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Rows stretch or shrink a little so a whole number of them fills the
+            // screen exactly: no "tiny scroll" from a row that's only just too tall.
+            val unit = fitUnit(maxHeight, base)
             if (mapBeside) {
                 Row(Modifier.fillMaxSize()) {
                     TileBoard(tiles.filter { it.id != "map" }, unit, cols, null, Modifier.weight(1f), tile)
@@ -296,6 +300,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxSize(),
                     tile = tile,
                 )
+            }
             }
         }
     }
@@ -445,6 +450,17 @@ fun parseTiles(list: List<String>): List<HomeTile> = list.map {
 class TileEdit(val onChange: (List<HomeTile>) -> Unit, val hidden: List<String>, val onPickChat: () -> Unit = {})
 
 /** Tiles for modules still being built: they show "coming soon" so a layout can be planned. */
+/**
+ * The row height closest to [base] that fits a whole number of rows into a board
+ * [height] tall (with the board's 12 dp padding and gaps).
+ */
+fun fitUnit(height: Dp, base: Dp, gap: Dp = 12.dp, pad: Dp = 12.dp): Dp {
+    if (height == Dp.Infinity || height <= 0.dp) return base
+    val room = height - pad * 2 + gap
+    val rows = (room / (base + gap)).let { kotlin.math.round(it).toInt() }.coerceAtLeast(1)
+    return (room / rows - gap).coerceIn(base * .8f, base * 1.25f)
+}
+
 val PLACEHOLDER_TILES = listOf("calendar", "todos", "meals", "routines", "nudges", "ride", "steward")
 
 /** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
