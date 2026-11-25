@@ -25,8 +25,8 @@ import (
 // fileJournal records the old contents of files written while it's on.
 type fileJournal struct {
 	mu   sync.Mutex
-	on   bool // a turn is being journaled
-	live bool // ...and one of its tools is running now
+	on   bool               // a turn is being journaled
+	live bool               // ...and one of its tools is running now
 	skip string             // a folder never journaled (Steward's own history)
 	old  map[string]*string // path → contents before (nil: the file didn't exist)
 }
@@ -92,7 +92,7 @@ func fileHash(path string) string {
 
 // stewardUndo is what the latest answer changed, saved next to the conversation.
 type stewardUndo struct {
-	Time  int64            `json:"time"`
+	Time  int64             `json:"time"`
 	Files []stewardUndoFile `json:"files"`
 }
 
