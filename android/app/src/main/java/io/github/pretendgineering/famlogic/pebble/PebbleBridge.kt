@@ -147,6 +147,8 @@ object PebbleBridge {
                 when (cmd) {
                     C_HELLO, C_BATTERY -> {
                         if (num in 1..100) { prefs.watchBattery = num; prefs.watchBatteryAt = System.currentTimeMillis() }
+                        // A colour watch with this version of the watchapp: send everyone's emoji as pictures.
+                        if (cmd == C_HELLO && app == APP_UUID) colorWatch = d[K_KIND] == "c"
                         if (cmd == C_HELLO) push(context, app)
                     }
                     C_CHECKIN -> {
@@ -306,6 +308,9 @@ object PebbleBridge {
         K_BEARING to ((d[1].toInt() % 360 + 360) % 360), K_DIST to d[0].toInt(), K_RADIUS to p.radius.toInt(),
     )
 
+    /** The watchapp said it has a colour screen (and can draw pictures of people's emoji). */
+    @Volatile private var colorWatch = false
+
     private fun personMessage(m: Member, idx: Int, count: Int, isMe: Boolean, me: Member?): Map<Int, Any> {
         var flags = 0
         if (isMe) flags = flags or F_ME
@@ -330,7 +335,35 @@ object PebbleBridge {
             K_COLOR to (parseColor(m.color) and 0xFFFFFF), K_FLAGS to flags,
             K_STATUS to statusOf(m).take(40), K_TEXT to detailOf(m, me).take(80),
             K_STATE to stateOf(m), K_LABEL to labelOf(m).take(24), K_BEARING to bearing, K_DIST to dist,
-        )
+        ) + (if (colorWatch && m.emoji.isNotEmpty()) runCatching { mapOf(K_DATA to emojiIcon(m.emoji)) }.getOrDefault(emptyMap()) else emptyMap())
+    }
+
+    private val iconCache = HashMap<String, ByteArray>()
+
+    /**
+     * Someone's emoji as a 22×22 picture for the watch: one byte a pixel, Pebble's
+     * 8-bit colour (0bAARRGGBB), see-through around the emoji.
+     */
+    private fun emojiIcon(emoji: String): ByteArray = synchronized(iconCache) {
+        iconCache.getOrPut(emoji) {
+            val px = 22
+            val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bmp)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = px * .82f }
+            val b = android.graphics.Rect()
+            paint.getTextBounds(emoji, 0, emoji.length, b)
+            val fit = px * .92f / maxOf(b.width(), b.height()).coerceAtLeast(1)
+            if (fit < 1f) { paint.textSize *= fit; paint.getTextBounds(emoji, 0, emoji.length, b) }
+            canvas.drawText(emoji, px / 2f - b.exactCenterX(), px / 2f - b.exactCenterY(), paint)
+            val out = ByteArray(px * px)
+            for (y in 0 until px) for (x in 0 until px) {
+                val c = bmp.getPixel(x, y)
+                val a = (c ushr 24) and 0xFF
+                out[y * px + x] = if (a < 110) 0 else (0xC0 or (((c shr 16) and 0xFF) shr 6 shl 4) or (((c shr 8) and 0xFF) shr 6 shl 2) or ((c and 0xFF) shr 6)).toByte()
+            }
+            bmp.recycle()
+            out
+        }
     }
 
     private fun stale(m: Member) = m.loc == null || m.paused || System.currentTimeMillis() - m.loc.time > 30 * 60_000

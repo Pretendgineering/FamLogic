@@ -143,7 +143,12 @@ In this order (each is finished before the next starts):
 6. **Steward** (the agent bridge): your own AI agent, using FamLogic's API with scoped keys and the vault guide; voice in, voice out.
 7. **Corkboard / Front Room** (Control Deck round two and the Android TV launcher, its own APK).
 
-### 💡 Future modules (ideas, logged to hone later)
+### ✅ Steward everywhere, 0.39.0
+- A small Steward button in the corner of every screen (app and console, not Chat): tell it what to add, change or remove there. It knows which page it was asked from, and the page updates after it answers.
+- It uses FamLogic's own actions where one fits (chores, events, lists, meals, recipes) and otherwise reads the vault guide and reads and writes notes directly (grown-ups only), so it already works for modules still being built.
+- Shown only when Steward is on (set up during first-run setup, or later in Settings → AI & API).
+
+### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
 - **Walks, runs and rides:** an optional tracker for family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like.
 - **Cars (Garage):** each car as a note. Fuel log by talking to Steward ("I just filled up the Sienna, 15 gallons, 56 dollars" → a fuel entry with miles, cost and price per gallon), with graphs and averages over time (mpg, cost per mile, monthly spend); oil changes and maintenance as reminders on the calendar by date or mileage; registration and insurance renewals. Later: OBD-II (a Bluetooth adapter through the phone) for mileage and fault codes.

@@ -98,13 +98,13 @@ static void layout(GRect b) {
 #if defined(PBL_ROUND)
   bool big = b.size.w >= 240;
   load_fonts(big, big);
-  s_grid_top = big ? 106 : 76;
+  s_grid_top = big ? 112 : 82;
   s_row_h = big ? 30 : 24;
   s_rows_max = big ? 4 : 3;
 #else
   bool big = b.size.w >= 200;
   load_fonts(big, big);
-  s_grid_top = big ? 82 : 60;
+  s_grid_top = big ? 90 : 68;
   s_row_h = (b.size.h - s_grid_top - 2) / 4;
   s_rows_max = 4;
 #endif
@@ -121,10 +121,10 @@ static GRect cell(GRect screen, int i) {
   int top = s_grid_top + (rows < s_rows_max ? (s_rows_max - rows) * s_row_h / 4 : 0);
   int row = i / 2, col = i % 2;
   int y = top + row * s_row_h;
-  int width = screen.size.w - PBL_IF_ROUND_ELSE(8, 2);
+  int width = screen.size.w - PBL_IF_ROUND_ELSE(16, 12); // breathing room from the edges
 #if defined(PBL_ROUND)
   // The usable width of a row is the circle's chord at its far edge.
-  int cy = screen.size.h / 2, rad = screen.size.w / 2 - 4;
+  int cy = screen.size.h / 2, rad = screen.size.w / 2 - 8;
   int dy = (y + s_row_h > cy) ? (y + s_row_h - cy) : (cy - y);
   int chord2 = rad * rad - dy * dy;
   int chord = 0;
@@ -145,11 +145,12 @@ static void draw_clock(Layer *layer, GContext *g) {
   bool sos = s_sos_name[0] != 0;
   graphics_context_set_text_color(g, sos ? GColorWhite : fg());
   int time_h = PBL_IF_ROUND_ELSE(b.size.w >= 240 ? 46 : 40, b.size.w >= 200 ? 46 : 40);
-  int top = PBL_IF_ROUND_ELSE(b.size.w >= 240 ? 26 : 12, 0);
+  int top = PBL_IF_ROUND_ELSE(b.size.w >= 240 ? 26 : 12, 2);
   graphics_draw_text(g, s_time_buf, s_time_font, GRect(0, top, b.size.w, time_h), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   if (sos) return;
   graphics_context_set_text_color(g, accent());
-  graphics_draw_text(g, s_date_buf, s_date_font, GRect(0, top + time_h - 4, b.size.w, 28), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  // A few pixels between the time and the date, so they don't crowd each other.
+  graphics_draw_text(g, s_date_buf, s_date_font, GRect(0, top + time_h + 3, b.size.w, 28), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
 static void draw_grid(Layer *layer, GContext *g) {

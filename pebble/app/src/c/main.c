@@ -33,7 +33,12 @@ typedef struct {
   char state; // s sos, d driving, m moving, t still, a away
   int16_t bearing;
   int32_t dist; // metres from you, -1 unknown
+#if defined(PBL_COLOR)
+  bool has_icon;  // their emoji, drawn by the phone (ICON_PX square, 8-bit colour with alpha)
+  uint8_t icon[22 * 22];
+#endif
 } Person;
+#define ICON_PX 22
 
 #define MAX_FENCES 8
 typedef struct {
@@ -1207,8 +1212,26 @@ static int16_t menu_row_height(MenuLayer *m, MenuIndex *idx, void *ctx) {
 }
 
 #if !defined(PBL_ROUND)
+#if defined(PBL_COLOR)
+// One small bitmap, refilled with whoever's emoji is being drawn.
+static GBitmap *s_icon_bmp;
+static bool draw_icon(GContext *g, GPoint c, Person *p) {
+  if (!p->has_icon) return false;
+  if (!s_icon_bmp) s_icon_bmp = gbitmap_create_blank(GSize(ICON_PX, ICON_PX), GBitmapFormat8Bit);
+  if (!s_icon_bmp) return false;
+  uint8_t *dst = gbitmap_get_data(s_icon_bmp);
+  int stride = gbitmap_get_bytes_per_row(s_icon_bmp);
+  for (int y = 0; y < ICON_PX; y++) memcpy(dst + y * stride, p->icon + y * ICON_PX, ICON_PX);
+  graphics_context_set_compositing_mode(g, GCompOpSet);
+  graphics_draw_bitmap_in_rect(g, s_icon_bmp, GRect(c.x - ICON_PX / 2, c.y - ICON_PX / 2, ICON_PX, ICON_PX));
+  graphics_context_set_compositing_mode(g, GCompOpAssign);
+  return true;
+}
+#endif
+
 static void draw_avatar(GContext *g, GRect r, Person *p, bool selected) {
-  GPoint c = GPoint(r.origin.x + 21, r.origin.y + r.size.h / 2);
+  // A little room from the screen's edge.
+  GPoint c = GPoint(r.origin.x + 24, r.origin.y + r.size.h / 2);
 #if defined(PBL_COLOR)
   graphics_context_set_fill_color(g, p->state == 'a' ? GColorDarkGray : GColorFromHEX(p->color));
   graphics_fill_circle(g, c, 14);
@@ -1216,6 +1239,7 @@ static void draw_avatar(GContext *g, GRect r, Person *p, bool selected) {
   graphics_context_set_stroke_width(g, 3);
   graphics_draw_circle(g, c, 16);
   graphics_context_set_text_color(g, GColorWhite);
+  if (draw_icon(g, c, p)) return;
 #else
   GColor on = selected ? bg() : fg();
   graphics_context_set_stroke_color(g, on);
@@ -1249,15 +1273,15 @@ static void menu_draw_row(GContext *g, const Layer *cell, MenuIndex *idx, void *
 #endif
   graphics_context_set_text_color(g, text);
   graphics_draw_text(g, (p->flags & F_ME) ? "You" : p->name, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(44, -2, b.size.w - 48, 28), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+                     GRect(50, -2, b.size.w - 56, 28), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   graphics_draw_text(g, (p->flags & F_ME) ? s_me_status : p->status, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                     GRect(44, 24, b.size.w - 48, 24), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+                     GRect(50, 24, b.size.w - 56, 24), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 #endif
 }
 
 static void list_select(ClickRecognizerRef r, void *ctx) {
   if (s_count == 0) {
-    send_cmd(C_HELLO, NULL, NULL, NULL, battery_state_service_peek().charge_percent);
+    send_cmd(C_HELLO, NULL, PBL_IF_COLOR_ELSE("c", NULL), NULL, battery_state_service_peek().charge_percent);
     return;
   }
   int row = menu_layer_get_selected_index(s_menu).row;
@@ -1352,6 +1376,10 @@ static void inbox(DictionaryIterator *it, void *ctx) {
     p->flags = (uint8_t)get_int(it, K_FLAGS);
     p->bearing = (int16_t)get_int(it, K_BEARING);
     p->dist = dict_find(it, K_DIST) ? get_int(it, K_DIST) : -1;
+#if defined(PBL_COLOR)
+    Tuple *icon = dict_find(it, K_DATA);
+    if (icon && icon->length == ICON_PX * ICON_PX) { memcpy(p->icon, icon->value->data, ICON_PX * ICON_PX); p->has_icon = true; }
+#endif
     if (idx + 1 > s_count || idx == 0) s_count = idx + 1;
     if (count < s_count) s_count = count > MAX_PEOPLE ? MAX_PEOPLE : count;
     if (idx + 1 >= count) s_loaded = true;
@@ -1451,7 +1479,7 @@ static void battery_changed(BatteryChargeState s) {
 
 // ---------------------------------------------------------------- start
 
-static void say_hello(void *data) { send_cmd(C_HELLO, NULL, NULL, NULL, battery_state_service_peek().charge_percent); }
+static void say_hello(void *data) { send_cmd(C_HELLO, NULL, PBL_IF_COLOR_ELSE("c", NULL), NULL, battery_state_service_peek().charge_percent); }
 
 int main(void) {
   // The last settings from the phone (theme, Quick Launch SOS), until it sends new ones.
