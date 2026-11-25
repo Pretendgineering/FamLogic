@@ -144,3 +144,46 @@ func TestStewardRecipe(t *testing.T) {
 		t.Fatalf("recipes: %v", rs)
 	}
 }
+
+func TestStewardNoteTools(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	step := 0
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		msgs := req["messages"].([]any)
+		if sys := msgs[0].(map[string]any)["content"].(string); !strings.Contains(sys, "Pantry") {
+			t.Errorf("page context missing from: %.300s", sys)
+		}
+		step++
+		switch step {
+		case 1:
+			fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"1","type":"function","function":{"name":"write_note","arguments":"{\"path\":\"Pets/Biscuit.md\",\"text\":\"---\\ntype: pet\\nspecies: dog\\n---\\n# Biscuit\\n\"}"}},{"id":"2","type":"function","function":{"name":"write_note","arguments":"{\"path\":\"../escape.md\",\"text\":\"x\"}"}},{"id":"3","type":"function","function":{"name":"write_note","arguments":"{\"path\":\"_FamLogic/Home.md\",\"text\":\"x\"}"}}]}}]}`)
+		default:
+			last := msgs[len(msgs)-1].(map[string]any)["content"].(string)
+			if !strings.Contains(last, "FamLogic keeps that file") {
+				t.Errorf("wiki write not refused: %s", last)
+			}
+			fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"Saved Biscuit."}}]}`)
+		}
+	}))
+	defer llm.Close()
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	e.status("PUT", "/api/admin/modules", "", map[string]any{"enabled": map[string]bool{"thereabouts": true, "meals": true, "pets": true, "agents": true}, "setupDone": true})
+	e.status("PUT", "/api/admin/steward", "", map[string]any{"enabled": true, "url": llm.URL, "model": "test", "key": "k"})
+	if st, res := e.status("POST", "/api/steward", f.mom, map[string]any{"text": "Add our dog Biscuit", "page": "meals"}); st != 200 || res["reply"] != "Saved Biscuit." {
+		t.Fatalf("say: %d %v", st, res)
+	}
+	vault := filepath.Join(filepath.Dir(e.path), "vault")
+	if b, err := os.ReadFile(filepath.Join(vault, "Pets", "Biscuit.md")); err != nil || !strings.Contains(string(b), "type: pet") {
+		t.Fatalf("pet note: %q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(vault), "escape.md")); err == nil {
+		t.Fatal("wrote outside the vault")
+	}
+	// The console admin can talk to Steward too.
+	if st, _ := e.status("GET", "/api/steward", "", nil); st != 200 {
+		t.Fatalf("admin steward: %d", st)
+	}
+}

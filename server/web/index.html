@@ -31,9 +31,16 @@
       <a href="#/chat" data-view="chat" data-module="chat"><span class="ri" data-icon="chat"></span><span>Chat</span></a>
       <a href="#/calendar" data-view="calendar" data-module="calendar"><span class="ri" data-icon="calendar"></span><span>Calendar</span></a>
       <a href="#/todos" data-view="todos" data-module="todos"><span class="ri" data-icon="check"></span><span>To-dos</span></a>
-      <a href="#/chores" data-view="chores" data-module="chores"><span class="ri" data-icon="star"></span><span>Chores</span></a>
+      <a href="#/chores" data-view="chores" data-module="chores"><span class="ri" data-icon="upkeep"></span><span>Chores</span></a>
       <a href="#/routines" data-view="routines" data-module="routines"><span class="ri" data-icon="check"></span><span>Routines</span></a>
       <a href="#/meals" data-view="meals" data-module="meals"><span class="ri" data-icon="meal"></span><span>Meals</span></a>
+      <a href="#/outings" data-view="outings" data-module="outings" hidden><span class="ri" data-icon="walk"></span><span>Walks</span></a>
+      <a href="#/garage" data-view="garage" data-module="garage" hidden><span class="ri" data-icon="car"></span><span>Cars</span></a>
+      <a href="#/ledger" data-view="ledger" data-module="ledger" hidden><span class="ri" data-icon="wallet"></span><span>Budget</span></a>
+      <a href="#/pets" data-view="pets" data-module="pets" hidden><span class="ri" data-icon="paw"></span><span>Pets</span></a>
+      <a href="#/profiles" data-view="profiles" data-module="profiles" hidden><span class="ri" data-icon="idcard"></span><span>Profiles</span></a>
+      <a href="#/homestead" data-view="homestead" data-module="homestead" hidden><span class="ri" data-icon="house"></span><span>Home care</span></a>
+      <a href="#/contacts" data-view="contacts" data-module="contacts" hidden><span class="ri" data-icon="book"></span><span>Contacts</span></a>
       <span class="rail-sep"></span>
       <a href="#/family" data-view="family"><span class="ri" data-icon="people"></span><span>Family</span></a>
       <a href="#/access" data-view="access"><span class="ri" data-icon="key"></span><span>Access</span></a>
@@ -49,6 +56,10 @@
           <select id="mode-select" aria-label="Light or dark"><option value="system">Same as this device</option><option value="light">Light</option><option value="dark">Dark</option></select>
           <label class="switch-label" title="Map, Chat, Calendar… instead of Thereabouts, Chitchat, Datebook…"><input type="checkbox" class="switch" id="plain-names" role="switch"> Plain Labels</label>
         </div></header>
+      <div class="dash-top" id="home-top">
+        <div class="dash-panel dash-map"><div id="home-map"></div><a class="dash-map-open" href="#/thereabouts">Open the map</a></div>
+        <div id="home-feed"></div>
+      </div>
       <div class="dash" id="home-dash"></div>
     </main>
 
@@ -313,6 +324,14 @@
 
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="/vendor/qrcode/qrcode.js"></script>
+  <button type="button" id="steward-fab" class="steward-fab" hidden aria-label="Ask Steward" title="Ask Steward"></button>
+  <section id="steward-panel" class="steward-panel" hidden aria-label="Steward">
+    <header><span class="ri" id="steward-icon"></span><strong id="steward-title">Steward</strong><span class="muted small" id="steward-where"></span>
+      <button type="button" class="link" id="steward-clear" title="Start over">Start over</button>
+      <button type="button" class="link" id="steward-close" aria-label="Close">✕</button></header>
+    <ol id="steward-msgs"></ol>
+    <form id="steward-form"><textarea id="steward-text" rows="2" maxlength="1000" placeholder="Ask, add, change or remove anything…"></textarea><button type="submit">Send</button></form>
+  </section>
   <script src="/app.js"></script>
 </body>
 </html>

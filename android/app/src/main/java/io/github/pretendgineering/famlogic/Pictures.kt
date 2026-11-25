@@ -153,25 +153,18 @@ private fun DrawScope.camera() {
     drawCircle(Color(0xFFFFCC3D), s * .05f, Offset(s * .78f, s * .4f))
 }
 
-/** A cream to-do scroll: the sheet, tan rolls top and bottom, a green tick and two lines to go. */
+/** A cream scroll, tan rolls at the top left and bottom right, a green tick and a line to go. */
 private fun DrawScope.scroll() {
     val k = size.minDimension / 24f
     fun o(x: Float, y: Float) = Offset(x * k, y * k)
-    val paper = Color(0xFFFFF1CF)
-    val roll = Color(0xFFD9A066)
-    // The sheet.
-    drawRect(paper, o(7.6f, 4.4f), Size(9.4f * k, 13.6f * k))
-    drawLine(INK.copy(alpha = .25f), o(7.6f, 4.4f), o(7.6f, 17.6f), 1f * k)
-    drawLine(INK.copy(alpha = .25f), o(17f, 4.4f), o(17f, 17.6f), 1f * k)
-    // The rolls, offset so it seems to float.
-    drawRoundRect(roll, o(5f, 2.6f), Size(13f * k, 3.4f * k), CornerRadius(1.7f * k))
-    drawCircle(Color(0xFFB97A45), 1.05f * k, o(6.7f, 4.3f))
-    drawRoundRect(roll, o(6.6f, 17.4f), Size(13f * k, 3.4f * k), CornerRadius(1.7f * k))
-    drawCircle(Color(0xFFB97A45), 1.05f * k, o(17.9f, 19.1f))
-    // The list.
-    val tick = Path().apply { moveTo(9.4f * k, 8.6f * k); lineTo(10.6f * k, 9.8f * k); lineTo(12.6f * k, 7.6f * k) }
-    drawPath(tick, Color(0xFF3FA568), style = Stroke(1.5f * k, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
-    drawLine(INK.copy(alpha = .55f), o(13.5f, 8.8f), o(15.3f, 8.8f), 1.3f * k, StrokeCap.Round)
-    drawLine(INK.copy(alpha = .55f), o(9.6f, 12f), o(15.3f, 12f), 1.3f * k, StrokeCap.Round)
-    drawLine(INK.copy(alpha = .55f), o(9.6f, 15f), o(13.6f, 15f), 1.3f * k, StrokeCap.Round)
+    val roll = Color(0xFFC98A4F)
+    drawRect(Color(0xFFFFF1CF), o(8f, 4.5f), Size(8.5f * k, 15f * k))
+    val line = Stroke(2f * k, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
+    drawPath(Path().apply {
+        moveTo(17.5f * k, 4.5f * k); lineTo(7f * k, 4.5f * k); arcTo(androidx.compose.ui.geometry.Rect(5f * k, 4.5f * k, 9f * k, 8.5f * k), 270f, -180f, false); lineTo(8f * k, 8.5f * k)
+        moveTo(8f * k, 6.5f * k); lineTo(8f * k, 19.5f * k); lineTo(18.5f * k, 19.5f * k)
+        moveTo(16.5f * k, 4.5f * k); lineTo(16.5f * k, 17.5f * k); arcTo(androidx.compose.ui.geometry.Rect(16.5f * k, 15.5f * k, 20.5f * k, 19.5f * k), 180f, -180f, false); lineTo(20.5f * k, 16.5f * k); lineTo(18.5f * k, 16.5f * k)
+    }, roll, style = line)
+    drawPath(Path().apply { moveTo(10.2f * k, 10.4f * k); lineTo(11.4f * k, 11.6f * k); lineTo(13.8f * k, 9f * k) }, Color(0xFF3FA568), style = line)
+    drawLine(Color(0xFF2B2440).copy(alpha = .55f), o(10.4f, 14.5f), o(14f, 14.5f), 1.6f * k, StrokeCap.Round)
 }

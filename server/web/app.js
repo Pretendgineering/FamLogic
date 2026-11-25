@@ -951,7 +951,15 @@ const ICONS = {
   chat: '<path d="M4 5.5h16v10.5H10l-6 4.5z"/>',
   calendar: '<rect x="3.5" y="5.5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3.5v4M16 3.5v4"/>',
   check: '<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="m8 12.3 2.8 2.8L16.2 9"/>',
-  upkeep: '<path d="M17 3.6H6.6A1.6 1.6 0 0 0 6.6 6.8H7.6M7.6 5V17.2M17 3.6V17.2M7 20.4H17.4A1.6 1.6 0 0 0 17.4 17.2H7.6M9.9 9l.9.9 1.6-1.7M13.6 9.1h1.2M9.9 12.2h4.9M9.9 15h3.3"/>',
+  upkeep: '<path d="M17.5 4.5H7a2 2 0 0 0 0 4h1M8 6.5V19.5h10.5M16.5 4.5V17.5a2 2 0 0 0 4 0V16.5h-2M11 10h3M11 13.5h3"/>',
+  walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="m9.5 21 2.5-6.5 2.5 2.5V21M8 11l3-3.5h3l2.5 3.5 2.5 1M11 7.5 9.5 13l-2 2"/>',
+  car: '<path d="M4 16.5v-4l2-5.2A2 2 0 0 1 7.9 6h8.2a2 2 0 0 1 1.9 1.3l2 5.2v4H4z"/><path d="M4 12.5h16"/><circle cx="7.5" cy="16.5" r="1.8"/><circle cx="16.5" cy="16.5" r="1.8"/>',
+  wallet: '<rect x="3.5" y="6" width="17" height="13" rx="2.5"/><path d="M3.5 9.5h17M15.5 14h2"/><path d="M6 6l9-2.5 1 2.5"/>',
+  paw: '<circle cx="7" cy="10" r="1.7"/><circle cx="10.3" cy="6.5" r="1.7"/><circle cx="13.7" cy="6.5" r="1.7"/><circle cx="17" cy="10" r="1.7"/><path d="M12 11.5c-2.6 0-5 3.4-5 5.7 0 1.6 1.4 2.3 2.7 2.3.9 0 1.5-.5 2.3-.5s1.4.5 2.3.5c1.3 0 2.7-.7 2.7-2.3 0-2.3-2.4-5.7-5-5.7z"/>',
+  idcard: '<rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><circle cx="9" cy="11" r="2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14.5 10h3M14.5 13.5h3"/>',
+  house: '<path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/>',
+  book: '<path d="M6.5 3.5h11a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1h-11a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z"/><circle cx="12" cy="10" r="2.2"/><path d="M8.5 16c.7-1.7 2-2.5 3.5-2.5s2.8.8 3.5 2.5M4.5 7.5h-1M4.5 12h-1M4.5 16.5h-1"/>',
+  spark: '<path d="M12 3.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5z"/><path d="M18.5 15.5c.3 1.5 1 2.2 2.5 2.5-1.5.3-2.2 1-2.5 2.5-.3-1.5-1-2.2-2.5-2.5 1.5-.3 2.2-1 2.5-2.5z"/>',
   sos: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M12 6.2a5.8 5.8 0 1 1 0 11.6a5.8 5.8 0 1 1 0-11.6ZM11.05 9.1a.95 .95 0 0 1 1.9 0L12.75 12.6a.75 .75 0 0 1-1.5 0ZM12 13.9a1.05 1.05 0 1 1 0 2.1a1.05 1.05 0 1 1 0-2.1Z"/><path d="M18.9 8.2A8 8 0 0 1 18.9 15.8M5.1 15.8A8 8 0 0 1 5.1 8.2M21.4 6.4A11 11 0 0 1 21.4 17.6M2.6 17.6A11 11 0 0 1 2.6 6.4"/>',
   star: '<path d="m12 3.5 2.6 5.6 6 .6-4.5 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6L3.4 9.7l6-.6z"/>',
   meal: '<path d="M7 3.5v17M4.5 3.5v5a2.5 2.5 0 0 0 5 0v-5M17 20.5V3.5c-2.5 1.5-3.5 5-3.5 8.5h3.5"/>',
@@ -966,12 +974,19 @@ document.querySelectorAll("[data-icon]").forEach((s) => { s.innerHTML = icon(s.d
 
 let modules = [];      // from /api/admin/modules: id, name, description, available, enabled
 let modulesLoaded = false;
-const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "upkeep", meals: "meal", display: "device", agents: "gear", routines: "check" };
+const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "upkeep", meals: "meal", display: "device", agents: "spark", routines: "check", outings: "walk", garage: "car", ledger: "wallet", pets: "paw", profiles: "idcard", homestead: "house", contacts: "book" };
 const moduleInfo = (id) => modules.find((m) => m.id === id);
 const moduleOn = (id) => !modulesLoaded || !!(moduleInfo(id) || {}).enabled;
 
 // What's coming in each module, for its placeholder page.
 const MODULE_PLANS = {
+  outings: ["Family walks, and each person's runs and bike rides: route, distance, time and pace.", "Shared to the feed if you like."],
+  garage: ["Each car as a note: fuel, mileage and service, with graphs and averages over time.", "Tell Steward \"I just filled up the Sienna, 15 gallons, $56\" and it's logged.", "Oil changes and maintenance as reminders on the calendar. Later: OBD-II."],
+  ledger: ["Fixed bills, flexible spending and paying off debt (snowball, avalanche), with interest.", "Bills on the calendar, so you see what's going out and when.", "Grocery receipts by photo or by voice; SimpleFIN or bank statements to import."],
+  pets: ["Feeding and walks as routines or chores, medicines, vet visits and shots as reminders.", "One printable page for a pet sitter."],
+  profiles: ["Allergies, medicines, sleep and naps, likes and dislikes, birthday, sizes.", "Parents' names, phone numbers and emergency contacts.", "One printable page for babysitters and grandparents."],
+  homestead: ["Bin and recycling day on the calendar, and as a chore if you like.", "Air filters, smoke alarms, gutters and the other upkeep a home needs, owned or rented, as reminders."],
+  contacts: ["The family's address book as notes, synced with phones over CardDAV.", "Linked to people, pets, cars and the home (the vet, the mechanic, the plumber)."],
   calendar: ["Shared calendar with CalDAV sync.", "Events kept as Markdown in the vault."],
   todos: ["To-dos and shared lists.", "Kept as Markdown task lists in the vault."],
   meals: ["Weekly meal plans and recipes.", "Ingredients go to the shopping list."],
@@ -999,6 +1014,7 @@ function showView(name) {
   closeMenu();
   if (name === "thereabouts" && map) setTimeout(() => map.invalidateSize(), 0);
   renderView();
+  stewardFab();
 }
 window.addEventListener("hashchange", () => showView(viewFromHash()));
 
@@ -1061,18 +1077,19 @@ async function renderHome() {
   const rows = (items, empty) => items.length ? el("ul", { class: "dash-list" }, ...items) : el("p", { class: "muted small" }, empty);
   const li = (main, sub, extra) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "dash-main" }, main), sub ? el("div", { class: "dash-sub" }, sub) : null), extra || null);
   const out = [];
+  const top = [];
   if (moduleOn("thereabouts")) {
     const sos = people.filter((m) => m.sosSince);
     out.push(panel("#/thereabouts", sos.length ? "sos" : "pin", sos.length ? "SOS" : "Who's where",
       rows(people.map((m) => el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "dash-main" }, m.name), el("div", { class: "dash-sub" }, describe(m))))), "Nobody's sharing yet."),
-      sos.length ? "sos" : ""));
+      sos.length ? "sos" : "dash-people"));
   }
   if (feed) {
     const at = (e) => e.place || (places.find((p) => p.id === e.placeId) || {}).name || "a place";
     const label = { arrived: (e) => `got to ${at(e)}`, left: (e) => `left ${at(e)}`, checkin: (e) => "checked in" + (e.note ? `: ${e.note}` : ""),
       sos: () => "sent an SOS", sos_end: () => "is OK", drive_start: () => "started driving", trip: () => "finished a trip",
       chore_done: (e) => `did "${e.title}"`, reward_spent: (e) => `got "${e.title}"` };
-    out.push(panel("#/thereabouts", "people", "Today", rows(feed.items.slice(0, 10).map((e) => li(`${e.name} ${(label[e.type] || (() => e.type))(e)}`, time(e.time))), "Nothing yet today.")));
+    top.push(panel("#/thereabouts", "people", "Today", rows(feed.items.slice(0, 14).map((e) => li(`${e.name} ${(label[e.type] || (() => e.type))(e)}`, time(e.time))), "Nothing yet today.")));
   }
   if (events) out.push(panel("#/calendar", "calendar", displayName(moduleInfo("calendar")),
     rows(events.events.slice(0, 8).map((e) => li(e.title, (new Date(e.start) < new Date(midnight.getTime() + 86400000) ? "Today" : new Date(e.start).toLocaleDateString([], { weekday: "short", day: "numeric" })) + " · " + (e.allDay ? "all day" : time(e.start)) + (e.where ? " · " + e.where : ""))), "Nothing in the next week.")));
@@ -1100,7 +1117,44 @@ async function renderHome() {
     const quiet = lastMembers.filter((m) => m.silent || (m.issues || []).length);
     out.push(panel("#/devices", "device", "Devices", rows(quiet.map((m) => li(m.name, m.silent ? "Not heard from in a while" : (m.issues || []).join(", "))), "All phones look fine.")));
   }
+  // Who's where sits beside the map, under the feed.
+  const peoplePanel = out.find((p) => p.classList.contains("dash-people") || p.classList.contains("sos"));
+  if (peoplePanel) { out.splice(out.indexOf(peoplePanel), 1); top.push(peoplePanel); }
+  $("#home-feed").replaceChildren(...top);
+  $("#home-top").hidden = !moduleOn("thereabouts") && !feed;
   $("#home-dash").replaceChildren(...out);
+  homeMapDraw();
+}
+
+// The home map: everyone sharing, fitted to them, a click away from the full map.
+let homeMap = null, homeTiles = "", homeMarkers = [];
+function homeMapDraw() {
+  const box = $("#home-map");
+  if (!box || !moduleOn("thereabouts") || typeof L === "undefined") return;
+  if (!homeMap) {
+    homeMap = L.map(box, { zoomControl: false, attributionControl: true, scrollWheelZoom: false }).setView([20, 0], 2);
+  }
+  if (appliedTiles && appliedTiles !== homeTiles) {
+    homeTiles = appliedTiles;
+    homeMap.eachLayer((l) => l.remove());
+    L.tileLayer(appliedTiles, { maxZoom: 19, attribution: (serverTiles || {}).tileAttribution || "© OpenStreetMap contributors", referrerPolicy: "strict-origin-when-cross-origin" }).addTo(homeMap);
+    homeMarkers = [];
+  }
+  homeMarkers.forEach((m) => m.remove());
+  homeMarkers = [];
+  const pts = [];
+  for (const m of lastMembers) {
+    if (!m.loc || m.paused) continue;
+    const pos = [m.loc.lat, m.loc.lon];
+    pts.push(pos);
+    homeMarkers.push(L.marker(pos, { icon: L.divIcon({ className: "pin", iconSize: [34, 34], iconAnchor: [17, 17],
+      html: `<div class="avatar${m.sosSince ? " sos" : ""}${m.emoji ? " emoji" : ""}" style="background:${m.color}">${m.emoji || initial(m.name)}</div>` }) }).bindTooltip(m.name).addTo(homeMap));
+  }
+  if (!pts.length) for (const p of places) pts.push([p.lat, p.lon]);
+  setTimeout(() => {
+    homeMap.invalidateSize();
+    if (pts.length) homeMap.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
+  }, 0);
 }
 
 function avatarOf(m) {
@@ -1499,6 +1553,7 @@ function renderModulePage(id) {
   box.classList.add("soon");
   box.replaceChildren(
     el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
+    serverFeatures.includes("steward") ? el("p", { class: "muted small" }, "You can start now: tell Steward (the button in the corner) and it keeps the notes in the vault, ready for when this arrives.") : null,
     el("ul", { class: "plain" }, ...(MODULE_PLANS[id] || []).map((t) => el("li", {}, t))));
 }
 
@@ -1574,6 +1629,24 @@ const SETUP_STEPS = [
         const hit = (res.results || res)[0];
         if (!hit) { alert(`Couldn't find "${q}". Add ${name} on the map instead.`); continue; }
         await api("POST", "/api/admin/places", { circleId: (circles[0] || {}).id, name, lat: hit.lat, lon: hit.lon, radius: name === "Home" ? 120 : 200 });
+      }
+    } },
+  { title: "Steward (optional)", render(box) {
+      box.append(el("p", {}, "Steward is the family's AI helper. With it on, a small button sits in the corner of every page, in the app and here: tell it what to add, change or remove (\"Sam has a dentist visit Friday at 3\", \"add eggs to Shopping\", \"save this recipe\") and it does it for you."),
+        el("p", { class: "muted small" }, "It needs an AI model: your own (Ollama, LocalAI, llama.cpp) or a cloud one with an OpenAI-compatible address. Skip this to set it up later in Settings → AI & API."));
+      stewardSettings().then((f) => { f.id = "setup-steward"; box.append(f); });
+    },
+    async save() {
+      const f = $("#setup-steward form");
+      if (!f) return;
+      const [enabled] = f.querySelectorAll("input[type=checkbox]");
+      const url = f.querySelector("input:not([type])");
+      if (!url || !url.value.trim()) return;
+      f.requestSubmit();
+      if (enabled && enabled.checked && !moduleOn("agents")) {
+        const on = Object.fromEntries(modules.filter((m) => m.enabled).map((m) => [m.id, true]));
+        on.agents = true;
+        setModules(await api("PUT", "/api/admin/modules", { enabled: on, setupDone: true }));
       }
     } },
   { title: "Getting phones connected", render(box) {
@@ -2069,7 +2142,7 @@ async function stewardSettings() {
   const save = el("button", { type: "submit" }, "Save");
   const test = el("button", { type: "button", class: "secondary" }, "Test");
   const form = el("form", { class: "upkeep-add" },
-    el("label", { class: "switch-label" }, enabled, "Let the family talk to Steward in Chitchat"),
+    el("label", { class: "switch-label" }, enabled, "Let the family use Steward (the button in the corner of each page, and in Chitchat)"),
     el("label", {}, "Model address (OpenAI-compatible)", url),
     el("div", { class: "row" }, el("label", { class: "grow" }, "Model", model), el("label", { class: "grow" }, "Key", key)),
     el("label", { class: "switch-label" }, everyone, "Children too (they can only do what they could in the app)"),
@@ -2319,3 +2392,54 @@ function crestLetter(ch) {
 }
 
 function sosMark() { const s = el("span", { class: "sos-mark" }); s.innerHTML = icon("sos"); return s; }
+
+// ---- Steward, from any page: a small round button in the corner (not on Chat,
+// which has its own voice). It opens a panel that knows which page you're on, and
+// the page redraws after each answer so changes show at once.
+const STEWARD_PAGES = ["home", "thereabouts", "calendar", "todos", "chores", "routines", "meals", "family"];
+function stewardAllowed() {
+  if (!serverFeatures.includes("steward")) return false;
+  if (isAdmin() || !me.member) return true;
+  return ["parent", "grandparent"].includes(me.member.role) || serverFeatures.includes("steward-kids");
+}
+function stewardFab() {
+  const fab = $("#steward-fab");
+  if (!fab) return;
+  if (!fab.childElementCount) { fab.innerHTML = icon("spark"); $("#steward-icon").innerHTML = icon("spark"); }
+  const page = STEWARD_PAGES.includes(view) || (moduleInfo(view) && view !== "chat" && view !== "agents");
+  fab.hidden = !(stewardAllowed() && page) || !$("#steward-panel").hidden;
+  if (!page) $("#steward-panel").hidden = true;
+  $("#steward-where").textContent = view === "home" ? "" : "· " + (moduleInfo(view) ? displayName(moduleInfo(view)) : view.charAt(0).toUpperCase() + view.slice(1));
+}
+function stewardDraw(msgs) {
+  const list = $("#steward-msgs");
+  list.replaceChildren(...msgs.map((m) => el("li", { class: m.role === "user" ? "mine" : "" }, m.text)));
+  if (!msgs.length) list.append(el("li", { class: "muted hint" }, "Tell Steward what to add, change or remove here: \"add milk and eggs to Shopping\", \"move the dentist to Friday at 3\", \"Biscuit had his shots today\"."));
+  list.scrollTop = list.scrollHeight;
+}
+$("#steward-fab")?.addEventListener("click", async () => {
+  $("#steward-panel").hidden = false;
+  $("#steward-fab").hidden = true;
+  $("#steward-title").textContent = displayName(moduleInfo("agents") || { name: "Steward", plain: "AI" });
+  stewardDraw([]);
+  try { stewardDraw((await api("GET", "/api/steward")).messages || []); } catch (err) { stewardDraw([{ role: "assistant", text: err.message }]); }
+  $("#steward-text").focus();
+});
+$("#steward-close")?.addEventListener("click", () => { $("#steward-panel").hidden = true; stewardFab(); });
+$("#steward-clear")?.addEventListener("click", async () => { try { await api("DELETE", "/api/steward"); } catch (_) {} stewardDraw([]); });
+$("#steward-text")?.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("#steward-form").requestSubmit(); } });
+$("#steward-form")?.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const box = $("#steward-text"), text = box.value.trim();
+  if (!text || box.disabled) return;
+  box.value = ""; box.disabled = true;
+  const shown = [...$("#steward-msgs").querySelectorAll("li:not(.hint)")].map((li) => ({ role: li.classList.contains("mine") ? "user" : "assistant", text: li.textContent }));
+  stewardDraw([...shown, { role: "user", text }, { role: "assistant", text: "Thinking…" }]);
+  try {
+    const res = await api("POST", "/api/steward", { text, page: view });
+    stewardDraw(res.messages || []);
+    upkeepDrawn = listsDrawn = calDrawn = homeDrawn = "";
+    renderView();
+  } catch (err) { stewardDraw([...shown, { role: "user", text }, { role: "assistant", text: err.message }]); }
+  box.disabled = false; box.focus();
+});

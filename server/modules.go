@@ -30,7 +30,25 @@ var allModules = []ModuleInfo{
 	{"routines", "Rhythms", "Routines", "Checklists that change with the day.", true, false},
 	{"meals", "Pantry", "Meals", "Meal plans and recipes.", true, false},
 	{"display", "Corkboard", "Family display", "The family's day on a wall tablet or TV.", false, false},
-	{"agents", "Steward", "AI & API", "API keys for your own AI agent.", true, false},
+	{"agents", "Steward", "AI & API", "Your family's AI helper, and API keys for your own agent.", true, false},
+	// Coming soon: they can be switched on now (a placeholder, and Steward can keep
+	// their notes in the vault already) and fill in as each is built.
+	{"outings", "Outings", "Walks & rides", "Family walks, and each person's runs and bike rides.", false, false},
+	{"garage", "Garage", "Cars", "Fuel, mileage and maintenance for each car, with reminders.", false, false},
+	{"ledger", "Ledger", "Budget", "Bills, spending, groceries and paying off debt.", false, false},
+	{"pets", "Menagerie", "Pets", "Feeding, walks, medicines and vet visits.", false, false},
+	{"profiles", "Who's Who", "Profiles", "Allergies, medicines, sleep, likes and emergency contacts; a page for sitters.", false, false},
+	{"homestead", "Homestead", "Home care", "Bin day, filters and the upkeep a home needs, owned or rented.", false, false},
+	{"contacts", "Rolodex", "Contacts", "The family's address book, synced with phones (CardDAV).", false, false},
+}
+
+func moduleCatalogByID(id string) (ModuleInfo, bool) {
+	for _, m := range allModules {
+		if m.ID == id {
+			return m, true
+		}
+	}
+	return ModuleInfo{}, false
 }
 
 // ModuleSettings are the family's choices.
@@ -107,6 +125,8 @@ func (s *Store) moduleFeatures() []string {
 	for _, m := range allModules {
 		if m.Available && set.Enabled[m.ID] {
 			out = append(out, "module:"+m.ID)
+		} else if set.Enabled[m.ID] {
+			out = append(out, "soon:"+m.ID) // switched on, still being built: apps show a placeholder
 		}
 	}
 	return out

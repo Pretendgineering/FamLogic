@@ -50,29 +50,15 @@ object FamIcons {
         }.build()
     }
 
-    /**
-     * Upkeep: a little to-do scroll. A sheet with a ticked line and two to go,
-     * rolled at the top and bottom, the rolls offset so it seems to float.
-     */
+    /** Upkeep: a little scroll, rolled at the top left and bottom right, with two lines on it. */
     val Upkeep: ImageVector by lazy {
         ImageVector.Builder("Upkeep", 24.dp, 24.dp, 24f, 24f).apply {
             path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
-                // Top roll, a little to the left, curling under at its left end.
-                moveTo(17f, 3.6f); lineTo(6.6f, 3.6f)
-                arcTo(1.6f, 1.6f, 0f, false, false, 6.6f, 6.8f)
-                lineTo(7.6f, 6.8f)
-                // The sheet.
-                moveTo(7.6f, 5f); lineTo(7.6f, 17.2f)
-                moveTo(17f, 3.6f); lineTo(17f, 17.2f)
-                // Bottom roll, a little to the right, curling under at its right end.
-                moveTo(7f, 20.4f); lineTo(17.4f, 20.4f)
-                arcTo(1.6f, 1.6f, 0f, false, false, 17.4f, 17.2f)
-                lineTo(7.6f, 17.2f)
-                // The list: a tick and two lines.
-                moveTo(9.9f, 9f); lineTo(10.8f, 9.9f); lineTo(12.4f, 8.2f)
-                moveTo(13.6f, 9.1f); lineTo(14.8f, 9.1f)
-                moveTo(9.9f, 12.2f); lineTo(14.8f, 12.2f)
-                moveTo(9.9f, 15f); lineTo(13.2f, 15f)
+                moveTo(17.5f, 4.5f); lineTo(7f, 4.5f); arcTo(2f, 2f, 0f, false, false, 7f, 8.5f); lineTo(8f, 8.5f)
+                moveTo(8f, 6.5f); lineTo(8f, 19.5f); lineTo(18.5f, 19.5f)
+                moveTo(16.5f, 4.5f); lineTo(16.5f, 17.5f); arcTo(2f, 2f, 0f, false, false, 20.5f, 17.5f); lineTo(20.5f, 16.5f); lineTo(18.5f, 16.5f)
+                moveTo(11f, 10f); lineTo(14f, 10f)
+                moveTo(11f, 13.5f); lineTo(14f, 13.5f)
             }
         }.build()
     }

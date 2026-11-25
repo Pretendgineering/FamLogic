@@ -47,8 +47,8 @@ func TestModulesDefaults(t *testing.T) {
 	if err := s.SetModules(map[string]bool{"display": true}, true); err != nil {
 		t.Fatal(err)
 	}
-	if feats := s.moduleFeatures(); len(feats) != 0 {
-		t.Fatalf("features should be empty until display is built: %v", feats)
+	if feats := s.moduleFeatures(); len(feats) != 1 || feats[0] != "soon:display" {
+		t.Fatalf("a module still being built is only a placeholder: %v", feats)
 	}
 }
 

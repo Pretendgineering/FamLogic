@@ -247,6 +247,26 @@ days: [mon, tue, wed, thu, fri]
 Which routine is current, and from when, on the given `days`. In `who`, `#name` means
 a group or tag.
 
+### Coming soon: Outings, Garage, Ledger, Pets, Profiles, Homestead, Contacts
+These modules aren't built yet, but a family can switch them on and keep their notes now
+(by hand, or by telling Steward). FamLogic will read these notes when each module arrives,
+so use the folders and fields below. Logs are dated lines in the body, newest last.
+
+```
+Outings/     one note per outing: 2026-11-29 Park loop.md   type: outing  (who, kind: walk|run|ride, distance, time)
+Cars/        one note per car: Sienna.md                    type: car     (make, model, year, plate, mileage)
+             body: "## Fuel" lines "- 2026-11-25: 15 gal, $56.00, 84,210 mi"; "## Service" lines "- 2026-10-02: oil change, 81,900 mi, $64"
+Budget/      Bills.md (type: bills; one line per bill: "- Electric: $120, day 15, monthly"),
+             Debts.md (type: debts; "- Car loan: $8,400 at 6.9%, $310 a month"), Spending/2026-11.md (type: spending; dated lines)
+Pets/        one note per pet: Biscuit.md                    type: pet     (species, born, vet: "[[Dr Lee]]")
+             body: "## Feeding", "## Walks", "## Medicines", "## Vet" (dated lines for visits and shots)
+People/      profiles go in each person's note, below FamLogic's own fields: "## Allergies", "## Medicines",
+             "## Sleep", "## Likes", "## Dislikes", "## Emergency contacts" (one line each)
+Home/        one note per job: Air filter.md                type: upkeep  (every: 3 months, last: 2026-09-01, next: 2026-12-01)
+             Bin day.md: type: upkeep, every: week, day: thu, who: "[[Sam]]"
+Contacts/    one note per person or business: Dr Lee.md     type: contact (phone, email, address, for: "[[Biscuit]]")
+```
+
 ## The API (for agents with a key)
 
 Editing text is fine, but the API does things properly: it notifies the right

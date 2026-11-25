@@ -356,7 +356,7 @@ type llmToolCall struct {
 	} `json:"function"`
 }
 
-func (s *Server) stewardSystem(me *Member) string {
+func (s *Server) stewardSystem(me *Member, page string) string {
 	now := time.Now()
 	people := []string{}
 	for _, m := range s.store.Members() {
@@ -375,15 +375,17 @@ Rules:
 - If you're unsure who someone means, ask instead of guessing.
 - If a tool returns an error, say plainly what went wrong.
 - Recipes: when someone reads or talks through a recipe, tidy it into a clean one and save it with add_recipe, then say its name and how many ingredients and steps it has.
-- Don't assume children go to school; families homeschool, unschool or keep their own hours.`,
-		s.familyName(), me.Name, me.access(), now.Format("Monday 2 January 2006, 15:04"), strings.Join(people, "; "))
+- Don't assume children go to school; families homeschool, unschool or keep their own hours.
+- Use the specific tools when one fits (chores, events, lists, meals, recipes). For anything else (pets, cars, the house, profiles, notes on anything), read the vault guide with read_vault_guide, then read and write notes with list_notes, read_note and write_note, keeping their formats exactly. Re-read a note before changing it, keep what you don't mean to change, and never delete what someone else wrote unless asked.
+- Modules switched on but still coming soon (%s) keep their notes in the vault already: one note per thing in a folder named after it (Pets/Biscuit.md, Cars/Sienna.md, Home/Air filter.md, Budget/Bills.md, Outings/2026-11-29 Park loop.md), front matter first. Logs go as dated lines in the note's body ("- 2026-11-25: 15 gal, $56.00, 84,210 mi").`+stewardPageLine(page),
+		s.familyName(), me.Name, me.access(), now.Format("Monday 2 January 2006, 15:04"), strings.Join(people, "; "), s.soonModules())
 }
 
 var stewardClient = &http.Client{Timeout: 90 * time.Second}
 
-func (s *Server) stewardReply(ctx context.Context, me *Member, history []StewardMsg) (string, error) {
+func (s *Server) stewardReply(ctx context.Context, me *Member, history []StewardMsg, page string) (string, error) {
 	c := s.store.Steward()
-	msgs := []llmMsg{{Role: "system", Content: s.stewardSystem(me)}}
+	msgs := []llmMsg{{Role: "system", Content: s.stewardSystem(me, page)}}
 	for _, h := range history {
 		msgs = append(msgs, llmMsg{Role: h.Role, Content: h.Text})
 	}
@@ -461,6 +463,7 @@ func (s *Server) handleStewardSay(w http.ResponseWriter, r *http.Request, me *Me
 	}
 	var body struct {
 		Text string `json:"text"`
+		Page string `json:"page"` // where they asked from (meals, chores...), so "this" makes sense
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -477,7 +480,7 @@ func (s *Server) handleStewardSay(w http.ResponseWriter, r *http.Request, me *Me
 	if len(recent) > 16 {
 		recent = recent[len(recent)-16:]
 	}
-	reply, err := s.stewardReply(ctx, me, recent)
+	reply, err := s.stewardReply(ctx, me, recent, body.Page)
 	if err != nil {
 		reply = "I can't reach my brain right now (" + err.Error() + "). Try again in a bit."
 	} else if reply == "" {
@@ -543,7 +546,7 @@ func (s *Server) handleAdminTestSteward(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	start := time.Now()
-	reply, err := s.stewardReply(ctx, &Member{ID: "admin", Name: "Admin", Role: RoleParent}, []StewardMsg{{Role: "user", Text: "Say hello in five words or fewer."}})
+	reply, err := s.stewardReply(ctx, &Member{ID: "admin", Name: "Admin", Role: RoleParent}, []StewardMsg{{Role: "user", Text: "Say hello in five words or fewer."}}, "")
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

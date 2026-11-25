@@ -953,3 +953,34 @@ input.switch:checked::after { transform: translateX(16px); background: var(--sur
 .sos-mark { display: inline-grid; flex: none; } .sos-mark svg { width: 20px; height: 20px; }
 .dash-panel.sos .dash-head .ri { background: var(--sos); color: #fff; }
 .dash-panel.sos .dash-title { color: var(--sos); }
+
+/* Steward, from any page: a round button in the corner and a chat panel above it. */
+.steward-fab { position: fixed; right: 22px; bottom: 22px; z-index: 1200; width: 56px; height: 56px; border-radius: 18px; border: 0; padding: 0; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-soft-text); box-shadow: var(--shadow-lg); cursor: pointer; }
+.steward-fab:hover { filter: brightness(1.04); }
+.steward-fab svg { width: 26px; height: 26px; }
+.steward-panel { position: fixed; right: 22px; bottom: 22px; z-index: 1200; width: min(400px, calc(100vw - 32px)); height: min(560px, calc(100vh - 44px)); display: flex; flex-direction: column; background: var(--surface); border-radius: 22px; box-shadow: var(--shadow-lg); overflow: hidden; }
+.steward-panel header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.steward-panel header strong { font-family: var(--serif); font-size: 1.1rem; }
+.steward-panel header .ri { display: inline-grid; color: var(--secondary); } .steward-panel header .ri svg { width: 20px; height: 20px; }
+.steward-panel header #steward-clear { margin-left: auto; }
+.steward-panel ol { list-style: none; margin: 0; padding: 12px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.steward-panel li { max-width: 85%; padding: 8px 12px; border-radius: 16px; background: var(--surface-2); white-space: pre-wrap; align-self: flex-start; }
+.steward-panel li.mine { align-self: flex-end; background: var(--accent-soft); color: var(--accent-soft-text); }
+.steward-panel li.hint { max-width: none; background: none; padding: 4px; }
+.steward-panel form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); align-items: flex-end; }
+.steward-panel textarea { flex: 1; resize: none; }
+@media (max-width: 720px) { .steward-fab { right: 16px; bottom: 16px; } .steward-panel { right: 16px; bottom: 16px; } }
+
+/* Home: the map and the feed on top, everything else in a row below. */
+.dash-top { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 12px; margin-bottom: 12px; height: clamp(320px, 52vh, 560px); }
+.dash-top[hidden] { display: none; }
+.dash-map { position: relative; padding: 0; overflow: hidden; }
+#home-map { position: absolute; inset: 0; }
+.dash-map-open { position: absolute; right: 12px; top: 12px; z-index: 500; padding: 7px 14px; border-radius: 999px; background: var(--surface); color: var(--text); font-weight: 600; font-size: .85rem; box-shadow: var(--shadow); text-decoration: none; }
+#home-feed { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+#home-feed .dash-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#home-feed .dash-panel.dash-people, #home-feed .dash-panel.sos { flex: 0 1 auto; max-height: 45%; }
+.dash { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.dash-map .pin .avatar { width: 34px; height: 34px; font-size: .9rem; border: 2px solid #fff; }
+@media (max-width: 900px) { .dash-top { grid-template-columns: 1fr; height: auto; } .dash-map { height: 300px; } #home-feed .dash-panel { max-height: 360px; } }
+.steward-panel textarea { font: inherit; padding: 8px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
