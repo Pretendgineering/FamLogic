@@ -115,6 +115,12 @@
       </nav>
       <section class="panel wide-panel" data-sub-panel="modules">
         <p class="muted">Switch parts of FamLogic on or off for your whole family. Modules marked <em>coming soon</em> can be chosen now and switch on when they arrive.</p>
+        <button type="button" class="secondary" id="modules-help">Help me choose</button>
+        <div id="modules-quiz" class="quiz-box" hidden>
+          <p class="muted small">Answer a few questions and the modules that fit are ticked for you. Nothing changes until you Save.</p>
+          <ul class="list quiz" id="modules-quiz-list"></ul>
+          <div class="row"><button type="button" class="tonal" id="modules-suggest">Tick what fits</button></div>
+        </div>
         <ul class="list modules" id="module-list"></ul>
         <div class="row"><button id="modules-save">Save</button><span class="muted small" id="modules-msg"></span></div>
       </section>

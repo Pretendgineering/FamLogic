@@ -1483,12 +1483,42 @@ function moduleRows(target, checked) {
         el("div", { class: "sub" }, m.description))));
   }));
 }
+// A few questions about the family's life, each suggesting modules (first-run setup,
+// and Settings → Modules → Help me choose). The family still decides.
+const MODULE_QUESTIONS = [
+  ["See where everyone is, and SOS?", ["thereabouts"]],
+  ["Family chat?", ["chat"]],
+  ["A shared calendar (appointments, activities, co-op or school)?", ["calendar"]],
+  ["Shopping lists and to-dos?", ["todos"]],
+  ["Chores, maybe with stars for the children?", ["chores"]],
+  ["Daily routines (mornings, bedtime, a homeschool day)?", ["routines"]],
+  ["Plan meals and keep recipes?", ["meals"]],
+  ["An AI helper you can just tell things to?", ["agents"]],
+  ["Pets?", ["pets"]],
+  ["A car, or a few?", ["garage"]],
+  ["A home to look after, owned or rented (filters, bin day)?", ["homestead"]],
+  ["Help with bills, the budget or grocery spending?", ["ledger"]],
+  ["Walks, runs, steps or health tracking?", ["outings"]],
+  ["Allergies, medicines and emergency contacts in one place?", ["profiles"]],
+  ["A shared address book?", ["contacts"]],
+];
+function moduleQuestions(target, isOn) {
+  target.replaceChildren(...MODULE_QUESTIONS.map(([q, ids]) => {
+    const box = el("input", { type: "checkbox", class: "switch", role: "switch", "data-ids": ids.join(",") });
+    box.checked = ids.some((id) => isOn(id));
+    return el("li", {}, el("label", { class: "switch-label" }, box, q));
+  }));
+}
+// The modules the answers suggest: {id: true/false} for every module a question covers.
+const suggestedModules = (target) => Object.fromEntries([...target.querySelectorAll("input[data-ids]")].flatMap((b) => b.dataset.ids.split(",").map((id) => [id, b.checked])));
+let modulesDirty = false; // ticked by hand (or by suggestions) and not saved yet: the refresh leaves the list alone
+
 const chosenModules = (target) => Object.fromEntries([...target.querySelectorAll("input[data-module]")].map((b) => [b.dataset.module, b.checked]));
 
 function renderSettings() {
   document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.sub === settingsTab)));
   document.querySelectorAll("[data-sub-panel]").forEach((p) => { p.hidden = p.dataset.subPanel !== settingsTab; });
-  if (settingsTab === "modules" && !$("#module-list").contains(document.activeElement)) moduleRows($("#module-list"), (m) => m.enabled);
+  if (settingsTab === "modules" && !modulesDirty && !$("#module-list").contains(document.activeElement)) moduleRows($("#module-list"), (m) => m.enabled);
   // Drawn once per visit (not by the 10-second refresh, which would wipe a key that's being shown).
   if (settingsTab === "agents" && !$("#agents-panel").childElementCount) renderKeys();
   if (settingsTab === "server") {
@@ -1516,9 +1546,23 @@ async function renderVault() {
     " to your user (see the README). How the notes are written: ", el("a", { href: "/api/v1/vault/guide", target: "_blank" }, "the formatting guide"), ".");
 }
 
+$("#module-list").addEventListener("change", () => { modulesDirty = true; });
+$("#modules-help").addEventListener("click", () => {
+  const box = $("#modules-quiz");
+  box.hidden = !box.hidden;
+  if (!box.hidden) moduleQuestions($("#modules-quiz-list"), (id) => (moduleInfo(id) || {}).enabled);
+});
+$("#modules-suggest").addEventListener("click", () => {
+  const want = suggestedModules($("#modules-quiz-list"));
+  $("#module-list").querySelectorAll("input[data-module]").forEach((b) => { if (b.dataset.module in want) b.checked = want[b.dataset.module]; });
+  modulesDirty = true;
+  $("#modules-quiz").hidden = true;
+  $("#modules-msg").textContent = "Ticked to match your answers. Check them, then Save.";
+});
 $("#modules-save").addEventListener("click", async () => {
   try {
     const res = await api("PUT", "/api/admin/modules", { enabled: chosenModules($("#module-list")), setupDone: true });
+    modulesDirty = false;
     setModules(res);
     $("#modules-msg").textContent = "Saved";
     setTimeout(() => ($("#modules-msg").textContent = ""), 2000);
@@ -1573,10 +1617,17 @@ async function loadModules() {
 const setupDialog = $("#setup-dialog");
 let setupStep = 0;
 const setupMade = []; // invites made along the way, shown at the end
+let setupSuggested = null; // modules the first questions suggested
 const SETUP_STEPS = [
   { title: "Welcome to FamLogic", render(box) {
-      box.append(el("p", {}, "Choose what your family wants to use."), el("ul", { class: "list modules", id: "setup-modules" }));
-      moduleRows($("#setup-modules"), (m) => m.enabled);
+      box.append(el("p", {}, "A few questions about your family's life, so FamLogic can suggest what to switch on. You choose on the next page, and can change it any time."),
+        el("ul", { class: "list quiz", id: "setup-quiz" }));
+      moduleQuestions($("#setup-quiz"), (id) => setupSuggested ? !!setupSuggested[id] : !!(moduleInfo(id) || {}).enabled);
+    },
+    async save() { setupSuggested = suggestedModules($("#setup-quiz")); } },
+  { title: "What to switch on", render(box) {
+      box.append(el("p", {}, "Suggested from your answers. Switch on what your family wants; modules marked coming soon can be chosen now."), el("ul", { class: "list modules", id: "setup-modules" }));
+      moduleRows($("#setup-modules"), (m) => setupSuggested && m.id in setupSuggested ? setupSuggested[m.id] : m.enabled);
     },
     async save() { setModules(await api("PUT", "/api/admin/modules", { enabled: chosenModules($("#setup-modules")), setupDone: true })); } },
   { title: "About your family", render(box) {
