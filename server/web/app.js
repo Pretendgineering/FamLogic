@@ -1453,6 +1453,7 @@ function renderModulePage(id) {
   const box = $("#module-soon");
   if (id === "chores" && m.available) { box.classList.remove("soon"); renderUpkeep(box); return; }
   if (id === "todos" && m.available) { box.classList.remove("soon"); renderLists(box); return; }
+  if (id === "calendar" && m.available) { box.classList.remove("soon"); renderCalendar(box); return; }
   box.classList.add("soon");
   box.replaceChildren(
     el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
@@ -2003,4 +2004,66 @@ async function renderLists(box, force = false) {
   make.addEventListener("submit", (ev) => { ev.preventDefault(); if (title.value.trim()) act("POST", "/api/lists", { title: title.value.trim(), kind: kind.value }); });
   box.replaceChildren(...(data.lists.length ? data.lists.map(listCard) : [el("p", { class: "muted" }, "No lists yet.")]),
     ...(data.canEdit ? [el("h2", {}, "Make a list"), make] : []));
+}
+
+// Datebook: the family calendar (Markdown notes in Calendar/; CalDAV for phones).
+let calDrawn = "";
+async function renderCalendar(box, force = false) {
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select, textarea")) return;
+  const from = new Date(); from.setHours(0, 0, 0, 0);
+  let data;
+  try { data = await api("GET", `/api/events?from=${from.getTime()}&to=${from.getTime() + 45 * 86400000}`); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  const sig = JSON.stringify(data);
+  if (!force && sig === calDrawn && box.childElementCount) return;
+  calDrawn = sig;
+  const act = async (method, path, body) => { try { await api(method, path, body); renderCalendar(box, true); } catch (err) { alert(err.message); } };
+  const people = lastMembers.filter((m) => m.role !== "dependent");
+  const days = {};
+  for (const e of data.events) {
+    const d = new Date(Math.max(e.start, from.getTime())); d.setHours(0, 0, 0, 0);
+    (days[d.getTime()] = days[d.getTime()] || []).push(e);
+  }
+  const agenda = Object.keys(days).sort().map((k) => {
+    const d = new Date(Number(k));
+    const label = d.getTime() === from.getTime() ? "Today" : d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+    return [el("h2", {}, label), el("ul", { class: "list" }, ...days[k].map((e) => {
+      const rm = el("button", { type: "button", class: "link" }, "Delete");
+      rm.addEventListener("click", () => { if (confirm(`Delete "${e.title}"${e.recurring ? " (every time it repeats)" : ""}?`)) act("DELETE", `/api/events/${e.id}`); });
+      return el("li", {}, el("span", { class: "feed-time muted small" }, e.allDay ? "All day" : new Date(e.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
+        el("div", { class: "grow" }, el("div", { class: "title" }, e.title, e.recurring ? el("span", { class: "badge" }, "repeats") : null),
+          el("div", { class: "sub" }, [e.where, e.who.map((id) => (people.find((p) => p.id === id) || {}).name).filter(Boolean).join(", ")].filter(Boolean).join(" · "))),
+        data.canEdit ? rm : null);
+    }))];
+  }).flat();
+  // Add an event.
+  const title = el("input", { placeholder: "e.g. Dentist (Sam)", maxlength: "100" });
+  const day = el("input", { type: "date", value: from.toISOString().slice(0, 10) });
+  const t1 = el("input", { type: "time", value: "17:00" });
+  const t2 = el("input", { type: "time", value: "18:00" });
+  const allDay = el("input", { type: "checkbox", class: "switch", role: "switch" });
+  const where = el("input", { placeholder: "Where (optional)", maxlength: "100" });
+  const every = el("select", {}, ...[["", "Once"], ["day", "Every day"], ["weekdays", "Weekdays"], ["week", "Every week"], ["2 weeks", "Every 2 weeks"], ["month", "Every month"], ["year", "Every year"]].map(([v, t]) => el("option", { value: v }, t)));
+  const who = el("div", { class: "toggles" }, ...people.map((m) => {
+    const b = el("button", { type: "button", class: "toggle", "data-id": m.id, "aria-pressed": "false" }, avatarOf(m), el("span", {}, m.name));
+    b.addEventListener("click", () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"));
+    return b;
+  }));
+  const form = el("form", { class: "upkeep-add" }, el("label", {}, "What", title),
+    el("div", { class: "row" }, el("label", {}, "Day", day), el("label", {}, "From", t1), el("label", {}, "To", t2), el("label", { class: "switch-label" }, allDay, "All day")),
+    el("div", { class: "row" }, el("label", { class: "grow" }, "Where", where), el("label", {}, "Repeats", every)),
+    el("div", { class: "muted small" }, "Who"), who, el("div", { class: "row" }, el("button", { type: "submit" }, "Add event")));
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (!title.value.trim()) return;
+    act("POST", "/api/events", { title: title.value.trim(), start: allDay.checked ? day.value : `${day.value}T${t1.value}`, end: allDay.checked ? "" : `${day.value}T${t2.value}`,
+      where: where.value.trim(), every: every.value, who: [...who.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.id) });
+  });
+  const sync = el("div", { class: "panel" }, el("h2", {}, "On your phone"),
+    el("p", { class: "muted small" }, "The family calendar syncs both ways with phones and computers (CalDAV). Sign in with your FamLogic username and password."),
+    el("ul", { class: "plain small" },
+      el("li", {}, el("strong", {}, "Android: "), "install DAVx5 (F-Droid or Play Store), add an account with URL ", el("code", {}, location.origin + "/dav/"), ", then switch on the calendar."),
+      el("li", {}, el("strong", {}, "iPhone or Mac: "), "Settings → Calendar → Accounts → Add Account → Other → CalDAV, server ", el("code", {}, location.host), "."),
+      el("li", {}, el("strong", {}, "Thunderbird: "), "New Calendar → On the network, location ", el("code", {}, location.origin + "/dav/"), ".")));
+  box.replaceChildren(...(agenda.length ? agenda : [el("p", { class: "muted" }, "Nothing on the calendar for the next few weeks.")]),
+    ...(data.canEdit ? [el("h2", {}, "Add an event"), form] : []), sync);
 }

@@ -56,7 +56,7 @@ type kidModule struct {
 var kidModules = []kidModule{
 	{"thereabouts", "Thereabouts", "Map", LevelFull, LevelFull},
 	{"chat", "Chitchat", "Chat", LevelFull, LevelFull},
-	{"calendar", "Datebook", "Calendar", LevelOff, LevelFull},
+	{"calendar", "Datebook", "Calendar", LevelView, LevelFull},
 	{"todos", "Odds & Ends", "Lists", LevelView, LevelFull},
 	{"chores", "Upkeep", "Chores", LevelView, LevelFull}, // younger children see and tick off their own chores
 	{"meals", "Pantry", "Meals", LevelOff, LevelFull},

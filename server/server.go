@@ -32,6 +32,8 @@ const (
 type Server struct {
 	typing typingNow
 	lists  *lists
+	cal    *calendar
+	dav    davLogins
 	cfg    Config
 	store  *Store
 	static fs.FS
@@ -54,6 +56,7 @@ func NewServer(cfg Config, store *Store, static fs.FS) *Server {
 		s.vault = openVault(cfg.VaultDir)
 		s.chores = newChores(s.vault)
 		s.lists = newLists(s.vault)
+		s.cal = newCalendar(s.vault, cfg.DataDir)
 	}
 	s.voice = openVoice(env("VOICE_DIR", "/voice"), filepath.Join(filepath.Dir(store.path), "tmp"))
 	if s.chat = openChatNextTo(store.path); s.chat != nil {
@@ -155,6 +158,13 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/members/{id}/stars", s.choreAuth(s.handleStars))
 	mux.HandleFunc("GET /api/rewards", s.choreAuth(s.handleRewards))
 	mux.HandleFunc("GET /api/lists", s.choreAuth(s.handleLists))
+	mux.HandleFunc("GET /api/events", s.choreAuth(s.handleEvents))
+	mux.HandleFunc("POST /api/events", s.choreAuth(s.handleSaveEvent))
+	mux.HandleFunc("GET /api/events/{id}", s.choreAuth(s.handleEvent))
+	mux.HandleFunc("PATCH /api/events/{id}", s.choreAuth(s.handleSaveEvent))
+	mux.HandleFunc("POST /api/events/{id}", s.choreAuth(s.handleSaveEvent))
+	mux.HandleFunc("DELETE /api/events/{id}", s.choreAuth(s.handleDeleteEvent))
+	mux.HandleFunc("POST /api/events/{id}/delete", s.choreAuth(s.handleDeleteEvent))
 	mux.HandleFunc("POST /api/lists", s.choreAuth(s.handleCreateList))
 	mux.HandleFunc("DELETE /api/lists/{id}", s.choreAuth(s.handleArchiveList))
 	mux.HandleFunc("POST /api/lists/{id}/delete", s.choreAuth(s.handleArchiveList))
@@ -226,7 +236,14 @@ func (s *Server) Routes() http.Handler {
 
 	mux.Handle("GET /", http.FileServerFS(s.static))
 
-	return securityHeaders(mux)
+	// CalDAV (PROPFIND, REPORT…): phones and computers sync the family calendar.
+	return securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, davPrefix+"/") || r.URL.Path == davPrefix || r.URL.Path == "/.well-known/caldav" {
+			s.handleDAV(w, r)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
 }
 
 func securityHeaders(next http.Handler) http.Handler {

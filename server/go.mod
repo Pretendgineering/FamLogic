@@ -3,6 +3,9 @@ module github.com/pretendgineering/famlogic/server
 go 1.26.0
 
 require (
+	github.com/emersion/go-ical v0.0.0-20261112170022-46c5b53a1723
+	github.com/emersion/go-webdav v0.8.0
+	github.com/teambition/rrule-go v1.8.2
 	golang.org/x/image v0.48.0
 	modernc.org/sqlite v1.63.0
 )

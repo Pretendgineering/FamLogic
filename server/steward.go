@@ -205,6 +205,42 @@ var stewardTools = []stewardTool{
 			id := argStr(a, "chore_id")
 			return s.callAs(me, s.handleChoreDone, "POST", "/api/chores/"+url.PathEscape(id)+"/done", map[string]string{"id": id}, body)
 		}},
+	{"list_events", "The family calendar for the next days (repeats expanded): id, title, start and end (unix ms), who, where.", obj(map[string]any{
+		"days": map[string]any{"type": "integer", "description": "How many days ahead (default 7, at most 60)"},
+	}),
+		func(s *Server, me *Member, a map[string]any) any {
+			d := 7
+			if n, ok := a["days"].(float64); ok && n > 0 {
+				d = min(int(n), 60)
+			}
+			now := time.Now()
+			from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+			return s.callAs(me, s.handleEvents, "GET", fmt.Sprintf("/api/events?from=%d&to=%d", from.UnixMilli(), from.AddDate(0, 0, d).UnixMilli()), nil, nil)
+		}},
+	{"add_event", "Add an event to the family calendar.", obj(map[string]any{
+		"title": str("Short, e.g. Dentist (Sam)"),
+		"start": str("YYYY-MM-DDTHH:MM (local time), or YYYY-MM-DD for all day"),
+		"end":   str("Optional, same format"),
+		"where": str("Optional"),
+		"who":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Names or ids"},
+		"every": str("Optional: day, weekdays, week, 2 weeks, month, year"),
+	}, "title", "start"),
+		func(s *Server, me *Member, a map[string]any) any {
+			body := map[string]any{"title": argStr(a, "title"), "start": argStr(a, "start"), "end": argStr(a, "end"), "where": argStr(a, "where")}
+			if e := argStr(a, "every"); e != "" {
+				body["every"] = e
+			}
+			who := []string{}
+			if list, ok := a["who"].([]any); ok {
+				for _, w := range list {
+					if ws, ok := w.(string); ok {
+						who = append(who, s.personID(ws))
+					}
+				}
+			}
+			body["who"] = who
+			return s.callAs(me, s.handleSaveEvent, "POST", "/api/events", nil, body)
+		}},
 	{"list_lists", "Shared lists (shopping, packing) and to-dos, with their items (id, text, done).", obj(map[string]any{}),
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handleLists, "GET", "/api/lists", nil, nil)
