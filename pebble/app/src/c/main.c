@@ -635,11 +635,11 @@ static void request_action(ActionMenu *menu, const ActionMenuItem *item, void *c
   else send_cmd(C_REQUEST, s_target_id, kind, NULL, 0);
 }
 
-// The nudges, as words (the watch's fonts don't have every emoji). The last two are for grown-ups only.
-static const char *NUDGE_KINDS[] = {"thumbs", "heart", "wave", "smile", "comehome", "cowboy", "alien", "eggplant", "peach"};
-static const char *NUDGE_WORDS[] = {"Thumbs up", "Heart", "Wave", "Smile", "Come home", "Cowboy", "Alien", "Eggplant", "Peach"};
-#define NUDGES_FOR_ALL 7
-#define NUDGES_ALL 9
+// The nudges, as words (the watch's fonts don't have every emoji). The last three are for grown-ups only.
+static const char *NUDGE_KINDS[] = {"thumbs", "heart", "wave", "smile", "hug", "comehome", "car", "cowboy", "alien", "rainbow", "dino", "coffee", "eggplant", "peach"};
+static const char *NUDGE_WORDS[] = {"Thumbs up", "Heart", "Wave", "Smile", "Hug", "Come home", "Car", "Cowboy", "Alien", "Rainbow", "Dinosaur", "Coffee", "Eggplant", "Peach"};
+#define NUDGES_FOR_ALL 11
+#define NUDGES_ALL 14
 
 static void add_nudges(ActionMenuLevel *level, bool adults, int max) {
   int n = adults ? NUDGES_ALL : NUDGES_FOR_ALL;
@@ -711,7 +711,7 @@ static void draw_nudge_icon(GContext *g, GRect r, const char *kind, GColor ink) 
     GPath *path = gpath_create(&info);
     gpath_draw_filled(g, path);
     gpath_destroy(path);
-  } else if (strcmp(kind, "smile") == 0 || strcmp(kind, "alien") == 0 || strcmp(kind, "cowboy") == 0) {
+  } else if (strcmp(kind, "smile") == 0 || strcmp(kind, "alien") == 0 || strcmp(kind, "cowboy") == 0 || strcmp(kind, "hug") == 0) {
     GColor face = strcmp(kind, "alien") == 0 ? PBL_IF_COLOR_ELSE(GColorGreen, ink) : PBL_IF_COLOR_ELSE(GColorChromeYellow, ink);
     graphics_context_set_fill_color(g, face);
     graphics_fill_circle(g, GPoint(c.x, c.y + 2), rad - 3);
@@ -719,6 +719,11 @@ static void draw_nudge_icon(GContext *g, GRect r, const char *kind, GColor ink) 
     graphics_fill_circle(g, GPoint(c.x - 4, c.y), 2);
     graphics_fill_circle(g, GPoint(c.x + 4, c.y), 2);
     graphics_fill_rect(g, GRect(c.x - 4, c.y + 6, 9, 2), 1, GCornersAll);
+    if (strcmp(kind, "hug") == 0) { // two arms wrapped round the front
+      graphics_context_set_fill_color(g, face);
+      graphics_fill_rect(g, GRect(c.x - 12, c.y + 6, 9, 4), 2, GCornersAll);
+      graphics_fill_rect(g, GRect(c.x + 4, c.y + 6, 9, 4), 2, GCornersAll);
+    }
     if (strcmp(kind, "cowboy") == 0) { // a hat
       graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorWindsorTan, ink));
       graphics_fill_rect(g, GRect(c.x - 12, c.y - 7, 25, 3), 1, GCornersAll);
@@ -746,6 +751,43 @@ static void draw_nudge_icon(GContext *g, GRect r, const char *kind, GColor ink) 
     graphics_fill_rect(g, GRect(c.x - 8, c.y, 17, 11), 0, GCornerNone);
     graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorWindsorTan, bg()));
     graphics_fill_rect(g, GRect(c.x - 2, c.y + 4, 5, 7), 0, GCornerNone);
+  } else if (strcmp(kind, "car") == 0) {
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorRed, ink));
+    graphics_fill_rect(g, GRect(c.x - 12, c.y - 1, 25, 8), 3, GCornersAll);   // body
+    graphics_fill_rect(g, GRect(c.x - 6, c.y - 7, 13, 7), 3, GCornersTop);    // cabin
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorBlack, ink));
+    graphics_fill_circle(g, GPoint(c.x - 6, c.y + 8), 3);                    // wheels
+    graphics_fill_circle(g, GPoint(c.x + 7, c.y + 8), 3);
+  } else if (strcmp(kind, "rainbow") == 0) {
+    graphics_context_set_stroke_width(g, 3);
+#if defined(PBL_COLOR)
+    GColor bands[] = {GColorRed, GColorChromeYellow, GColorIslamicGreen, GColorBlueMoon};
+#endif
+    for (int i = 0; i < 4; i++) {
+      int rr = 13 - i * 3;
+      graphics_context_set_stroke_color(g, PBL_IF_COLOR_ELSE(bands[i], ink));
+      graphics_draw_arc(g, GRect(c.x - rr, c.y + 6 - rr, 2 * rr, 2 * rr), GOvalScaleModeFitCircle, DEG_TO_TRIGANGLE(-90), DEG_TO_TRIGANGLE(90));
+    }
+  } else if (strcmp(kind, "dino") == 0) {
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorIslamicGreen, ink));
+    graphics_fill_circle(g, GPoint(c.x - 2, c.y + 3), 6);                    // body
+    graphics_fill_rect(g, GRect(c.x + 1, c.y - 9, 5, 10), 2, GCornersAll);   // neck
+    graphics_fill_rect(g, GRect(c.x + 1, c.y - 12, 10, 6), 2, GCornersAll);  // head
+    GPoint tail[] = {{c.x - 7, c.y}, {c.x - 7, c.y + 7}, {c.x - 14, c.y + 8}};
+    GPathInfo info = {3, tail};
+    GPath *path = gpath_create(&info);
+    gpath_draw_filled(g, path);
+    gpath_destroy(path);
+    graphics_fill_rect(g, GRect(c.x - 5, c.y + 7, 3, 5), 0, GCornerNone);    // legs
+    graphics_fill_rect(g, GRect(c.x + 1, c.y + 7, 3, 5), 0, GCornerNone);
+  } else if (strcmp(kind, "coffee") == 0) {
+    graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorWindsorTan, ink));
+    graphics_fill_rect(g, GRect(c.x - 9, c.y - 3, 14, 13), 3, GCornersBottom); // cup
+    graphics_context_set_stroke_color(g, PBL_IF_COLOR_ELSE(GColorWindsorTan, ink));
+    graphics_draw_circle(g, GPoint(c.x + 7, c.y + 2), 3);                       // handle
+    graphics_context_set_stroke_color(g, ink);
+    graphics_draw_line(g, GPoint(c.x - 5, c.y - 11), GPoint(c.x - 5, c.y - 6)); // steam
+    graphics_draw_line(g, GPoint(c.x, c.y - 12), GPoint(c.x, c.y - 6));
   } else if (strcmp(kind, "eggplant") == 0 || strcmp(kind, "peach") == 0) {
     bool egg = kind[0] == 'e';
     graphics_context_set_fill_color(g, egg ? PBL_IF_COLOR_ELSE(GColorPurple, ink) : PBL_IF_COLOR_ELSE(GColorRajah, ink));
