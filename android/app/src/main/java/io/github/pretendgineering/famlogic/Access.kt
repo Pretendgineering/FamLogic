@@ -105,7 +105,7 @@ object Access {
     private val NAMES = mapOf(
         "map" to ("Thereabouts" to "Map"), "thereabouts" to ("Thereabouts" to "Map"),
         "chat" to ("Chitchat" to "Chat"), "calendar" to ("Datebook" to "Calendar"),
-        "todos" to ("Odds & Ends" to "Lists"), "chores" to ("Upkeep" to "Chores"),
+        "todos" to ("Docket" to "Lists"), "chores" to ("Upkeep" to "Chores"),
         "meals" to ("Pantry" to "Meals"), "display" to ("Corkboard" to "Family display"),
         "agents" to ("Steward" to "AI"), "sos" to ("SOS" to "SOS"), "checkin" to ("Check in" to "Check in"),
         "steward" to ("Steward" to "AI"), "routines" to ("Rhythms" to "Routines"), "nudges" to ("Nudges" to "Nudges"),

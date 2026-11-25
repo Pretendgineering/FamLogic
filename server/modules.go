@@ -25,7 +25,7 @@ var allModules = []ModuleInfo{
 	{"thereabouts", "Thereabouts", "Map", "Family map, SOS, check-ins, fences and trips.", true, true},
 	{"chat", "Chitchat", "Chat", "Family, group and one-to-one chat.", true, true},
 	{"calendar", "Datebook", "Calendar", "Shared calendar, synced with CalDAV.", true, true},
-	{"todos", "Odds & Ends", "Lists", "To-dos and shared lists.", true, true},
+	{"todos", "Docket", "Lists", "What's on the docket: one-off jobs, errands and projects, and shared lists.", true, true},
 	{"chores", "Upkeep", "Chores", "Chores, with optional stars.", true, true},
 	{"routines", "Rhythms", "Routines", "Checklists that change with the day.", true, false},
 	{"meals", "Pantry", "Meals", "Meal plans and recipes.", true, false},

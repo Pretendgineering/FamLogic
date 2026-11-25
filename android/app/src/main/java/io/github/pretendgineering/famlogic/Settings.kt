@@ -854,7 +854,7 @@ private fun LookCards(prefs: Prefs) {
     SettingsCard("Labels") {
         SwitchRow(
             title = "Plain Labels",
-            detail = "Map, Chat, Calendar and Lists instead of Thereabouts, Chitchat, Datebook and Odds & Ends. This device only.",
+            detail = "Map, Chat, Calendar and Lists instead of Thereabouts, Chitchat, Datebook and Docket. This device only.",
             checked = Access.plainNames,
             onChange = { Access.setPlainNames(namesContext, it) },
         )

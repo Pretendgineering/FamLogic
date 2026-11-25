@@ -1204,7 +1204,7 @@ private fun SimpleTile(
         if (Access.pictures && picture != null) picture(s + 8.dp)
         else Icon(icon, contentDescription = null, tint = Accent2.copy(alpha = .75f), modifier = Modifier.size(s))
         Spacer(Modifier.height(10.dp))
-        // Long names ("Odds & Ends") wrap onto a second line and shrink to fit a small tile.
+        // Long names ("Who's Who") wrap onto a second line and shrink to fit a small tile.
         val style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge
         androidx.compose.foundation.text.BasicText(
             title,

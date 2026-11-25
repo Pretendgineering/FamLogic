@@ -255,6 +255,21 @@ var stewardTools = []stewardTool{
 			}
 			return s.callAs(me, s.handleAddItem, "POST", "/api/lists/"+url.PathEscape(id)+"/items", map[string]string{"id": id}, body)
 		}},
+	{"make_list", "Make a new list on the Docket: a shared list (Shopping, Packing) or someone's to-dos (one-off jobs, errands, projects).", obj(map[string]any{
+		"title": str("Short, e.g. Shopping, or the person's name for their to-dos"),
+		"kind":  str("list (shared) or todos"),
+		"who":   str("For to-dos: name or id of whose they are (empty: the family's)"),
+	}, "title"),
+		func(s *Server, me *Member, a map[string]any) any {
+			body := map[string]any{"title": argStr(a, "title"), "kind": argStr(a, "kind")}
+			if body["kind"] == "" {
+				body["kind"] = "list"
+			}
+			if w := argStr(a, "who"); w != "" {
+				body["who"] = []string{s.personID(w)}
+			}
+			return s.callAs(me, s.handleCreateList, "POST", "/api/lists", nil, body)
+		}},
 	{"tick_list_item", "Tick an item off a list (or untick it).", obj(map[string]any{
 		"list_id": str("The list's id"),
 		"item_id": str("The item's id"),
@@ -390,6 +405,7 @@ Rules:
 - Only give stars when a parent asks. Never retire chores or change who they're for unless a parent asks.
 - If you're unsure who someone means, ask instead of guessing.
 - If a tool returns an error, say plainly what went wrong.
+- When someone rambles off everything they need to do ("today I need to..."), sort each thing where it belongs, without asking about each one: a regular household job that comes round again (dishes, bins, sweeping) is a chore (add_chore, with how often); anything at a set day or time is a calendar event (add_event); a one-off job, errand or project (replace the car's wiper blades, return a parcel) goes on the Docket, on that person's to-dos (find it with list_lists; make_list if there isn't one); things to buy go on the Shopping list. Then reply with a short summary of where each thing went.
 - Recipes: when someone reads or talks through a recipe, tidy it into a clean one and save it with add_recipe, then say its name and how many ingredients and steps it has.
 - Don't assume children go to school; families homeschool, unschool or keep their own hours.
 - Use the specific tools when one fits (chores, events, lists, meals, recipes). For anything else (pets, cars, the house, profiles, notes on anything), read the vault guide with read_vault_guide, then read and write notes with list_notes, read_note and write_note, keeping their formats exactly. Re-read a note before changing it, keep what you don't mean to change, and never delete what someone else wrote unless asked.

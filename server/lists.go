@@ -1,6 +1,6 @@
 package main
 
-// Odds & Ends: shared lists (shopping, packing) and to-dos, as Markdown notes in
+// Docket: shared lists (shopping, packing) and to-dos, as Markdown notes in
 // the vault (Lists/ and To-dos/), so the app, the console, Obsidian and AI agents
 // all see the same thing. A note is front matter (type: list or todos, famlogic_id,
 // who) and task lines, optionally under "## Section" headings:
@@ -442,7 +442,7 @@ func (s *Server) listsSetup(w http.ResponseWriter, me *Member) bool {
 		return false
 	}
 	if s.listsLevel(me) == LevelOff {
-		writeError(w, http.StatusForbidden, "Odds & Ends isn't switched on for you")
+		writeError(w, http.StatusForbidden, "Docket isn't switched on for you")
 		return false
 	}
 	return true

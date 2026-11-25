@@ -46,7 +46,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - Small things: rotating keeps what you typed; a camera icon that takes a new photo or picks one; senders' pictures in chat; a clearer selected tab.
 
 ### ✅ Phase 3c: Access & Control, grandparents and a friendlier app (0.20.0)
-- **Module names** with a vibe: Thereabouts, **Chitchat**, **Datebook**, **Odds & Ends**, **Upkeep**, **Rhythms**, **Pantry**, **Corkboard**, **Front Room**, **Steward** (nudges stay nudges). **Plain Labels** switch (Customize, and the console's Look) for Map, Chat, Calendar…
+- **Module names** with a vibe: Thereabouts, **Chitchat**, **Datebook**, **Docket**, **Upkeep**, **Rhythms**, **Pantry**, **Corkboard**, **Front Room**, **Steward** (nudges stay nudges). **Plain Labels** switch (Customize, and the console's Look) for Map, Chat, Calendar…
 - **Access & Control** page in the console: everyone in a list that opens into their switches. Per child: a preset, then each module **Off / View only / Can add / Full** and single features; bigger buttons and picture icons; their home screen (drag to reorder, sizes); **open their settings for 10 minutes** from afar. The parent PIN lives here.
 - **Grandparents:** a role with the whole app but no parents' controls or children's chats; bigger buttons and picture icons as options.
 - **Children's settings:** none for younger children, only Customize/Account/About for older ones; the secret way in is holding the family name for 5 seconds, then the parent PIN.
@@ -90,7 +90,7 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **The second colour is for small accents** (tile icons, the family name, selected chips and switches); the main colour is for actions.
 
 ### Design rule: tiles grow into mini versions
-A module's home tile is a **shortcut when small** (an icon, a name, a count) and a **live mini version when 2×2 or larger**: Upkeep shows the chores due, ticked right on the tile; Odds & Ends will show its lists and Datebook the next few events the same way. Opening the tile still goes to the full screen. One tile wide or tall, a tile becomes a strip of its newest items (across or down) with as many as fit.
+A module's home tile is a **shortcut when small** (an icon, a name, a count) and a **live mini version when 2×2 or larger**: Upkeep shows the chores due, ticked right on the tile; Docket will show its lists and Datebook the next few events the same way. Opening the tile still goes to the full screen. One tile wide or tall, a tile becomes a strip of its newest items (across or down) with as many as fit.
 
 ### ✅ Back to cards (0.26.0)
 - After trying the flat, edge-to-edge look, the app and console go back to **rounded cards with a little depth** (Material You): settings in cards, home tiles as spaced cards; every arranging behaviour stays (tap to select, edge bars, gliding tiles, the drawer). The map's pull-up sheet stays.
@@ -135,7 +135,7 @@ A walkthrough in the web console that sets everything up properly the first time
 
 ### ⏳ 6. Modules, one at a time
 In this order (each is finished before the next starts):
-1. ✅ **Odds & Ends** (lists and to-dos), 0.34.0: shared lists and someone's to-dos as Markdown, sections, `@who`, tick from the tile, Steward can add and tick.
+1. ✅ **Docket** (called Odds & Ends until 0.41.0; to-dos and lists), 0.34.0: shared lists and someone's to-dos as Markdown, sections, `@who`, tick from the tile, Steward can add and tick.
 2. ✅ **Upkeep** (chores), 0.27.0. Next for it: chores on the Pebble, a "spend stars" list of rewards, and talking to Steward from the app ("I finished the dishwasher").
 3. ✅ **Rhythms** (routines), 0.36.0: checklists that come round at a time on chosen days, current routine per person, ticks clear each time.
 4. ✅ **Datebook** (calendar), 0.35.0: events as Markdown, repeats, two-way CalDAV with phones (DAVx5, iPhone, Thunderbird), agenda tile, Steward can read and add. Outside calendars by link since 0.40.0.
@@ -153,6 +153,10 @@ In this order (each is finished before the next starts):
 - **Datebook:** outside calendars by link (school terms, sports, holidays). Parents add them; everyone sees them, read-only, in the app, the console and on phones through calendar sync.
 - **Setup:** a few questions about the family (pets, a car, a home, routines, money, health, AI help) suggest modules; the same questions are under Settings → Modules → Help me choose.
 - **Who's Who (profiles):** birthday, allergies, medicines, sleep, likes, dislikes, sizes, doctor, emergency contacts and notes for each person, in their People note. Everyone sees them; parents change anyone's, older children and grandparents their own. Print or share one as a page for a sitter, with the parents' numbers.
+
+### ✅ 0.41.0: Docket, and Steward sorts your day
+- **Odds & Ends is now Docket:** what's on the docket. One-off jobs, errands and projects (not the regular chores, which are Upkeep), and shared lists like Shopping.
+- **Ramble it off:** tell Steward everything you need to do today and it sorts each thing: regular jobs become chores, anything at a set time goes on the calendar, one-off jobs go on your Docket, and things to buy go on Shopping. Everything can still be done by hand; Steward is optional.
 
 ### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.

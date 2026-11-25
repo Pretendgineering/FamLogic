@@ -1237,7 +1237,7 @@ $("#pin-clear").addEventListener("click", async () => {
 
 // ---- Access & Control: what each person can use (parents and admins)
 const TILE_NAMES = { map: ["Thereabouts", "Map"], chat: ["Chitchat", "Chat"], sos: ["SOS", "SOS"], checkin: ["Check in", "Check in"],
-  calendar: ["Datebook", "Calendar"], todos: ["Odds & Ends", "Lists"], chores: ["Upkeep", "Chores"], meals: ["Pantry", "Meals"],
+  calendar: ["Datebook", "Calendar"], todos: ["Docket", "Lists"], chores: ["Upkeep", "Chores"], meals: ["Pantry", "Meals"],
   routines: ["Rhythms", "Routines"], nudges: ["Nudges", "Nudges"], ride: ["Where's My Ride", "Where's my ride"], steward: ["Steward", "AI"] };
 const tileName = (t) => t.startsWith("convo.") ? "Chat shortcut" : (TILE_NAMES[t] || [t, t])[plainNames ? 1 : 0];
 const LEVEL_NAMES = { off: "Off", view: "View only", add: "Can add", full: "Full" };
@@ -1501,7 +1501,7 @@ const MODULE_QUESTIONS = [
   ["See where everyone is, and SOS?", ["thereabouts"]],
   ["Family chat?", ["chat"]],
   ["A shared calendar (appointments, activities, co-op or school)?", ["calendar"]],
-  ["Shopping lists and to-dos?", ["todos"]],
+  ["One-off jobs, errands and projects to keep track of, and shopping lists?", ["todos"]],
   ["Chores, maybe with stars for the children?", ["chores"]],
   ["Daily routines (mornings, bedtime, a homeschool day)?", ["routines"]],
   ["Plan meals and keep recipes?", ["meals"]],
@@ -2219,7 +2219,7 @@ async function stewardSettings() {
   return el("div", {}, el("p", { class: "muted small" }, "Steward answers as itself and acts as whoever is talking: everything it does goes through the same permissions as the app."), form);
 }
 
-// Odds & Ends: shared lists and to-dos (Markdown notes in the vault's Lists/ and To-dos/).
+// Docket: shared lists and to-dos (Markdown notes in the vault's Lists/ and To-dos/).
 let listsDrawn = "";
 let listOpen = "";
 async function renderLists(box, force = false) {
@@ -2508,7 +2508,7 @@ function stewardDraw(msgs, undo) {
     });
     list.append(el("li", { class: "hint changed" }, el("span", { class: "muted small" }, "Changed: " + stewardUndo.changed.join(", ")), btn));
   }
-  if (!msgs.length) list.append(el("li", { class: "muted hint" }, "Tell Steward what to add, change or remove here: \"add milk and eggs to Shopping\", \"move the dentist to Friday at 3\", \"Biscuit had his shots today\"."));
+  if (!msgs.length) list.append(el("li", { class: "muted hint" }, "Tell Steward what to add, change or remove here (\"add milk and eggs to Shopping\", \"move the dentist to Friday at 3\"), or ramble off everything you need to do today and it sorts it into chores, the calendar and the Docket."));
   list.scrollTop = list.scrollHeight;
 }
 $("#steward-fab")?.addEventListener("click", async () => {

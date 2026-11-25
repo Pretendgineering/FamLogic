@@ -141,7 +141,7 @@ var stewardPages = map[string]string{
 	"home":        "the Home screen",
 	"thereabouts": "Thereabouts (the map: who's where, fences)",
 	"chores":      "Upkeep (chores and stars)",
-	"todos":       "Odds & Ends (shared lists and to-dos)",
+	"todos":       "Docket (to-dos: one-off jobs, errands and projects; and shared lists like Shopping)",
 	"calendar":    "Datebook (the family calendar)",
 	"routines":    "Rhythms (routines)",
 	"meals":       "Pantry (this week's meals and the recipes)",

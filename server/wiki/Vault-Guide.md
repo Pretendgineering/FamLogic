@@ -302,7 +302,7 @@ Rules for agents using the API:
 ## What FamLogic does with the vault today
 
 FamLogic keeps the folders, the home note, this guide and the **People** notes;
-**Upkeep** (chores) lives in `Chores/`, **Odds & Ends** (lists and to-dos) in `Lists/`
+**Upkeep** (chores) lives in `Chores/`, **Docket** (lists and to-dos) in `Lists/`
 and `To-dos/`, and **Datebook** (the calendar) in `Calendar/`, as above. Calendar notes
 may also have `uid` (FamLogic's, for phone sync: don't change it) and `rrule` (a standard
 repeat rule, e.g. `FREQ=WEEKLY;BYDAY=TU`) instead of `every`. The other types are the agreed

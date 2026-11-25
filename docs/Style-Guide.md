@@ -18,7 +18,7 @@ FamLogic.
 - **Don't assume one kind of family.** No school, two parents or Monday-to-Friday by default.
   Examples rotate: "Co-op", "Grandma's", "Practice", "Work".
 - **Names:** every module has its own name and a plain name (Thereabouts / Map, Chitchat / Chat,
-  Datebook / Calendar, Odds & Ends / Lists, Upkeep / Chores, Rhythms / Routines, Pantry / Meals,
+  Datebook / Calendar, Docket / Lists, Upkeep / Chores, Rhythms / Routines, Pantry / Meals,
   Steward / AI). Show whichever the person chose ("Plain Labels"). Use the same pair everywhere.
 - **Sentence case** for buttons and headings ("Add a chore"), except section labels in the
   console, which are small caps-style uppercase (`DUE NOW`).

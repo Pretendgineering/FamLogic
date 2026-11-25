@@ -185,7 +185,7 @@ fun StewardChat(prefs: Prefs, page: String, modifier: Modifier = Modifier) {
             if (msgs.isEmpty() && !thinking) item {
                 Text(
                     if (Access.isChild) "Tell me when you've done a job, or ask what's next."
-                    else "Tell me what to add, change or remove: \"add milk and eggs to Shopping\", \"move the dentist to Friday at 3\", \"save this recipe\", \"Biscuit had his shots today\".",
+                    else "Tell me what to add, change or remove (\"add milk and eggs to Shopping\", \"move the dentist to Friday at 3\"), or ramble off everything you need to do today and I'll sort it into chores, the calendar and the Docket.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp),
                 )
             }

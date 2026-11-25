@@ -66,7 +66,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Odds & Ends: shared lists (shopping, packing) and to-dos. Each is a Markdown note
+ * Docket: shared lists (shopping, packing) and to-dos. Each is a Markdown note
  * in the vault (Lists/, To-dos/), so the console, Obsidian and an AI agent all see
  * the same items.
  */

@@ -50,7 +50,7 @@ var keyScopes = []struct{ ID, Text string }{
 	{"people", "See who's in the family (names, roles, stars), not where they are"},
 	{"chores", "See, add, change and tick off chores (Upkeep), and give or spend stars"},
 	{"calendar", "See and change the family calendar (Datebook)"},
-	{"lists", "See, add to and tick off lists and to-dos (Odds & Ends)"},
+	{"lists", "See, add to and tick off lists and to-dos (Docket)"},
 	{"feed", "Read the family feed (who arrived where, who did which chore)"},
 	{"location", "See where everyone is (the map)"},
 }
