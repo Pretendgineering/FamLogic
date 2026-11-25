@@ -26,7 +26,7 @@ jobs:
           cache: gradle # reuse downloaded dependencies; fewer trips to Maven Central
       # The Android SDK comes preinstalled on GitHub's Ubuntu runners (ANDROID_HOME).
 
-      # Sign with the project's FamLogic release key (see server/wiki/Releasing.md). Pull requests and
+      # Sign with the project's FamLogic release key (see docs/Releasing.md). Pull requests and
       # forks don't get the secrets; they still build, signed with a throwaway debug key.
       - name: Set up signing key
         id: signing

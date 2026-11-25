@@ -169,7 +169,7 @@ Every one is a module the family can switch off, like the rest, and keeps its da
 ### ⏳ Later and parked
 - **Voice, beyond chat:** the Pebble (hold to talk), the TV and Control Deck, read-aloud with quiet hours.
 - **Devices page** in the console (several devices per person, last seen, Revoke); pairing displays with a code.
-- **Pebble App Store listing** (draft in [Pebble-App-Store](Pebble-App-Store.md)), and **F-Droid / IzzyOnDroid** for the app; a shareable invite message with a download link once the app is in a store.
+- **Pebble App Store listing**, and **F-Droid / IzzyOnDroid** for the app; a shareable invite message with a download link once the app is in a store.
 - **Profile pictures** (emoji icons stay as the fallback).
 - **Home Assistant** integration (presence, chores done, a dashboard).
 

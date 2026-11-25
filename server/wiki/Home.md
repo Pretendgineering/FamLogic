@@ -8,7 +8,6 @@ A self-hosted family hub. These pages come with FamLogic and are replaced when i
 - [Vault guide](Vault-Guide.md): how notes in this vault are written (for people and AI agents)
 - [Thereabouts](Thereabouts.md): location sharing, SOS, fences, trips
 - [Chitchat](Chitchat.md): chat
-- [Pebble](Pebble.md) and [Pebble App Store](Pebble-App-Store.md): the watch
-- [Releasing](Releasing.md): how releases are built
+- [Pebble](Pebble.md): the watch
 
 Source: https://github.com/Pretendgineering/FamLogic
