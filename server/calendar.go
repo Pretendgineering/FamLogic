@@ -70,6 +70,8 @@ type Occurrence struct {
 	Where     string   `json:"where,omitempty"`
 	Notes     string   `json:"notes,omitempty"`
 	Recurring bool     `json:"recurring,omitempty"`
+	Calendar  string   `json:"calendar,omitempty"` // an outside calendar's name (read-only); "" for the family's
+	Color     string   `json:"color,omitempty"`
 }
 
 type calendar struct {
@@ -368,46 +370,53 @@ func (c *calendar) archive(id string) error {
 func (c *calendar) occurrences(members []Member, from, to time.Time) []Occurrence {
 	out := []Occurrence{}
 	for _, ev := range c.all(members) {
-		start, allDay, err := parseWhen(ev.Start)
-		if err != nil {
-			continue
-		}
-		dur := time.Hour
-		if allDay {
-			dur = 24 * time.Hour
-		}
-		if ev.End != "" {
-			if end, _, err := parseWhen(ev.End); err == nil && end.After(start) {
-				dur = end.Sub(start)
-				if allDay {
-					dur += 24 * time.Hour // an all-day end date is inclusive in notes
-				}
-			}
-		}
-		add := func(s time.Time, rec bool) {
-			out = append(out, Occurrence{ID: ev.ID, Title: ev.Title, Start: s.UnixMilli(), End: s.Add(dur).UnixMilli(), AllDay: allDay,
-				Who: ev.Who, Where: ev.Where, Notes: ev.Notes, Recurring: rec})
-		}
-		if ev.RRule == "" {
-			if start.Before(to) && start.Add(dur).After(from) {
-				add(start, false)
-			}
-			continue
-		}
-		opt, err := rrule.StrToROption(ev.RRule)
-		if err != nil {
-			continue
-		}
-		opt.Dtstart = start
-		r, err := rrule.NewRRule(*opt)
-		if err != nil {
-			continue
-		}
-		for _, s := range r.Between(from.Add(-dur), to, true) {
-			add(s, true)
-		}
+		out = append(out, expandEvent(ev, from, to)...)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Start < out[j].Start })
+	return out
+}
+
+// expandEvent gives an event's showings between from and to (repeats expanded).
+func expandEvent(ev CalEvent, from, to time.Time) []Occurrence {
+	var out []Occurrence
+	start, allDay, err := parseWhen(ev.Start)
+	if err != nil {
+		return nil
+	}
+	dur := time.Hour
+	if allDay {
+		dur = 24 * time.Hour
+	}
+	if ev.End != "" {
+		if end, _, err := parseWhen(ev.End); err == nil && end.After(start) {
+			dur = end.Sub(start)
+			if allDay {
+				dur += 24 * time.Hour // an all-day end date is inclusive in notes
+			}
+		}
+	}
+	add := func(s time.Time, rec bool) {
+		out = append(out, Occurrence{ID: ev.ID, Title: ev.Title, Start: s.UnixMilli(), End: s.Add(dur).UnixMilli(), AllDay: allDay,
+			Who: ev.Who, Where: ev.Where, Notes: ev.Notes, Recurring: rec})
+	}
+	if ev.RRule == "" {
+		if start.Before(to) && start.Add(dur).After(from) {
+			add(start, false)
+		}
+		return out
+	}
+	opt, err := rrule.StrToROption(ev.RRule)
+	if err != nil {
+		return nil
+	}
+	opt.Dtstart = start
+	r, err := rrule.NewRRule(*opt)
+	if err != nil {
+		return nil
+	}
+	for _, s := range r.Between(from.Add(-dur), to, true) {
+		add(s, true)
+	}
 	return out
 }
 
@@ -515,17 +524,10 @@ func etagOf(b []byte) string {
 }
 
 // fromICS saves an event a calendar app sent (new or changed).
-func (c *calendar) fromICS(cal *ical.Calendar, members []Member) (CalEvent, error) {
-	var ve *ical.Component
-	for _, child := range cal.Children {
-		if child.Name == ical.CompEvent && child.Props.Get(ical.PropRecurrenceID) == nil {
-			ve = child
-			break
-		}
-	}
-	if ve == nil {
-		return CalEvent{}, fmt.Errorf("no event in it")
-	}
+// readVEvent reads one VEVENT into an event (UID, title, start, end, where,
+// notes and repeat), in the family's local time. Used for calendar apps and
+// outside calendars alike.
+func readVEvent(ve *ical.Component) (CalEvent, error) {
 	ev := &ical.Event{Component: ve}
 	uid, _ := ve.Props.Text(ical.PropUID)
 	if uid == "" {
@@ -540,14 +542,14 @@ func (c *calendar) fromICS(cal *ical.Calendar, members []Member) (CalEvent, erro
 		return CalEvent{}, fmt.Errorf("the event has no start")
 	}
 	allDay := ve.Props.Get(ical.PropDateTimeStart).ValueType() == ical.ValueDate
-	var s, e string
+	var st, e string
 	if allDay {
-		s = start.Format(dayLayout)
+		st = start.Format(dayLayout)
 		if end, err := ev.DateTimeEnd(time.Local); err == nil && end.After(start.AddDate(0, 0, 1)) {
 			e = end.AddDate(0, 0, -1).Format(dayLayout)
 		}
 	} else {
-		s = start.In(time.Local).Format(timeLayout)
+		st = start.In(time.Local).Format(timeLayout)
 		if end, err := ev.DateTimeEnd(time.Local); err == nil && end.After(start) {
 			e = end.In(time.Local).Format(timeLayout)
 		}
@@ -558,6 +560,26 @@ func (c *calendar) fromICS(cal *ical.Calendar, members []Member) (CalEvent, erro
 	if p := ve.Props.Get(ical.PropRecurrenceRule); p != nil {
 		rr = p.Value
 	}
+	return CalEvent{UID: uid, Title: title, Start: st, End: e, Where: where, Notes: desc, RRule: rr, AllDay: allDay}, nil
+}
+
+func (c *calendar) fromICS(cal *ical.Calendar, members []Member) (CalEvent, error) {
+	var ve *ical.Component
+	for _, child := range cal.Children {
+		if child.Name == ical.CompEvent && child.Props.Get(ical.PropRecurrenceID) == nil {
+			ve = child
+			break
+		}
+	}
+	if ve == nil {
+		return CalEvent{}, fmt.Errorf("no event in it")
+	}
+	got, err := readVEvent(ve)
+	if err != nil {
+		return CalEvent{}, err
+	}
+	uid := got.UID
+	title, s, e, where, desc, rr := got.Title, got.Start, got.End, got.Where, got.Notes, got.RRule
 	in := EventInput{Title: &title, Start: &s, End: &e, Where: &where, Notes: &desc, RRule: &rr}
 	if p := ve.Props.Get(ical.PropCategories); p != nil {
 		if names, err := p.TextList(); err == nil {
@@ -581,7 +603,7 @@ func (c *calendar) fromICS(cal *ical.Calendar, members []Member) (CalEvent, erro
 	if id != "" {
 		return c.save(id, in, members)
 	}
-	got, err := c.save("", in, members)
+	got, err = c.save("", in, members)
 	if err != nil {
 		return got, err
 	}
@@ -637,7 +659,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, me *Member
 	if to.Sub(from) > 400*24*time.Hour {
 		to = from.Add(400 * 24 * time.Hour)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": s.cal.occurrences(s.store.Members(), from, to), "canEdit": s.canEditCalendar(me)})
+	events := append(s.cal.occurrences(s.store.Members(), from, to), s.feedOccurrences(from, to)...)
+	sort.Slice(events, func(i, j int) bool { return events[i].Start < events[j].Start })
+	writeJSON(w, http.StatusOK, map[string]any{"events": events, "canEdit": s.canEditCalendar(me)})
 }
 
 // GET /api/events/{id}: the event itself (not an occurrence).

@@ -30,15 +30,16 @@ const (
 )
 
 type Server struct {
-	typing   typingNow
-	lists    *lists
-	cal      *calendar
-	restart  func() // stops and starts the server again (restoring a backup); nil in tests
-	routines *lists
-	dav      davLogins
-	cfg      Config
-	store    *Store
-	static   fs.FS
+	typing    typingNow
+	lists     *lists
+	cal       *calendar
+	feedCache feedEvents // outside calendars' events, read once per download
+	restart   func()     // stops and starts the server again (restoring a backup); nil in tests
+	routines  *lists
+	dav       davLogins
+	cfg       Config
+	store     *Store
+	static    fs.FS
 
 	loginMu sync.Mutex    // serialises failed logins so guessing is slow
 	limiter *loginLimiter // locks a username after repeated wrong passwords
@@ -163,6 +164,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/rewards", s.choreAuth(s.handleRewards))
 	mux.HandleFunc("GET /api/lists", s.choreAuth(s.handleLists))
 	mux.HandleFunc("GET /api/events", s.choreAuth(s.handleEvents))
+	mux.HandleFunc("GET /api/calendar/feeds", s.choreAuth(s.handleFeeds))
+	mux.HandleFunc("POST /api/calendar/feeds", s.choreAuth(s.handleAddFeed))
+	mux.HandleFunc("DELETE /api/calendar/feeds/{id}", s.choreAuth(s.handleDeleteFeed))
+	mux.HandleFunc("POST /api/calendar/feeds/{id}/refresh", s.choreAuth(s.handleRefreshFeed))
 	mux.HandleFunc("GET /api/routines", s.choreAuth(s.handleRoutines))
 	mux.HandleFunc("POST /api/routines", s.choreAuth(s.handleCreateRoutine))
 	mux.HandleFunc("POST /api/routines/{id}/items/{item}", s.choreAuth(s.handleTickRoutine))

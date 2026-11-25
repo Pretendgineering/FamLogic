@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -60,7 +62,9 @@ import java.util.Date
  * Datebook: the family calendar. Events are Markdown notes in the vault's Calendar/
  * folder, and phones can sync them both ways over CalDAV (DAVx5, iPhone Calendar).
  */
-data class CalOccurrence(val id: String, val title: String, val start: Long, val end: Long, val allDay: Boolean, val who: List<String>, val where: String, val notes: String, val recurring: Boolean)
+data class CalOccurrence(val id: String, val title: String, val start: Long, val end: Long, val allDay: Boolean, val who: List<String>, val where: String, val notes: String, val recurring: Boolean,
+    /** An outside calendar's name (school, holidays...) and colour; "" for the family's own events, which can be changed. */
+    val calendar: String = "", val color: String = "")
 data class CalData(val events: List<CalOccurrence>, val canEdit: Boolean)
 data class CalEventFull(val id: String, val title: String, val start: String, val end: String, val allDay: Boolean, val who: List<String>, val where: String, val notes: String, val rrule: String)
 
@@ -72,7 +76,8 @@ suspend fun Api.events(from: Long, to: Long): CalData {
     return CalData((0 until arr.length()).map { i ->
         arr.getJSONObject(i).let {
             CalOccurrence(it.optString("id"), it.optString("title"), it.optLong("start"), it.optLong("end"), it.optBoolean("allDay"),
-                strings(it.optJSONArray("who")), it.optString("where"), it.optString("notes"), it.optBoolean("recurring"))
+                strings(it.optJSONArray("who")), it.optString("where"), it.optString("notes"), it.optBoolean("recurring"),
+                it.optString("calendar"), it.optString("color"))
         }
     }, o.optBoolean("canEdit"))
 }
@@ -132,18 +137,23 @@ fun CalendarScreen(prefs: Prefs) {
                         style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 10.dp),
                     )
                 }
-                items(evs, key = { "${it.id}-${it.start}" }) { o ->
+                items(evs, key = { "${it.id}-${it.start}-${it.title}" }) { o ->
                     ElevatedCard(
-                        onClick = { if (data.canEdit) scope.launch { runCatching { Api(prefs.serverUrl, prefs.token).event(o.id) }.onSuccess { editing = it } } },
+                        onClick = { if (data.canEdit && o.calendar.isEmpty()) scope.launch { runCatching { Api(prefs.serverUrl, prefs.token).event(o.id) }.onSuccess { editing = it } } },
                         shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth(),
                     ) {
+                        Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+                            // An outside calendar's events: a stripe in its colour (they're read-only).
+                            if (o.calendar.isNotEmpty()) androidx.compose.foundation.layout.Box(Modifier.width(4.dp).fillMaxHeight()
+                                .background(runCatching { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(o.color)) }.getOrDefault(MaterialTheme.colorScheme.outline)))
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(Datebook.timeText(o), Modifier.width(72.dp), style = MaterialTheme.typography.labelLarge, color = Accent2)
                             Column(Modifier.weight(1f)) {
                                 Text(o.title, style = MaterialTheme.typography.titleMedium)
-                                val sub = listOfNotNull(o.where.ifEmpty { null }, o.who.mapNotNull { id -> people.find { it.id == id }?.name }.joinToString(", ").ifEmpty { null }).joinToString(" · ")
+                                val sub = listOfNotNull(o.calendar.ifEmpty { null }, o.where.ifEmpty { null }, o.who.mapNotNull { id -> people.find { it.id == id }?.name }.joinToString(", ").ifEmpty { null }).joinToString(" · ")
                                 if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                        }
                         }
                     }
                 }

@@ -2207,9 +2207,12 @@ async function renderCalendar(box, force = false) {
   if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select, textarea")) return;
   const from = new Date(); from.setHours(0, 0, 0, 0);
   let data;
-  try { data = await api("GET", `/api/events?from=${from.getTime()}&to=${from.getTime() + 45 * 86400000}`); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  let feeds = { feeds: [], canManage: false };
+  try {
+    [data, feeds] = await Promise.all([api("GET", `/api/events?from=${from.getTime()}&to=${from.getTime() + 45 * 86400000}`), api("GET", "/api/calendar/feeds").catch(() => feeds)]);
+  } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   if (box.dataset.module !== "calendar") return; // the page changed while loading
-  const sig = JSON.stringify(data);
+  const sig = JSON.stringify([data, feeds]);
   if (!force && sig === calDrawn && box.childElementCount) return;
   calDrawn = sig;
   const act = async (method, path, body) => { try { await api(method, path, body); renderCalendar(box, true); } catch (err) { alert(err.message); } };
@@ -2225,10 +2228,11 @@ async function renderCalendar(box, force = false) {
     return [el("h2", {}, label), el("ul", { class: "list" }, ...days[k].map((e) => {
       const rm = el("button", { type: "button", class: "link" }, "Delete");
       rm.addEventListener("click", () => { if (confirm(`Delete "${e.title}"${e.recurring ? " (every time it repeats)" : ""}?`)) act("DELETE", `/api/events/${e.id}`); });
-      return el("li", {}, el("span", { class: "feed-time muted small" }, e.allDay ? "All day" : new Date(e.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
+      // Outside calendars' events: their colour and name, and read-only.
+      return el("li", e.calendar ? { class: "outside", style: `--cal:${e.color || "var(--muted)"}` } : {}, el("span", { class: "feed-time muted small" }, e.allDay ? "All day" : new Date(e.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
         el("div", { class: "grow" }, el("div", { class: "title" }, e.title, e.recurring ? el("span", { class: "badge" }, "repeats") : null),
-          el("div", { class: "sub" }, [e.where, e.who.map((id) => (people.find((p) => p.id === id) || {}).name).filter(Boolean).join(", ")].filter(Boolean).join(" · "))),
-        data.canEdit ? rm : null);
+          el("div", { class: "sub" }, [e.calendar, e.where, (e.who || []).map((id) => (people.find((p) => p.id === id) || {}).name).filter(Boolean).join(", ")].filter(Boolean).join(" · "))),
+        data.canEdit && !e.calendar ? rm : null);
     }))];
   }).flat();
   // Add an event.
@@ -2254,6 +2258,27 @@ async function renderCalendar(box, force = false) {
     act("POST", "/api/events", { title: title.value.trim(), start: allDay.checked ? day.value : `${day.value}T${t1.value}`, end: allDay.checked ? "" : `${day.value}T${t2.value}`,
       where: where.value.trim(), every: every.value, who: [...who.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.id) });
   });
+  // Outside calendars (school, sports, holidays): parents add a link; everyone sees them.
+  const feedRows = feeds.feeds.map((f) => {
+    const rm = el("button", { type: "button", class: "link danger" }, "Remove");
+    rm.addEventListener("click", () => { if (confirm(`Stop showing "${f.name}"?`)) act("DELETE", `/api/calendar/feeds/${f.id}`); });
+    const again = el("button", { type: "button", class: "link" }, "Refresh");
+    again.addEventListener("click", () => act("POST", `/api/calendar/feeds/${f.id}/refresh`));
+    return el("li", {}, el("span", { class: "cal-dot", style: `background:${f.color}` }),
+      el("div", { class: "grow" }, el("div", { class: "title" }, f.name),
+        el("div", { class: "sub" }, f.error ? "Problem: " + f.error : `${f.events} ${f.events === 1 ? "event" : "events"} · updated ${f.fetched ? ago(f.fetched) : "never"}`)),
+      feeds.canManage ? again : null, feeds.canManage ? rm : null);
+  });
+  const fName = el("input", { placeholder: "e.g. School, Holidays", maxlength: "40" });
+  const fURL = el("input", { placeholder: "https://… or webcal://… (.ics)" });
+  const fColor = el("input", { type: "color", value: "#3a7bd5", "aria-label": "Colour" });
+  const fForm = el("form", { class: "upkeep-add" },
+    el("div", { class: "row" }, el("label", { class: "grow" }, "Name", fName), el("label", {}, "Colour", fColor)),
+    el("label", {}, "Link", fURL), el("div", { class: "row" }, el("button", { type: "submit", class: "tonal" }, "Add calendar")));
+  fForm.addEventListener("submit", (ev) => { ev.preventDefault(); if (fName.value.trim() && fURL.value.trim()) act("POST", "/api/calendar/feeds", { name: fName.value.trim(), url: fURL.value.trim(), color: fColor.value }); });
+  const outside = (feedRows.length || feeds.canManage) ? [el("h2", {}, "Outside calendars"),
+    el("p", { class: "muted small" }, "Calendars from a link, like school terms, sports fixtures or holidays. Everyone sees them; they update every few hours and show on phones too."),
+    feedRows.length ? el("ul", { class: "list" }, ...feedRows) : null, feeds.canManage ? fForm : null] : [];
   const sync = el("div", { class: "panel" }, el("h2", {}, "On your phone"),
     el("p", { class: "muted small" }, "The family calendar syncs both ways with phones and computers (CalDAV). Sign in with your FamLogic username and password."),
     el("ul", { class: "plain small" },
@@ -2261,7 +2286,7 @@ async function renderCalendar(box, force = false) {
       el("li", {}, el("strong", {}, "iPhone or Mac: "), "Settings → Calendar → Accounts → Add Account → Other → CalDAV, server ", el("code", {}, location.host), "."),
       el("li", {}, el("strong", {}, "Thunderbird: "), "New Calendar → On the network, location ", el("code", {}, location.origin + "/dav/"), ".")));
   box.replaceChildren(...(agenda.length ? agenda : [el("p", { class: "muted" }, "Nothing on the calendar for the next few weeks.")]),
-    ...(data.canEdit ? [el("h2", {}, "Add an event"), form] : []), sync);
+    ...(data.canEdit ? [el("h2", {}, "Add an event"), form] : []), ...outside.filter(Boolean), sync);
 }
 
 // Rhythms: routines, and who's on which now.

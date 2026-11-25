@@ -36,7 +36,7 @@ import (
 )
 
 // backupDirs are the folders in DATA_DIR a backup carries (besides the vault).
-var backupDirs = []string{"media", "timeline", "steward", "caldav"}
+var backupDirs = []string{"media", "timeline", "steward", "caldav", "feeds"}
 
 // writeBackup writes the whole family to w as a zip.
 func (s *Server) writeBackup(w io.Writer) error {

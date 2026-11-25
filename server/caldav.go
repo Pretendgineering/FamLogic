@@ -8,11 +8,13 @@ package main
 // (/.well-known/caldav).
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -61,15 +63,85 @@ func (b *davBackend) CreateCalendar(ctx context.Context, cal *caldav.Calendar) e
 }
 
 func (b *davBackend) ListCalendars(ctx context.Context) ([]caldav.Calendar, error) {
-	return []caldav.Calendar{b.familyCalendar(ctx)}, nil
+	out := []caldav.Calendar{b.familyCalendar(ctx)}
+	// Outside calendars (school, holidays...), read-only, each its own calendar.
+	for _, f := range b.s.store.Feeds() {
+		out = append(out, caldav.Calendar{Path: b.feedCalPath(ctx, f.ID), Name: f.Name, Description: "An outside calendar, added in FamLogic (read-only)",
+			SupportedComponentSet: []string{ical.CompEvent}, Color: f.Color, MaxResourceSize: 1 << 20, ReadOnly: true})
+	}
+	return out, nil
+}
+
+func (b *davBackend) feedCalPath(ctx context.Context, id string) string {
+	return davPrefix + "/" + davUser(ctx).ID + "/calendars/" + id + "/"
+}
+
+// feedOf says which outside calendar a path is in ("" for the family's).
+func (b *davBackend) feedOf(ctx context.Context, p string) string {
+	for _, f := range b.s.store.Feeds() {
+		if strings.HasPrefix(p, b.feedCalPath(ctx, f.ID)) || strings.TrimSuffix(p, "/")+"/" == b.feedCalPath(ctx, f.ID) {
+			return f.ID
+		}
+	}
+	return ""
 }
 
 func (b *davBackend) GetCalendar(ctx context.Context, p string) (*caldav.Calendar, error) {
-	c := b.familyCalendar(ctx)
-	if strings.TrimSuffix(p, "/") != strings.TrimSuffix(c.Path, "/") {
-		return nil, webdav.NewHTTPError(http.StatusNotFound, fmt.Errorf("no such calendar"))
+	all, _ := b.ListCalendars(ctx)
+	for _, c := range all {
+		if strings.TrimSuffix(p, "/") == strings.TrimSuffix(c.Path, "/") {
+			return &c, nil
+		}
 	}
-	return &c, nil
+	return nil, webdav.NewHTTPError(http.StatusNotFound, fmt.Errorf("no such calendar"))
+}
+
+// feedObjects are an outside calendar's events, one object per UID, as the link sent them.
+func (b *davBackend) feedObjects(ctx context.Context, id string) []caldav.CalendarObject {
+	raw, err := os.ReadFile(b.s.feedPath(id))
+	if err != nil {
+		return nil
+	}
+	src, err := ical.NewDecoder(bytes.NewReader(raw)).Decode()
+	if err != nil {
+		return nil
+	}
+	var zones []*ical.Component
+	byUID := map[string]*ical.Calendar{}
+	var order []string
+	for _, c := range src.Children {
+		switch c.Name {
+		case ical.CompTimezone:
+			zones = append(zones, c)
+		case ical.CompEvent:
+			uid, _ := c.Props.Text(ical.PropUID)
+			if uid == "" {
+				continue
+			}
+			cal, ok := byUID[uid]
+			if !ok {
+				cal = ical.NewCalendar()
+				cal.Props.SetText(ical.PropVersion, "2.0")
+				cal.Props.SetText(ical.PropProductID, "-//FamLogic//Datebook//EN")
+				byUID[uid] = cal
+				order = append(order, uid)
+			}
+			cal.Children = append(cal.Children, c)
+		}
+	}
+	mod := time.Now()
+	if st, err := os.Stat(b.s.feedPath(id)); err == nil {
+		mod = st.ModTime()
+	}
+	out := []caldav.CalendarObject{}
+	for _, uid := range order {
+		cal := byUID[uid]
+		cal.Children = append(append([]*ical.Component{}, zones...), cal.Children...)
+		data := encodeICS(cal)
+		out = append(out, caldav.CalendarObject{Path: b.feedCalPath(ctx, id) + strings.NewReplacer("/", "_", "?", "_", "#", "_").Replace(uid) + ".ics",
+			ModTime: mod, ContentLength: int64(len(data)), ETag: etagOf(data), Data: cal})
+	}
+	return out
 }
 
 func (b *davBackend) objectPath(ctx context.Context, uid string) string {
@@ -83,6 +155,9 @@ func (b *davBackend) object(ctx context.Context, ev CalEvent, members []Member) 
 }
 
 func (b *davBackend) ListCalendarObjects(ctx context.Context, p string, req *caldav.CalendarCompRequest) ([]caldav.CalendarObject, error) {
+	if id := b.feedOf(ctx, p); id != "" {
+		return b.feedObjects(ctx, id), nil
+	}
 	members := b.s.store.Members()
 	out := []caldav.CalendarObject{}
 	for _, ev := range b.s.cal.all(members) {
@@ -92,6 +167,14 @@ func (b *davBackend) ListCalendarObjects(ctx context.Context, p string, req *cal
 }
 
 func (b *davBackend) GetCalendarObject(ctx context.Context, p string, req *caldav.CalendarCompRequest) (*caldav.CalendarObject, error) {
+	if id := b.feedOf(ctx, p); id != "" {
+		for _, o := range b.feedObjects(ctx, id) {
+			if o.Path == p {
+				return &o, nil
+			}
+		}
+		return nil, webdav.NewHTTPError(http.StatusNotFound, fmt.Errorf("no such event"))
+	}
 	members := b.s.store.Members()
 	for _, ev := range b.s.cal.all(members) {
 		if b.objectPath(ctx, ev.UID) == p {
@@ -112,7 +195,7 @@ func (b *davBackend) QueryCalendarObjects(ctx context.Context, p string, query *
 
 func (b *davBackend) PutCalendarObject(ctx context.Context, p string, cal *ical.Calendar, opts *caldav.PutCalendarObjectOptions) (*caldav.CalendarObject, error) {
 	me := davUser(ctx)
-	if !b.s.canEditCalendar(me) {
+	if !b.s.canEditCalendar(me) || b.feedOf(ctx, p) != "" {
 		return nil, webdav.NewHTTPError(http.StatusForbidden, fmt.Errorf("you can see the calendar, but not change it"))
 	}
 	members := b.s.store.Members()
@@ -130,7 +213,7 @@ func (b *davBackend) PutCalendarObject(ctx context.Context, p string, cal *ical.
 
 func (b *davBackend) DeleteCalendarObject(ctx context.Context, p string) error {
 	me := davUser(ctx)
-	if !b.s.canEditCalendar(me) {
+	if !b.s.canEditCalendar(me) || b.feedOf(ctx, p) != "" {
 		return webdav.NewHTTPError(http.StatusForbidden, fmt.Errorf("you can see the calendar, but not change it"))
 	}
 	members := b.s.store.Members()
