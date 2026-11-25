@@ -1581,13 +1581,14 @@ function renderModulePage(id) {
   if (box.dataset.module !== id) {
     box.dataset.module = id;
     box.replaceChildren();
-    upkeepDrawn = listsDrawn = calDrawn = "";
+    upkeepDrawn = listsDrawn = calDrawn = profilesDrawn = "";
   }
   if (id === "chores" && m.available) { box.classList.remove("soon"); renderUpkeep(box); return; }
   if (id === "todos" && m.available) { box.classList.remove("soon"); renderLists(box); return; }
   if (id === "calendar" && m.available) { box.classList.remove("soon"); renderCalendar(box); return; }
   if (id === "routines" && m.available) { box.classList.remove("soon"); renderRoutines(box); return; }
   if (id === "meals" && m.available) { box.classList.remove("soon"); renderMeals(box); return; }
+  if (id === "profiles" && m.available) { box.classList.remove("soon"); renderProfiles(box); return; }
   box.classList.add("soon");
   box.replaceChildren(
     el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
@@ -2465,7 +2466,7 @@ function sosMark() { const s = el("span", { class: "sos-mark" }); s.innerHTML = 
 // ---- Steward, from any page: a small round button in the corner (not on Chat,
 // which has its own voice). It opens a panel that knows which page you're on, and
 // the page redraws after each answer so changes show at once.
-const STEWARD_PAGES = ["home", "thereabouts", "calendar", "todos", "chores", "routines", "meals", "family"];
+const STEWARD_PAGES = ["home", "thereabouts", "calendar", "todos", "chores", "routines", "meals", "family", "profiles"];
 function stewardAllowed() {
   if (!serverFeatures.includes("steward")) return false;
   if (isAdmin() || !me.member) return true;
@@ -2509,7 +2510,7 @@ $("#steward-fab")?.addEventListener("click", async () => {
 $("#steward-close")?.addEventListener("click", () => { $("#steward-panel").hidden = true; stewardFab(); });
 $("#steward-clear")?.addEventListener("click", async () => { try { await api("DELETE", "/api/steward"); } catch (_) {} stewardDraw([], { canUndo: false }); });
 // After Steward changes something, the page shows it at once.
-function stewardAfter() { upkeepDrawn = listsDrawn = calDrawn = homeDrawn = ""; renderView(); }
+function stewardAfter() { upkeepDrawn = listsDrawn = calDrawn = homeDrawn = profilesDrawn = ""; renderView(); }
 $("#steward-text")?.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("#steward-form").requestSubmit(); } });
 $("#steward-form")?.addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -2573,4 +2574,79 @@ async function talkStop() {
     talk.addEventListener("pointerdown", (e) => { e.preventDefault(); talkStart(); });
     ["pointerup", "pointerleave", "pointercancel"].forEach((t) => talk.addEventListener(t, talkStop));
   }
+}
+
+// Who's Who: everyone's profile (in their People note), editable by who may, and a
+// printable page per person for babysitters and grandparents.
+let profilesDrawn = "", profileOpen = "";
+async function renderProfiles(box, force = false) {
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
+  let d;
+  try { d = await api("GET", "/api/profiles"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "profiles") return;
+  const sig = JSON.stringify([d, profileOpen]);
+  if (!force && sig === profilesDrawn && box.childElementCount) return;
+  profilesDrawn = sig;
+  const card = (p) => {
+    const editing = profileOpen === p.id;
+    const head = el("div", { class: "profile-head" }, avatarOf(personById(p.id) || p), el("div", { class: "name" }, p.name));
+    const print = el("button", { type: "button", class: "secondary" }, "Print");
+    print.addEventListener("click", () => printProfile(p, d));
+    head.append(print);
+    if (p.canEdit && !editing) {
+      const edit = el("button", { type: "button", class: "tonal" }, "Change");
+      edit.addEventListener("click", () => { profileOpen = p.id; renderProfiles(box, true); });
+      head.append(edit);
+    }
+    if (editing) {
+      const fields = d.sections.map((sec) => {
+        const f = sec === "Birthday" ? el("input", { type: "date", value: p.profile[sec] || "" })
+          : el("textarea", { rows: sec === "Notes" || sec === "Emergency contacts" ? "3" : "2", placeholder: sec === "Emergency contacts" ? "- Grandma (Mom's mum): 07700 900123" : "One per line" }, p.profile[sec] || "");
+        f.dataset.sec = sec;
+        return el("label", {}, sec, f);
+      });
+      const save = el("button", { type: "submit" }, "Save");
+      const cancel = el("button", { type: "button", class: "link" }, "Cancel");
+      cancel.addEventListener("click", () => { profileOpen = ""; renderProfiles(box, true); });
+      const form = el("form", { class: "upkeep-add" }, ...fields, el("div", { class: "row" }, save, cancel));
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const profile = Object.fromEntries([...form.querySelectorAll("[data-sec]")].map((f) => [f.dataset.sec, f.value.trim()]));
+        try { await api("PUT", `/api/profiles/${p.id}`, { profile }); profileOpen = ""; renderProfiles(box, true); } catch (err) { alert(err.message); }
+      });
+      return el("div", { class: "panel list-card" }, head, form);
+    }
+    const shown = d.sections.filter((sec) => p.profile[sec]);
+    return el("div", { class: "panel list-card" }, head,
+      shown.length ? el("dl", { class: "profile" }, ...shown.flatMap((sec) => [el("dt", {}, sec), el("dd", {}, sec === "Birthday" ? birthdayText(p.profile[sec]) : p.profile[sec])]))
+        : el("p", { class: "muted small" }, p.canEdit ? "Nothing yet. Change adds allergies, medicines, emergency contacts and more." : "Nothing yet."));
+  };
+  box.replaceChildren(...d.people.map(card));
+}
+
+function birthdayText(v) {
+  const d = new Date(v + "T12:00");
+  if (isNaN(d)) return v;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  if (now < new Date(now.getFullYear(), d.getMonth(), d.getDate())) age--;
+  return d.toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" }) + (age >= 0 && age < 130 ? ` (${age})` : "");
+}
+
+// A plain page for one person, for a babysitter: their profile and the parents' numbers.
+function printProfile(p, d) {
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const rows = d.sections.filter((s) => p.profile[s]).map((s) => `<h2>${esc(s)}</h2><p>${esc(s === "Birthday" ? birthdayText(p.profile[s]) : p.profile[s]).replace(/\n/g, "<br>")}</p>`).join("");
+  const parents = d.parents.filter((x) => x.name).map((x) => `<li>${esc(x.name)}${x.phone ? ": " + esc(x.phone) : ""}</li>`).join("");
+  const w = window.open("", "_blank");
+  if (!w) { alert("Allow pop-ups to print."); return; }
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(p.name)}</title><style>
+    body{font:15px/1.45 system-ui,sans-serif;margin:32px;color:#222;max-width:640px}
+    h1{font-family:"Liberation Serif",Georgia,serif;margin:0 0 4px}h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:#555;margin:18px 0 2px}
+    p{margin:0}.box{border:2px solid #222;border-radius:12px;padding:10px 14px;margin-top:20px}ul{margin:4px 0;padding-left:18px}
+    </style><h1>${esc(p.name)}</h1><div style="color:#555">${esc($("#family-name").textContent || "")}</div>${rows || "<p>No details yet.</p>"}
+    ${parents ? `<div class="box"><h2 style="margin-top:0">Parents</h2><ul>${parents}</ul></div>` : ""}`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 200);
 }

@@ -37,7 +37,7 @@ var allModules = []ModuleInfo{
 	{"garage", "Garage", "Cars", "Fuel, mileage and maintenance for each car, with reminders.", false, false},
 	{"ledger", "Ledger", "Budget", "Bills, spending, groceries and paying off debt.", false, false},
 	{"pets", "Menagerie", "Pets", "Feeding, walks, medicines and vet visits.", false, false},
-	{"profiles", "Who's Who", "Profiles", "Allergies, medicines, sleep, likes and emergency contacts; a page for sitters.", false, false},
+	{"profiles", "Who's Who", "Profiles", "Allergies, medicines, sleep, likes and emergency contacts; a page for sitters.", true, false},
 	{"homestead", "Homestead", "Home care", "Bin day, filters and the upkeep a home needs, owned or rented.", false, false},
 	{"contacts", "Rolodex", "Contacts", "The family's address book, synced with phones (CardDAV).", false, false},
 }

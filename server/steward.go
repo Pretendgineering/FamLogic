@@ -321,6 +321,25 @@ var stewardTools = []stewardTool{
 			id := argStr(a, "recipe_id")
 			return s.callAs(me, s.handleShopRecipe, "POST", "/api/recipes/"+url.PathEscape(id)+"/shop", map[string]string{"id": id}, nil)
 		}},
+	{"list_profiles", "Everyone's profile (Who's Who): birthday, allergies, medicines, sleep, likes, dislikes, sizes, doctor, emergency contacts, notes.", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleProfiles, "GET", "/api/profiles", nil, nil)
+		}},
+	{"set_profile", "Change sections of someone's profile. Send only the sections to change, each as its whole new text (one item per line, like \"- Peanuts\"); read it first and keep what's there unless asked to remove it.", obj(map[string]any{
+		"person":   str("Name or id"),
+		"sections": map[string]any{"type": "object", "description": "Section name to its full new text. Sections: Birthday (YYYY-MM-DD), Allergies, Medicines, Sleep, Likes, Dislikes, Sizes, Doctor, Emergency contacts, Notes", "additionalProperties": map[string]any{"type": "string"}},
+	}, "person", "sections"),
+		func(s *Server, me *Member, a map[string]any) any {
+			id := s.personID(argStr(a, "person"))
+			secs, _ := a["sections"].(map[string]any)
+			prof := map[string]any{}
+			for k, v := range secs {
+				if vs, ok := v.(string); ok {
+					prof[k] = vs
+				}
+			}
+			return s.callAs(me, s.handleSetProfile, "PUT", "/api/profiles/"+url.PathEscape(id), map[string]string{"id": id}, map[string]any{"profile": prof})
+		}},
 	{"read_feed", "What happened recently: arrivals, check-ins, trips, chores done.", obj(map[string]any{
 		"hours": map[string]any{"type": "integer", "description": "How far back (default 12, at most 48)"},
 	}),

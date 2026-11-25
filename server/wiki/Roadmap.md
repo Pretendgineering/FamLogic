@@ -138,7 +138,7 @@ In this order (each is finished before the next starts):
 1. ✅ **Odds & Ends** (lists and to-dos), 0.34.0: shared lists and someone's to-dos as Markdown, sections, `@who`, tick from the tile, Steward can add and tick.
 2. ✅ **Upkeep** (chores), 0.27.0. Next for it: chores on the Pebble, a "spend stars" list of rewards, and talking to Steward from the app ("I finished the dishwasher").
 3. ✅ **Rhythms** (routines), 0.36.0: checklists that come round at a time on chosen days, current routine per person, ticks clear each time.
-4. ✅ **Datebook** (calendar), 0.35.0: events as Markdown, repeats, two-way CalDAV with phones (DAVx5, iPhone, Thunderbird), agenda tile, Steward can read and add. Next: outside calendars by link.
+4. ✅ **Datebook** (calendar), 0.35.0: events as Markdown, repeats, two-way CalDAV with phones (DAVx5, iPhone, Thunderbird), agenda tile, Steward can read and add. Outside calendars by link since 0.40.0.
 5. ✅ **Pantry** (meals and recipes), 0.36.0: the week's meals as Markdown, recipes, ingredients to the Shopping list in one tap.
 6. **Steward** (the agent bridge): your own AI agent, using FamLogic's API with scoped keys and the vault guide; voice in, voice out.
 7. **Corkboard / Front Room** (Control Deck round two and the Android TV launcher, its own APK).
@@ -147,6 +147,12 @@ In this order (each is finished before the next starts):
 - A small Steward button in the corner of every screen (app and console, not Chat): tell it what to add, change or remove there. It knows which page it was asked from, and the page updates after it answers.
 - It uses FamLogic's own actions where one fits (chores, events, lists, meals, recipes) and otherwise reads the vault guide and reads and writes notes directly (grown-ups only), so it already works for modules still being built.
 - Shown only when Steward is on (set up during first-run setup, or later in Settings → AI & API).
+
+### ✅ 0.40.0: Steward polish, outside calendars, setup questions, Who's Who
+- **Steward:** Undo puts back everything its last answer changed (leaving anything changed again since); each answer lists what it changed; hold to talk to it in the web console too.
+- **Datebook:** outside calendars by link (school terms, sports, holidays). Parents add them; everyone sees them, read-only, in the app, the console and on phones through calendar sync.
+- **Setup:** a few questions about the family (pets, a car, a home, routines, money, health, AI help) suggest modules; the same questions are under Settings → Modules → Help me choose.
+- **Who's Who (profiles):** birthday, allergies, medicines, sleep, likes, dislikes, sizes, doctor, emergency contacts and notes for each person, in their People note. Everyone sees them; parents change anyone's, older children and grandparents their own. Print or share one as a page for a sitter, with the parents' numbers.
 
 ### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.

@@ -191,6 +191,8 @@ func (v *Vault) Sync(members []Member) {
 }
 
 func (v *Vault) syncPeople(members []Member) error {
+	peopleNotes.Lock() // profiles are written into the same notes
+	defer peopleNotes.Unlock()
 	dir := filepath.Join(v.dir, "People")
 	// Which note is whose: by famlogic_id, so a renamed person keeps their note.
 	byID := map[string]string{}

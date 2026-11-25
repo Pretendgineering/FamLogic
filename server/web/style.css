@@ -1008,3 +1008,12 @@ label.button { display: inline-block; margin: 0; }
 .list.quiz li { padding: .35rem .4rem; }
 .list.quiz .switch-label { white-space: normal; }
 .quiz-box { margin: 12px 0; padding: 12px 14px; border-radius: 18px; background: var(--surface-2); }
+
+/* Who's Who: a profile as labelled rows. */
+dl.profile { display: grid; grid-template-columns: 11em 1fr; gap: 6px 14px; margin: 8px 4px 2px; }
+dl.profile dt { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding-top: 2px; }
+dl.profile dd { margin: 0; white-space: pre-wrap; }
+.profile-head { display: flex; align-items: center; gap: 10px; }
+.profile-head .avatar { width: 34px; height: 34px; }
+.profile-head .name { flex: 1; font-family: var(--serif); font-weight: 700; font-size: 1.15rem; }
+@media (max-width: 720px) { dl.profile { grid-template-columns: 1fr; gap: 2px; } dl.profile dd { margin-bottom: 8px; } }
