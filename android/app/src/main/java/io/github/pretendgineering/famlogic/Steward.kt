@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -75,13 +76,21 @@ object Steward {
 
 data class StewardMsg(val role: String, val text: String, val time: Long)
 
-private fun parseSteward(o: JSONObject): List<StewardMsg> {
-    val arr = o.optJSONArray("messages") ?: return emptyList()
-    return (0 until arr.length()).map { arr.getJSONObject(it).let { m -> StewardMsg(m.optString("role"), m.optString("text"), m.optLong("time")) } }
+/** The conversation, and what Steward's latest answer changed (which can be undone). */
+data class StewardState(val msgs: List<StewardMsg>, val changed: List<String> = emptyList(), val canUndo: Boolean = false)
+
+private fun parseSteward(o: JSONObject): StewardState {
+    val arr = o.optJSONArray("messages") ?: JSONArray()
+    val ch = o.optJSONArray("changed") ?: JSONArray()
+    return StewardState(
+        (0 until arr.length()).map { arr.getJSONObject(it).let { m -> StewardMsg(m.optString("role"), m.optString("text"), m.optLong("time")) } },
+        (0 until ch.length()).map { ch.getString(it) }, o.optBoolean("canUndo"),
+    )
 }
 
-suspend fun Api.steward(): List<StewardMsg> = parseSteward(call("GET", "/api/steward"))
-suspend fun Api.stewardSay(text: String, page: String = ""): List<StewardMsg> = parseSteward(call("POST", "/api/steward", JSONObject().put("text", text).put("page", page)))
+suspend fun Api.steward(): StewardState = parseSteward(call("GET", "/api/steward"))
+suspend fun Api.stewardSay(text: String, page: String = ""): StewardState = parseSteward(call("POST", "/api/steward", JSONObject().put("text", text).put("page", page)))
+suspend fun Api.stewardUndo(): StewardState = parseSteward(call("POST", "/api/steward/undo"))
 suspend fun Api.stewardClear() { call("DELETE", "/api/steward") }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,11 +126,14 @@ fun StewardChat(prefs: Prefs, page: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var msgs by remember { mutableStateOf<List<StewardMsg>>(emptyList()) }
+    var changed by remember { mutableStateOf<List<String>>(emptyList()) }
+    var canUndo by remember { mutableStateOf(false) }
+    fun show(st: StewardState) { msgs = st.msgs; changed = st.changed; canUndo = st.canUndo }
     var draft by remember { mutableStateOf("") }
     var thinking by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
     val api = { Api(prefs.serverUrl, prefs.token) }
-    LaunchedEffect(Unit) { runCatching { msgs = api().steward() } }
+    LaunchedEffect(Unit) { runCatching { show(api().steward()) } }
     LaunchedEffect(msgs.size, thinking) { if (msgs.isNotEmpty()) list.animateScrollToItem(0) }
 
     fun say(text: String, spoken: Boolean) {
@@ -129,10 +141,11 @@ fun StewardChat(prefs: Prefs, page: String, modifier: Modifier = Modifier) {
         if (t.isEmpty() || thinking) return
         draft = ""
         msgs = msgs + StewardMsg("user", t, System.currentTimeMillis())
+        canUndo = false
         thinking = true
         scope.launch {
             try {
-                msgs = api().stewardSay(t, page)
+                show(api().stewardSay(t, page))
                 if (spoken || Access.younger) msgs.lastOrNull()?.takeIf { it.role == "assistant" }?.let { Voice.speak(context, prefs, it.text) }
                 Steward.refreshAll(prefs)
             } catch (e: Exception) {
@@ -144,6 +157,18 @@ fun StewardChat(prefs: Prefs, page: String, modifier: Modifier = Modifier) {
 
     Column(modifier) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, reverseLayout = true, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // What the latest answer changed, with Undo (shown under it; the list is reversed).
+            if (canUndo && !thinking && msgs.lastOrNull()?.role == "assistant") item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Changed: " + changed.joinToString(", "), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    androidx.compose.material3.TextButton(onClick = {
+                        scope.launch {
+                            runCatching { api().stewardUndo() }.onSuccess { show(it); Steward.refreshAll(prefs) }
+                                .onFailure { Toast.makeText(context, it.message ?: "Couldn't undo", Toast.LENGTH_SHORT).show() }
+                        }
+                    }) { Text("Undo") }
+                }
+            }
             if (thinking) item { Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp); Text("  Thinking…", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
             items(msgs.reversed(), key = { it.time.toString() + it.role }) { m ->
                 val mine = m.role == "user"

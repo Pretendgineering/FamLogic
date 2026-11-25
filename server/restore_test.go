@@ -187,3 +187,59 @@ func TestStewardNoteTools(t *testing.T) {
 		t.Fatalf("admin steward: %d", st)
 	}
 }
+
+func TestStewardUndo(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	vault := filepath.Join(filepath.Dir(e.path), "vault")
+	os.MkdirAll(filepath.Join(vault, "Pets"), 0o755)
+	os.WriteFile(filepath.Join(vault, "Pets", "Rex.md"), []byte("---\ntype: pet\n---\n# Rex\n"), 0o644)
+	turn := 0
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		msgs := req["messages"].([]any)
+		if msgs[len(msgs)-1].(map[string]any)["role"] == "tool" {
+			fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"Done."}}]}`)
+			return
+		}
+		turn++
+		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[`+
+			`{"id":"1","type":"function","function":{"name":"write_note","arguments":"{\"path\":\"Pets/Rex.md\",\"text\":\"---\\ntype: pet\\nshots: 2026-11-25\\n---\\n# Rex\\n\"}"}},`+
+			`{"id":"2","type":"function","function":{"name":"write_note","arguments":"{\"path\":\"Pets/Biscuit.md\",\"text\":\"# Biscuit\\n\"}"}}]}}]}`)
+	}))
+	defer llm.Close()
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	e.status("PUT", "/api/admin/modules", "", map[string]any{"enabled": map[string]bool{"thereabouts": true, "pets": true, "agents": true}, "setupDone": true})
+	e.status("PUT", "/api/admin/steward", "", map[string]any{"enabled": true, "url": llm.URL, "model": "test", "key": "k"})
+	st, res := e.status("POST", "/api/steward", f.mom, map[string]any{"text": "Rex had his shots, and add Biscuit"})
+	if st != 200 || res["canUndo"] != true || len(res["changed"].([]any)) != 2 {
+		t.Fatalf("say: %d %v", st, res)
+	}
+	if st, _ := e.status("POST", "/api/steward/undo", f.dad, nil); st != 409 {
+		t.Fatalf("someone else's undo: %d", st)
+	}
+	st, res = e.status("POST", "/api/steward/undo", f.mom, nil)
+	if st != 200 || len(res["undone"].([]any)) != 2 {
+		t.Fatalf("undo: %d %v", st, res)
+	}
+	if b, _ := os.ReadFile(filepath.Join(vault, "Pets", "Rex.md")); strings.Contains(string(b), "shots") {
+		t.Fatalf("Rex not put back: %s", b)
+	}
+	if _, err := os.Stat(filepath.Join(vault, "Pets", "Biscuit.md")); err == nil {
+		t.Fatal("Biscuit should be gone again")
+	}
+	if st, _ := e.status("POST", "/api/steward/undo", f.mom, nil); st != 409 {
+		t.Fatalf("only once: %d", st)
+	}
+	// Changed again after the answer: left alone.
+	e.status("POST", "/api/steward", f.mom, map[string]any{"text": "again"})
+	os.WriteFile(filepath.Join(vault, "Pets", "Rex.md"), []byte("# Rex, edited in Obsidian\n"), 0o644)
+	_, res = e.status("POST", "/api/steward/undo", f.mom, nil)
+	if len(res["kept"].([]any)) != 1 {
+		t.Fatalf("kept: %v", res)
+	}
+	if b, _ := os.ReadFile(filepath.Join(vault, "Pets", "Rex.md")); !strings.Contains(string(b), "Obsidian") {
+		t.Fatal("an edit made since was undone")
+	}
+}

@@ -340,7 +340,7 @@ func (c *calendar) save(id string, in EventInput, members []Member) (CalEvent, e
 			path = filepath.Join(c.dir, fmt.Sprintf("%s (%d).md", noteName(day+" "+title), i))
 		}
 		if n.path != "" && n.path != path {
-			os.Remove(n.path)
+			removeJournaled(n.path)
 		}
 		n.path = path
 	}

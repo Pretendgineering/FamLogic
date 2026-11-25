@@ -147,7 +147,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/chat/{id}/messages/{mid}", s.admin(s.handleAdminChatDeleteMessage))
 	// Parents' controls (kids.go).
 	mux.HandleFunc("POST /api/pin/check", s.device(s.handleCheckPIN))
-	mux.HandleFunc("POST /api/voice/transcribe", s.device(s.handleTranscribe))
+	mux.HandleFunc("POST /api/voice/transcribe", s.choreAuth(s.handleTranscribe))
 	mux.HandleFunc("POST /api/voice/speak", s.device(s.handleSpeak))
 	mux.HandleFunc("GET /api/v1/vault/guide", s.handleVaultGuide)
 	// Upkeep (chores) and the family feed.
@@ -194,6 +194,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/steward", s.choreAuth(s.handleStewardGet))
 	mux.HandleFunc("POST /api/steward", s.choreAuth(s.handleStewardSay))
 	mux.HandleFunc("DELETE /api/steward", s.choreAuth(s.handleStewardClear))
+	mux.HandleFunc("POST /api/steward/undo", s.choreAuth(s.handleStewardUndo))
 	mux.HandleFunc("GET /api/admin/steward", s.admin(s.handleAdminSteward))
 	mux.HandleFunc("PUT /api/admin/steward", s.admin(s.handleAdminSetSteward))
 	mux.HandleFunc("POST /api/admin/steward/test", s.admin(s.handleAdminTestSteward))

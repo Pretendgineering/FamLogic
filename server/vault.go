@@ -361,6 +361,7 @@ func setFront(text string, fields [][2]string) string {
 
 // writeAtomic writes a file so that nobody ever sees half of it.
 func writeAtomic(path string, data []byte) error {
+	journalBefore(path) // so Steward's last answer can be undone
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".famlogic-*.tmp")
 	if err != nil {
 		return err

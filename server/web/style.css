@@ -992,3 +992,9 @@ label.button { display: inline-block; margin: 0; }
   /* Home: panels under the map grow with their content. */
   #home-feed .dash-panel.dash-people, #home-feed .dash-panel.sos { max-height: none; }
 }
+
+/* Steward panel: what the last answer changed, with Undo; and the hold-to-talk button. */
+.steward-panel li.changed { display: flex; align-items: center; gap: 8px; padding: 0 4px; }
+.steward-panel .talk { width: 42px; height: 42px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); color: var(--secondary); box-shadow: none; flex: none; touch-action: none; }
+.steward-panel .talk svg { width: 22px; height: 22px; }
+.steward-panel .talk.listening { background: var(--secondary); color: var(--surface); transform: scale(1.12); }

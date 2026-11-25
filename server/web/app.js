@@ -959,6 +959,7 @@ const ICONS = {
   idcard: '<rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><circle cx="9" cy="11" r="2"/><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4M14.5 10h3M14.5 13.5h3"/>',
   house: '<path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/>',
   book: '<path d="M6.5 3.5h11a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1h-11a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z"/><circle cx="12" cy="10" r="2.2"/><path d="M8.5 16c.7-1.7 2-2.5 3.5-2.5s2.8.8 3.5 2.5M4.5 7.5h-1M4.5 12h-1M4.5 16.5h-1"/>',
+  mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/>',
   spark: '<path d="M12 3.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5z"/><path d="M18.5 15.5c.3 1.5 1 2.2 2.5 2.5-1.5.3-2.2 1-2.5 2.5-.3-1.5-1-2.2-2.5-2.5 1.5-.3 2.2-1 2.5-2.5z"/>',
   sos: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M12 6.2a5.8 5.8 0 1 1 0 11.6a5.8 5.8 0 1 1 0-11.6ZM11.05 9.1a.95 .95 0 0 1 1.9 0L12.75 12.6a.75 .75 0 0 1-1.5 0ZM12 13.9a1.05 1.05 0 1 1 0 2.1a1.05 1.05 0 1 1 0-2.1Z"/><path d="M18.9 8.2A8 8 0 0 1 18.9 15.8M5.1 15.8A8 8 0 0 1 5.1 8.2M21.4 6.4A11 11 0 0 1 21.4 17.6M2.6 17.6A11 11 0 0 1 2.6 6.4"/>',
   star: '<path d="m12 3.5 2.6 5.6 6 .6-4.5 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6L3.4 9.7l6-.6z"/>',
@@ -2397,15 +2398,27 @@ function stewardAllowed() {
 function stewardFab() {
   const fab = $("#steward-fab");
   if (!fab) return;
-  if (!fab.childElementCount) { fab.innerHTML = icon("spark"); $("#steward-icon").innerHTML = icon("spark"); }
+  if (!fab.childElementCount) { fab.innerHTML = icon("spark"); $("#steward-icon").innerHTML = icon("spark"); $("#steward-talk").innerHTML = icon("mic"); }
+  $("#steward-talk").hidden = !serverFeatures.includes("voice-stt");
   const page = STEWARD_PAGES.includes(view) || (moduleInfo(view) && view !== "chat" && view !== "agents");
   fab.hidden = !(stewardAllowed() && page) || !$("#steward-panel").hidden;
   if (!page) $("#steward-panel").hidden = true;
   $("#steward-where").textContent = view === "home" ? "" : "· " + (moduleInfo(view) ? displayName(moduleInfo(view)) : view.charAt(0).toUpperCase() + view.slice(1));
 }
-function stewardDraw(msgs) {
+// After Steward's latest answer: what it changed, with Undo.
+let stewardUndo = { canUndo: false, changed: [] };
+function stewardDraw(msgs, undo) {
+  if (undo) stewardUndo = { canUndo: !!undo.canUndo, changed: undo.changed || [] };
   const list = $("#steward-msgs");
   list.replaceChildren(...msgs.map((m) => el("li", { class: m.role === "user" ? "mine" : "" }, m.text)));
+  if (stewardUndo.canUndo && msgs.length && msgs[msgs.length - 1].role === "assistant") {
+    const btn = el("button", { type: "button", class: "link" }, "Undo");
+    btn.addEventListener("click", async () => {
+      try { const res = await api("POST", "/api/steward/undo"); stewardDraw(res.messages || [], { canUndo: false }); stewardAfter(); }
+      catch (err) { alert(err.message); }
+    });
+    list.append(el("li", { class: "hint changed" }, el("span", { class: "muted small" }, "Changed: " + stewardUndo.changed.join(", ")), btn));
+  }
   if (!msgs.length) list.append(el("li", { class: "muted hint" }, "Tell Steward what to add, change or remove here: \"add milk and eggs to Shopping\", \"move the dentist to Friday at 3\", \"Biscuit had his shots today\"."));
   list.scrollTop = list.scrollHeight;
 }
@@ -2414,24 +2427,74 @@ $("#steward-fab")?.addEventListener("click", async () => {
   $("#steward-fab").hidden = true;
   $("#steward-title").textContent = displayName(moduleInfo("agents") || { name: "Steward", plain: "AI" });
   stewardDraw([]);
-  try { stewardDraw((await api("GET", "/api/steward")).messages || []); } catch (err) { stewardDraw([{ role: "assistant", text: err.message }]); }
+  try { const res = await api("GET", "/api/steward"); stewardDraw(res.messages || [], res); } catch (err) { stewardDraw([{ role: "assistant", text: err.message }]); }
   $("#steward-text").focus();
 });
 $("#steward-close")?.addEventListener("click", () => { $("#steward-panel").hidden = true; stewardFab(); });
-$("#steward-clear")?.addEventListener("click", async () => { try { await api("DELETE", "/api/steward"); } catch (_) {} stewardDraw([]); });
+$("#steward-clear")?.addEventListener("click", async () => { try { await api("DELETE", "/api/steward"); } catch (_) {} stewardDraw([], { canUndo: false }); });
+// After Steward changes something, the page shows it at once.
+function stewardAfter() { upkeepDrawn = listsDrawn = calDrawn = homeDrawn = ""; renderView(); }
 $("#steward-text")?.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("#steward-form").requestSubmit(); } });
 $("#steward-form")?.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const box = $("#steward-text"), text = box.value.trim();
   if (!text || box.disabled) return;
   box.value = ""; box.disabled = true;
-  const shown = [...$("#steward-msgs").querySelectorAll("li:not(.hint)")].map((li) => ({ role: li.classList.contains("mine") ? "user" : "assistant", text: li.textContent }));
-  stewardDraw([...shown, { role: "user", text }, { role: "assistant", text: "Thinking…" }]);
-  try {
-    const res = await api("POST", "/api/steward", { text, page: view });
-    stewardDraw(res.messages || []);
-    upkeepDrawn = listsDrawn = calDrawn = homeDrawn = "";
-    renderView();
-  } catch (err) { stewardDraw([...shown, { role: "user", text }, { role: "assistant", text: err.message }]); }
+  await stewardSay(text);
   box.disabled = false; box.focus();
 });
+async function stewardSay(text) {
+  const shown = [...$("#steward-msgs").querySelectorAll("li:not(.hint)")].map((li) => ({ role: li.classList.contains("mine") ? "user" : "assistant", text: li.textContent }));
+  stewardDraw([...shown, { role: "user", text }, { role: "assistant", text: "Thinking…" }], { canUndo: false });
+  try {
+    const res = await api("POST", "/api/steward", { text, page: view });
+    stewardDraw(res.messages || [], res);
+    stewardAfter();
+  } catch (err) { stewardDraw([...shown, { role: "user", text }, { role: "assistant", text: err.message }]); }
+}
+
+// Talk to Steward from the console: hold the microphone button, let go to send. The
+// browser records 16 kHz mono and the server turns it into text (when speech is on).
+let talkRec = null;
+async function talkStart() {
+  if (talkRec) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const ctx = new AudioContext({ sampleRate: 16000 });
+    const src = ctx.createMediaStreamSource(stream);
+    const node = ctx.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(node); node.connect(ctx.destination);
+    talkRec = { stream, ctx, node, chunks, started: Date.now() };
+    $("#steward-talk").classList.add("listening");
+  } catch (_) { alert("The browser couldn't use a microphone here (it needs https, and permission)."); }
+}
+async function talkStop() {
+  const r = talkRec; talkRec = null;
+  if (!r) return;
+  $("#steward-talk").classList.remove("listening");
+  r.node.disconnect(); r.stream.getTracks().forEach((t) => t.stop()); await r.ctx.close();
+  if (Date.now() - r.started < 400) return; // a tap, not a hold
+  const n = r.chunks.reduce((a, c) => a + c.length, 0);
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVE"); str(12, "fmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 16000, true); v.setUint32(28, 32000, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, n * 2, true);
+  let o = 44;
+  for (const c of r.chunks) for (const x of c) { v.setInt16(o, Math.max(-1, Math.min(1, x)) * 0x7fff, true); o += 2; }
+  try {
+    const res = await fetch("/api/voice/transcribe", { method: "POST", body: buf, credentials: "same-origin", headers: { "Content-Type": "audio/wav" } });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || "Couldn't hear that");
+    if (out.text && out.text.trim()) await stewardSay(out.text.trim());
+  } catch (err) { alert(err.message); }
+}
+{
+  const talk = $("#steward-talk");
+  if (talk) {
+    talk.addEventListener("pointerdown", (e) => { e.preventDefault(); talkStart(); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((t) => talk.addEventListener(t, talkStop));
+  }
+}

@@ -428,7 +428,9 @@ func (s *Server) stewardReply(ctx context.Context, me *Member, history []Steward
 				if t.name == call.Function.Name {
 					args := map[string]any{}
 					_ = json.Unmarshal([]byte(call.Function.Arguments), &args)
+					journalLive(true)
 					result = t.run(s, me, args)
+					journalLive(false)
 				}
 			}
 			b, _ := json.Marshal(result)
@@ -449,7 +451,8 @@ func (s *Server) handleStewardGet(w http.ResponseWriter, r *http.Request, me *Me
 		writeError(w, http.StatusForbidden, "Steward isn't set up for you")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"messages": s.stewardHistory(me.ID)})
+	undo := s.loadStewardUndo(me.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"messages": s.stewardHistory(me.ID), "changed": changedNames(undo), "canUndo": undo != nil})
 }
 
 // POST /api/steward {text}: say something; the answer comes back with the conversation.
@@ -477,7 +480,12 @@ func (s *Server) handleStewardSay(w http.ResponseWriter, r *http.Request, me *Me
 	if len(recent) > 16 {
 		recent = recent[len(recent)-16:]
 	}
+	// One answer at a time, with every file it changes remembered, so it can be undone.
+	stewardTurns.Lock()
+	journalStart(filepath.Dir(s.stewardPath(me.ID)))
 	reply, err := s.stewardReply(ctx, me, recent, body.Page)
+	undo := s.saveStewardUndo(me.ID, journalStop())
+	stewardTurns.Unlock()
 	if err != nil {
 		reply = "I can't reach my brain right now (" + err.Error() + "). Try again in a bit."
 	} else if reply == "" {
@@ -485,12 +493,14 @@ func (s *Server) handleStewardSay(w http.ResponseWriter, r *http.Request, me *Me
 	}
 	hist = append(hist, StewardMsg{Role: "assistant", Text: reply, Time: time.Now().UnixMilli()})
 	s.saveStewardHistory(me.ID, hist)
-	writeJSON(w, http.StatusOK, map[string]any{"messages": s.stewardHistory(me.ID), "reply": reply})
+	writeJSON(w, http.StatusOK, map[string]any{"messages": s.stewardHistory(me.ID), "reply": reply,
+		"changed": changedNames(undo), "canUndo": undo != nil})
 }
 
 // DELETE /api/steward: start over.
 func (s *Server) handleStewardClear(w http.ResponseWriter, r *http.Request, me *Member) {
 	s.saveStewardHistory(me.ID, []StewardMsg{})
+	os.Remove(s.stewardUndoPath(me.ID)) // starting over: the last answer stays as it is
 	w.WriteHeader(http.StatusNoContent)
 }
 
