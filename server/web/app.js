@@ -980,7 +980,7 @@ const moduleOn = (id) => !modulesLoaded || !!(moduleInfo(id) || {}).enabled;
 
 // What's coming in each module, for its placeholder page.
 const MODULE_PLANS = {
-  outings: ["Family walks, and each person's runs and bike rides: route, distance, time and pace.", "Shared to the feed if you like."],
+  outings: ["Family walks, and each person's runs and bike rides: route, distance, time and pace.", "Steps from the phone or Pebble, for anyone who wants them shown (on Home, tiles, the watch).", "Meals and macros: log what you ate by voice or from Pantry's recipes; ties into groceries and the meal plan.", "Health data from the phone (Health Connect) and Pebble: sleep, heart rate, weight, and whatever else you choose to track.", "Each part switches on or off, per person."],
   garage: ["Each car as a note: fuel, mileage and service, with graphs and averages over time.", "Tell Steward \"I just filled up the Sienna, 15 gallons, $56\" and it's logged.", "Oil changes and maintenance as reminders on the calendar. Later: OBD-II."],
   ledger: ["Fixed bills, flexible spending and paying off debt (snowball, avalanche), with interest.", "Bills on the calendar, so you see what's going out and when.", "Grocery receipts by photo or by voice; SimpleFIN or bank statements to import."],
   pets: ["Feeding and walks as routines or chores, medicines, vet visits and shots as reminders.", "One printable page for a pet sitter."],

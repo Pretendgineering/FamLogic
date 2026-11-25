@@ -254,6 +254,8 @@ so use the folders and fields below. Logs are dated lines in the body, newest la
 
 ```
 Outings/     one note per outing: 2026-11-29 Park loop.md   type: outing  (who, kind: walk|run|ride, distance, time)
+Health/<Name>/  per person: Steps.md, Food.md, Weight.md, Sleep.md...  type: health-log (metric, unit, goal)
+             body: dated lines, "- 2026-11-25: 8,412 steps" or "- 2026-11-25 12:30: Turkey sandwich, 420 kcal, P 28 C 40 F 14"
 Cars/        one note per car: Sienna.md                    type: car     (make, model, year, plate, mileage)
              body: "## Fuel" lines "- 2026-11-25: 15 gal, $56.00, 84,210 mi"; "## Service" lines "- 2026-10-02: oil change, 81,900 mi, $64"
 Budget/      Bills.md (type: bills; one line per bill: "- Electric: $120, day 15, monthly"),

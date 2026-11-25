@@ -33,7 +33,7 @@ var allModules = []ModuleInfo{
 	{"agents", "Steward", "AI & API", "Your family's AI helper, and API keys for your own agent.", true, false},
 	// Coming soon: they can be switched on now (a placeholder, and Steward can keep
 	// their notes in the vault already) and fill in as each is built.
-	{"outings", "Outings", "Walks & rides", "Family walks, and each person's runs and bike rides.", false, false},
+	{"outings", "Outings", "Health & activity", "Walks, runs and rides, steps, meals and macros, and health data from phones and watches.", false, false},
 	{"garage", "Garage", "Cars", "Fuel, mileage and maintenance for each car, with reminders.", false, false},
 	{"ledger", "Ledger", "Budget", "Bills, spending, groceries and paying off debt.", false, false},
 	{"pets", "Menagerie", "Pets", "Feeding, walks, medicines and vet visits.", false, false},

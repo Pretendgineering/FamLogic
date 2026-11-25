@@ -150,7 +150,12 @@ In this order (each is finished before the next starts):
 
 ### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
-- **Walks, runs and rides:** an optional tracker for family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like.
+- **Health & activity (Outings, grown from walks and runs):** family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like. Then:
+  - **Steps** from the phone and the Pebble, shown anywhere someone wants them (Home, a tile, the watch, the family display), or nowhere.
+  - **Meals and macros:** log what you ate by talking to Steward, by picking a Pantry recipe (its nutrition worked out once from the ingredients), or from a grocery receipt; calories, protein, carbs, fat and any goals you set. Ties into groceries (what's in the house), the meal plan and the budget.
+  - **Health data:** from Android's Health Connect and the Pebble's health service: sleep, heart rate, weight, water, medication taken, mood, cycle, or anything else a person wants to track, as dated notes they own.
+  - **Scheduling:** workouts, walks and meal times on the calendar and in routines.
+  - Every part, and every metric, is switched on or off per person; nothing is tracked unless someone chose it. Graphs and trends over any period; everything exportable.
 - **Cars (Garage):** each car as a note. Fuel log by talking to Steward ("I just filled up the Sienna, 15 gallons, 56 dollars" → a fuel entry with miles, cost and price per gallon), with graphs and averages over time (mpg, cost per mile, monthly spend); oil changes and maintenance as reminders on the calendar by date or mileage; registration and insurance renewals. Later: OBD-II (a Bluetooth adapter through the phone) for mileage and fault codes.
 - **Budget:** fixed recurring expenses, flexible variable spending, and debt payoff (snowball, avalanche, custom) with payoff calculators and interest; Steward can help build a budget from what you tell it. Imports transactions from SimpleFIN, or a bank statement uploaded by hand (CSV/PDF, OCR when needed), then sorted into categories. Ties into groceries, cars and bills. Needs a lot of honing.
 - **Bills on the calendar:** each bill's due day and amount shows in its own lane of the Datebook, so you see what's going out (and coming in) and when.
