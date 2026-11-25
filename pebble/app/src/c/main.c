@@ -636,10 +636,10 @@ static void request_action(ActionMenu *menu, const ActionMenuItem *item, void *c
 }
 
 // The nudges, as words (the watch's fonts don't have every emoji). The last two are for grown-ups only.
-static const char *NUDGE_KINDS[] = {"thumbs", "heart", "wave", "smile", "comehome", "cowboy", "alien", "ogre", "eggplant", "peach"};
-static const char *NUDGE_WORDS[] = {"Thumbs up", "Heart", "Wave", "Smile", "Come home", "Cowboy", "Alien", "Demon mask", "Eggplant", "Peach"};
-#define NUDGES_FOR_ALL 8
-#define NUDGES_ALL 10
+static const char *NUDGE_KINDS[] = {"thumbs", "heart", "wave", "smile", "comehome", "cowboy", "alien", "eggplant", "peach"};
+static const char *NUDGE_WORDS[] = {"Thumbs up", "Heart", "Wave", "Smile", "Come home", "Cowboy", "Alien", "Eggplant", "Peach"};
+#define NUDGES_FOR_ALL 7
+#define NUDGES_ALL 9
 
 static void add_nudges(ActionMenuLevel *level, bool adults, int max) {
   int n = adults ? NUDGES_ALL : NUDGES_FOR_ALL;
@@ -711,9 +711,8 @@ static void draw_nudge_icon(GContext *g, GRect r, const char *kind, GColor ink) 
     GPath *path = gpath_create(&info);
     gpath_draw_filled(g, path);
     gpath_destroy(path);
-  } else if (strcmp(kind, "smile") == 0 || strcmp(kind, "alien") == 0 || strcmp(kind, "cowboy") == 0 || strcmp(kind, "ogre") == 0) {
-    GColor face = strcmp(kind, "alien") == 0 ? PBL_IF_COLOR_ELSE(GColorGreen, ink)
-                : strcmp(kind, "ogre") == 0 ? PBL_IF_COLOR_ELSE(GColorRed, ink) : PBL_IF_COLOR_ELSE(GColorChromeYellow, ink);
+  } else if (strcmp(kind, "smile") == 0 || strcmp(kind, "alien") == 0 || strcmp(kind, "cowboy") == 0) {
+    GColor face = strcmp(kind, "alien") == 0 ? PBL_IF_COLOR_ELSE(GColorGreen, ink) : PBL_IF_COLOR_ELSE(GColorChromeYellow, ink);
     graphics_context_set_fill_color(g, face);
     graphics_fill_circle(g, GPoint(c.x, c.y + 2), rad - 3);
     graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorBlack, GColorBlack));
@@ -724,14 +723,6 @@ static void draw_nudge_icon(GContext *g, GRect r, const char *kind, GColor ink) 
       graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorWindsorTan, ink));
       graphics_fill_rect(g, GRect(c.x - 12, c.y - 7, 25, 3), 1, GCornersAll);
       graphics_fill_rect(g, GRect(c.x - 6, c.y - 13, 13, 7), 2, GCornersTop);
-    } else if (strcmp(kind, "ogre") == 0) { // horns
-      GPoint l[] = {{c.x - 9, c.y - 5}, {c.x - 5, c.y - 8}, {c.x - 11, c.y - 14}};
-      GPoint rt[] = {{c.x + 9, c.y - 5}, {c.x + 5, c.y - 8}, {c.x + 11, c.y - 14}};
-      GPathInfo a = {3, l}, b = {3, rt};
-      graphics_context_set_fill_color(g, face);
-      GPath *pa = gpath_create(&a), *pb = gpath_create(&b);
-      gpath_draw_filled(g, pa); gpath_draw_filled(g, pb);
-      gpath_destroy(pa); gpath_destroy(pb);
     }
   } else if (strcmp(kind, "thumbs") == 0) {
     graphics_context_set_fill_color(g, PBL_IF_COLOR_ELSE(GColorChromeYellow, ink));

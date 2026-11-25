@@ -59,7 +59,7 @@ func (s *Store) sosSeenNamesLocked(m *Member) []string {
 // the answer to "where are you?").
 var RequestKinds = map[string]bool{"pickup": true, "call": true, "where": true, "heart": true, "thumbs": true, "here": true,
 	// More nudges (0.20): a wave, a smile, "come home", and a few for fun.
-	"wave": true, "smile": true, "comehome": true, "cowboy": true, "alien": true, "ogre": true,
+	"wave": true, "smile": true, "comehome": true, "cowboy": true, "alien": true,
 	// Between adults only.
 	"eggplant": true, "peach": true, "coming": true}
 
@@ -68,7 +68,7 @@ var adultNudges = map[string]bool{"eggplant": true, "peach": true}
 
 // nudgeKinds are the friendly ones a parent can switch off for a child.
 var nudgeKinds = map[string]bool{"where": true, "heart": true, "thumbs": true, "here": true, "wave": true, "smile": true,
-	"comehome": true, "cowboy": true, "alien": true, "ogre": true, "eggplant": true, "peach": true}
+	"comehome": true, "cowboy": true, "alien": true, "eggplant": true, "peach": true}
 
 func isAdult(m *Member) bool { return m.role() == RoleParent || m.role() == RoleGrandparent }
 

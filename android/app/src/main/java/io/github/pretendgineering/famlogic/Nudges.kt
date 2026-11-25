@@ -16,7 +16,6 @@ object Nudges {
         Nudge("comehome", "🏠", "come home"),
         Nudge("cowboy", "🤠", "a cowboy"),
         Nudge("alien", "👽", "an alien"),
-        Nudge("ogre", "👹", "a demon mask"),
         Nudge("eggplant", "🍆", "an eggplant", adultsOnly = true),
         Nudge("peach", "🍑", "a peach", adultsOnly = true),
     )
