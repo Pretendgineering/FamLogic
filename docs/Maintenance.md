@@ -1,5 +1,7 @@
 # Weekly look-over
 
+(A developer document, kept in `docs/` rather than the user-facing wiki.)
+
 Started 2026-11-25 (0.39.1). Once a week, a careful debug and visual check, so the code stays
 tidy as it grows. **Surgical, not broad:** fix real problems; never change something just to
 change it. Each run ends with a patch release (bump `versionCode`/`versionName`) only if

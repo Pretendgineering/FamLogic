@@ -85,7 +85,6 @@ Status: ✅ done · 🔨 next · ⏳ queued
 - **Home:** the map tile takes any size (a plain preview when it's one tile wide or tall, its title bar from 2×2); dragging a tile now makes room wherever you hold it; the resize bars are easier to grab near the screen edge without triggering Back. Module switches live only in the console now: on a phone, tiles you don't want go in the drawer.
 
 ### Design rules
-The full design language, for every surface (app, console, watch, TV, e-ink, PWA), is in the [Style guide](Style-Guide.md).
 - **Say it short.** Descriptions, hints and empty states are one plain line; details live in the wiki.
 - **No emoji in text.** Emoji are for people's own icons and nudges, never in labels, descriptions or "nothing here" messages.
 - **The second colour is for small accents** (tile icons, the family name, selected chips and switches); the main colour is for actions.

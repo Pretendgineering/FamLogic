@@ -4,6 +4,8 @@ One look and one voice everywhere: the Android app, the web console, the Pebble,
 coming (the TV launcher, display tablets, TRMNL e-ink screens, a PWA). When something here and
 the code disagree, fix the code (or, if the code is right, update this page in the same change).
 The weekly look-over ([Maintenance](Maintenance.md)) checks against it.
+This is a developer document: it lives in `docs/`, not in the in-app wiki, which is for using
+FamLogic.
 
 ## 1. Voice
 
