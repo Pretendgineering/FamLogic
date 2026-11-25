@@ -113,7 +113,7 @@ The map, chat and safety features are what families use every day. Next, each ge
 - **Where's my ride?** Answer a "Pick me up" (or an SOS) with "On my way" and the other person sees how far you are and about how long until you get there.
 - **Call buttons** on SOS, pick-up, low-battery, quiet-phone and missed check-in alerts, for everyone who adds their number (Settings → You).
 
-### ⏳ 4. Guided setup (the on-ramp)
+### ✅ 4. Guided setup (the on-ramp), 0.37.0 (first version: modules, family name and PIN, people, Home and School, phones, a short tour; Settings → Server → Run setup again)
 A walkthrough in the web console that sets everything up properly the first time, by asking questions rather than showing settings, and can be run again later (Settings → Run setup again) to revisit any step:
 - **About you and the server:** your name, the family's name, the admin password, and the **parent PIN** (what it's for, and why children's devices need it).
 - **Who's in your family?** Add each person with their role, in plain words: "a parent", "a grandparent", "a child", "someone who doesn't use the app (a baby)".
@@ -124,7 +124,7 @@ A walkthrough in the web console that sets everything up properly the first time
 - **A short tour** at the end: where each setting lives now, so they can find it again.
 - Setup can't be skipped on a new server, only paused and resumed; everything it sets can be changed later.
 
-### ⏳ 5. Android widgets
+### ✅ 5. Android widgets, 0.37.0 (first version: Family, and Check in + SOS)
 - **Map snapshot,** **check in** in one tap, **SOS** (hold), **one person's card**, **latest chat message** with Reply, **talk to Mom** (for kids), **quick nudges**, **where's my ride?**. Module widgets come with each module.
 
 ### ⏳ 6. Modules, one at a time

@@ -32,6 +32,7 @@
       <a href="#/calendar" data-view="calendar" data-module="calendar"><span class="ri" data-icon="calendar"></span><span>Calendar</span></a>
       <a href="#/todos" data-view="todos" data-module="todos"><span class="ri" data-icon="check"></span><span>To-dos</span></a>
       <a href="#/chores" data-view="chores" data-module="chores"><span class="ri" data-icon="star"></span><span>Chores</span></a>
+      <a href="#/routines" data-view="routines" data-module="routines"><span class="ri" data-icon="check"></span><span>Routines</span></a>
       <a href="#/meals" data-view="meals" data-module="meals"><span class="ri" data-icon="meal"></span><span>Meals</span></a>
       <span class="rail-sep"></span>
       <a href="#/family" data-view="family"><span class="ri" data-icon="people"></span><span>Family</span></a>
@@ -90,7 +91,8 @@
       </div>
       <div class="panel wide-panel">
         <h2>Family displays</h2>
-        <p class="muted">Coming with the <strong>Family display</strong> module. A wall tablet or Android TV running the FamLogic app chooses <em>Use as a family display</em> and shows a pairing code; you approve it here and pick what it shows (calendar, chores, menus, who's where). Displays have no personal account, and you can unpair one at any time.</p>
+        <p class="muted">A wall tablet or TV showing the family's day. It has its own sign-in (no location, can't post), and you can sign it out here any time.</p>
+        <button type="button" id="pair-display">Pair a family display</button>
       </div>
     </main>
 
@@ -110,6 +112,7 @@
         <dl class="facts" id="server-facts"></dl>
         <div class="row">
           <a class="button secondary" href="/api/admin/backup" download title="The whole data file. It contains password hashes: keep it somewhere safe.">Download backup</a>
+          <button type="button" class="secondary" id="rerun-setup">Run setup again</button>
           <button id="logout-btn2" class="secondary">Log out</button>
         </div>
         <h2>Notes vault</h2>
@@ -219,10 +222,9 @@
 
   <dialog id="setup-dialog">
     <form method="dialog" id="setup-form">
-      <h2>Welcome to FamLogic</h2>
-      <p>Choose what your family wants to use. You can change this any time in <strong>Settings → Modules</strong>.</p>
-      <ul class="list modules" id="setup-modules"></ul>
-      <div class="row"><button type="submit">Start</button></div>
+      <div class="muted small" id="setup-step-count"></div>
+      <div id="setup-step"></div>
+      <div class="row setup-nav"><button type="button" class="secondary" id="setup-back">Back</button><span class="grow"></span><button type="button" class="link" id="setup-later">Finish later</button><button type="submit" id="setup-next">Next</button></div>
     </form>
   </dialog>
 

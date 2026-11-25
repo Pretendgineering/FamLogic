@@ -950,7 +950,7 @@ document.querySelectorAll("[data-icon]").forEach((s) => { s.innerHTML = icon(s.d
 
 let modules = [];      // from /api/admin/modules: id, name, description, available, enabled
 let modulesLoaded = false;
-const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "star", meals: "meal", display: "device", agents: "gear" };
+const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "star", meals: "meal", display: "device", agents: "gear", routines: "check" };
 const moduleInfo = (id) => modules.find((m) => m.id === id);
 const moduleOn = (id) => !modulesLoaded || !!(moduleInfo(id) || {}).enabled;
 
@@ -1074,7 +1074,7 @@ function avatarOf(m) {
   return el("div", { class: "avatar" + (m.emoji ? " emoji" : ""), style: `background:${m.color}` }, m.emoji || initial(m.name));
 }
 
-const ACCESS_LABELS = { admin: "Admin", parent: "Parent", grandparent: "Grandparent", older_child: "Older child", younger_child: "Younger child", dependent: "Doesn't use the app" };
+const ACCESS_LABELS = { display: "Family display", admin: "Admin", parent: "Parent", grandparent: "Grandparent", older_child: "Older child", younger_child: "Younger child", dependent: "Doesn't use the app" };
 const displayName = (m) => plainNames ? (m.plain || m.name) : m.name;
 
 function renderFamily() {
@@ -1479,19 +1479,103 @@ async function loadModules() {
   }
 }
 
-// First run: which modules does this family want?
+// Guided setup: a few questions instead of settings, the first time (and again
+// from Settings → Server → Run setup again). Every step can be changed later.
 const setupDialog = $("#setup-dialog");
+let setupStep = 0;
+const setupMade = []; // invites made along the way, shown at the end
+const SETUP_STEPS = [
+  { title: "Welcome to FamLogic", render(box) {
+      box.append(el("p", {}, "Choose what your family wants to use."), el("ul", { class: "list modules", id: "setup-modules" }));
+      moduleRows($("#setup-modules"), (m) => m.enabled);
+    },
+    async save() { setModules(await api("PUT", "/api/admin/modules", { enabled: chosenModules($("#setup-modules")), setupDone: true })); } },
+  { title: "About your family", render(box) {
+      box.append(el("label", {}, "Your family's name", el("input", { id: "setup-family", value: $("#family-name").textContent || "", maxlength: "40", placeholder: "e.g. The Bakers" })),
+        el("p", { class: "muted small" }, "A parent PIN keeps settings closed on children's phones and family displays; you type it to open them."),
+        el("label", {}, "Parent PIN (4 to 8 digits, optional)", el("input", { id: "setup-pin", inputmode: "numeric", maxlength: "8", placeholder: "Leave empty to set later" })));
+    },
+    async save() {
+      const name = $("#setup-family").value.trim();
+      if (name) { await api("PUT", "/api/admin/family", { name }); $("#family-name").textContent = name; }
+      const pin = $("#setup-pin").value.trim();
+      if (pin) await api("PUT", "/api/admin/pin", { pin });
+    } },
+  { title: "Who's in your family?", render(box) {
+      const rows = el("div", { id: "setup-people", class: "setup-people" });
+      const addRow = () => rows.append(el("div", { class: "row" }, el("input", { placeholder: "Name", maxlength: "40" }),
+        el("select", {}, ...[["parent", "A parent"], ["grandparent", "A grandparent"], ["older_child", "A child who reads"], ["younger_child", "A younger child"], ["dependent", "Doesn't use the app (a baby)"]].map(([v, t]) => el("option", { value: v }, t)))));
+      addRow(); addRow();
+      const more = el("button", { type: "button", class: "link" }, "Add another person");
+      more.addEventListener("click", addRow);
+      box.append(el("p", { class: "muted small" }, "Leave a row empty to skip it. You can add people any time on the Family page."), rows, more);
+    },
+    async save() {
+      for (const r of $("#setup-people").children) {
+        const name = r.querySelector("input").value.trim();
+        const access = r.querySelector("select").value;
+        if (!name) continue;
+        if (access === "dependent") { await api("POST", "/api/admin/dependents", { name }); continue; }
+        setupMade.push(await api("POST", "/api/admin/invites", { name, access }));
+      }
+    } },
+  { title: "Places", render(box) {
+      box.append(el("p", { class: "muted small" }, "Fences tell you when someone arrives or leaves. Add Home now (and School, if you like); you can draw more on the map later."),
+        el("label", {}, "Home address", el("input", { id: "setup-home", placeholder: "Street, town" })),
+        el("label", {}, "School address (optional)", el("input", { id: "setup-school", placeholder: "School name, town" })));
+      if (!serverFeatures.includes("geocode")) box.append(el("p", { class: "banner" }, "Address search is off on this server: add fences on the map instead."));
+    },
+    async save() {
+      for (const [id, name] of [["setup-home", "Home"], ["setup-school", "School"]]) {
+        const q = ($("#" + id) || {}).value?.trim();
+        if (!q || !serverFeatures.includes("geocode")) continue;
+        const res = await api("GET", "/api/admin/geocode?q=" + encodeURIComponent(q));
+        const hit = (res.results || res)[0];
+        if (!hit) { alert(`Couldn't find "${q}". Add ${name} on the map instead.`); continue; }
+        await api("POST", "/api/admin/places", { circleId: (circles[0] || {}).id, name, lat: hit.lat, lon: hit.lon, radius: name === "Home" ? 120 : 200 });
+      }
+    } },
+  { title: "Getting phones connected", render(box) {
+      if (!setupMade.length) { box.append(el("p", {}, "When you invite people on the Family page, each gets a link or code for their phone.")); return; }
+      box.append(el("p", {}, "Open each link on that person's phone (or show the code to scan). Younger children need no password."),
+        el("ul", { class: "list" }, ...setupMade.map((inv) => {
+          const show = el("button", { type: "button", class: "secondary" }, "Show code");
+          show.addEventListener("click", () => showLink(inv, `For ${inv.name}`, "Open this on their phone, or scan the code."));
+          return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, inv.name), el("div", { class: "sub" }, inv.link)), show);
+        })));
+    }, async save() {} },
+  { title: "You're set", render(box) {
+      box.append(el("ul", { class: "plain" },
+        el("li", {}, el("strong", {}, "Family: "), "people, roles and invites."),
+        el("li", {}, el("strong", {}, "Access & Control: "), "what each child can use, their home screen, the parent PIN."),
+        el("li", {}, el("strong", {}, "Settings: "), "modules, backups, AI and API, and Run setup again.")));
+    }, async save() {} },
+];
+function renderSetup() {
+  const st = SETUP_STEPS[setupStep];
+  const box = $("#setup-step");
+  box.replaceChildren(el("h2", {}, st.title));
+  st.render(box);
+  $("#setup-step-count").textContent = `Step ${setupStep + 1} of ${SETUP_STEPS.length}`;
+  $("#setup-back").hidden = setupStep === 0;
+  $("#setup-later").hidden = setupStep === 0 || setupStep === SETUP_STEPS.length - 1;
+  $("#setup-next").textContent = setupStep === SETUP_STEPS.length - 1 ? "Done" : "Next";
+}
 function openSetup() {
-  moduleRows($("#setup-modules"), (m) => m.enabled);
+  setupStep = 0;
+  setupMade.length = 0;
+  renderSetup();
   if (!setupDialog.open) setupDialog.showModal();
 }
+$("#setup-back").addEventListener("click", () => { setupStep = Math.max(0, setupStep - 1); renderSetup(); });
+$("#setup-later").addEventListener("click", () => { setupDialog.close(); refresh(); });
 $("#setup-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
-    setModules(await api("PUT", "/api/admin/modules", { enabled: chosenModules($("#setup-modules")), setupDone: true }));
-    setupDialog.close();
-    showView(view === "home" ? "home" : view);
-    refresh();
+    await SETUP_STEPS[setupStep].save();
+    if (setupStep === SETUP_STEPS.length - 1) { setupDialog.close(); showView(view === "home" ? "home" : view); refresh(); return; }
+    setupStep++;
+    renderSetup();
   } catch (err) { alert(err.message); }
 });
 
@@ -2139,3 +2223,15 @@ async function renderMeals(box) {
     el("h2", {}, "Recipes"), recipes.length ? el("ul", { class: "list" }, ...recipes) : el("p", { class: "muted" }, "No recipes yet."),
     ...(d.canEdit ? [el("h2", {}, "Add a recipe"), form] : []));
 }
+
+// Pairing a family display: a one-time code for the display's FamLogic app.
+document.getElementById("pair-display")?.addEventListener("click", async () => {
+  const name = prompt("A name for the display", "Kitchen display");
+  if (!name) return;
+  try {
+    const inv = await api("POST", "/api/admin/invites", { name: name.trim(), access: "display" });
+    showLink(inv, "Pair the display", "On the display, open FamLogic and scan this code or type the code. It signs in as the family display: it shows the family's day, shares no location and posts nothing.");
+    refresh();
+  } catch (err) { alert(err.message); }
+});
+$("#rerun-setup")?.addEventListener("click", () => openSetup());

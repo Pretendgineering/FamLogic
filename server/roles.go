@@ -37,6 +37,7 @@ const (
 	AccessYoungerChild = "younger_child"
 	AccessDependent    = "dependent"
 	AccessGrandparent  = "grandparent"
+	AccessDisplay      = "display" // a family display (Corkboard): looks, doesn't share a location
 )
 
 var ErrNeedsOwner = errors.New("only the main admin can change who is an admin")
@@ -52,6 +53,8 @@ func (m *Member) role() string {
 // access is the console's label for this person's role.
 func (m *Member) access() string {
 	switch {
+	case m.Display:
+		return AccessDisplay
 	case m.role() == RoleDependent:
 		return AccessDependent
 	case m.role() == RoleGrandparent:
@@ -157,7 +160,7 @@ func inviteAccess(a string) (string, bool) {
 	switch a {
 	case "", AccessParent:
 		return AccessParent, true
-	case AccessOlderChild, AccessYoungerChild, AccessGrandparent:
+	case AccessOlderChild, AccessYoungerChild, AccessGrandparent, AccessDisplay:
 		return a, true
 	}
 	return "", false // admins are made from parents; non-users aren't invited
@@ -172,6 +175,18 @@ func applyInviteAccess(m *Member, inv *Invite) {
 		m.Role = RoleChild
 	case AccessGrandparent:
 		m.Role = RoleGrandparent
+	case AccessDisplay:
+		// Signs in with a code like a younger child; sees the family's day, posts nothing.
+		m.Role, m.Display = RoleChild, true
+		k := &KidSettings{Preset: "younger", Modules: map[string]string{}, Features: map[string]bool{}}
+		for _, mod := range kidModules {
+			k.Modules[mod.ID] = LevelView
+		}
+		k.Modules["chat"] = LevelOff
+		for _, f := range kidFeatures {
+			k.Features[f.ID] = false
+		}
+		m.Kid = k
 	default:
 		m.Role = RoleParent
 	}

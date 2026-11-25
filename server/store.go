@@ -120,6 +120,8 @@ type Member struct {
 	Role            string `json:"role,omitempty"`
 	Admin           bool   `json:"admin,omitempty"`
 	PasswordAllowed bool   `json:"passwordAllowed,omitempty"`
+	// A family display (Corkboard): a wall tablet or TV signed in as itself.
+	Display bool `json:"display,omitempty"`
 
 	// A child's switches, set by parents (see kids.go), and the tiles on this
 	// person's home screen (nil = the app's default).
@@ -176,6 +178,7 @@ type data struct {
 	LastEventID int64       `json:"lastEventId"`
 	Events      []Event     `json:"events,omitempty"`
 	CheckPlans  []CheckPlan `json:"checkPlans,omitempty"`
+	FamilyName  string      `json:"familyName,omitempty"` // set in the console (else FAMILY_NAME)
 }
 
 // Store keeps everything in memory and writes it to one JSON file.
@@ -426,7 +429,7 @@ func (s *Store) UpdateLocation(id string, loc Location) error {
 	if !ok {
 		return ErrNotFound
 	}
-	if m.Paused || (m.Loc != nil && loc.Time < m.Loc.Time) {
+	if m.Paused || m.Display || (m.Loc != nil && loc.Time < m.Loc.Time) {
 		return nil
 	}
 	wasDriving := m.Loc != nil && m.Loc.Driving
@@ -544,4 +547,17 @@ func normalizeCode(c string) string {
 func hashToken(t string) string {
 	h := sha256.Sum256([]byte(t))
 	return hex.EncodeToString(h[:])
+}
+
+func (s *Store) FamilyName() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.d.FamilyName
+}
+
+func (s *Store) SetFamilyName(n string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.d.FamilyName = n
+	return s.saveLocked()
 }

@@ -46,6 +46,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FamLogic">
 
+        <!-- Home-screen widgets. -->
+        <receiver android:name=".FamilyWidgetReceiver" android:exported="false" android:label="@string/widget_family_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_family" />
+        </receiver>
+        <receiver android:name=".QuickWidgetReceiver" android:exported="false" android:label="@string/widget_quick_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_quick" />
+        </receiver>
         <!-- Someone's SOS, full screen even over the lock screen. -->
         <activity
             android:name=".SosAlertActivity"

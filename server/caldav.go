@@ -50,7 +50,7 @@ func (b *davBackend) calPath(ctx context.Context) string {
 
 func (b *davBackend) familyCalendar(ctx context.Context) caldav.Calendar {
 	return caldav.Calendar{
-		Path: b.calPath(ctx), Name: b.s.cfg.FamilyName, Description: "The family calendar (FamLogic Datebook)",
+		Path: b.calPath(ctx), Name: b.s.familyName(), Description: "The family calendar (FamLogic Datebook)",
 		SupportedComponentSet: []string{ical.CompEvent}, Color: "#6F5AA8", MaxResourceSize: 1 << 20,
 		ReadOnly: !b.s.canEditCalendar(davUser(ctx)),
 	}

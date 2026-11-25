@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">FamLogic</string>
+    <string name="widget_family_description">Who\'s where in your family</string>
+    <string name="widget_quick_description">Check in, and SOS</string>
+    <string name="widget_family_label">Family</string>
+    <string name="widget_quick_label">Check in and SOS</string>
 </resources>

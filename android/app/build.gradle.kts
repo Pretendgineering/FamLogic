@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.pretendgineering.famlogic"
         minSdk = 26
         targetSdk = 35
-        versionCode = 58
-        versionName = "0.36.0"
+        versionCode = 59
+        versionName = "0.37.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo
@@ -84,6 +84,7 @@ dependencies {
     implementation(composeBom)
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.glance:glance-appwidget:1.1.1") // home-screen widgets
     implementation("androidx.compose.material:material-icons-extended") // camera, kid-friendly big icons (unused ones are stripped from releases)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")

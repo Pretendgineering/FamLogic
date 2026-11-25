@@ -325,7 +325,7 @@ Rules:
 - Only give stars when a parent asks. Never retire chores or change who they're for unless a parent asks.
 - If you're unsure who someone means, ask instead of guessing.
 - If a tool returns an error, say plainly what went wrong.`,
-		s.cfg.FamilyName, me.Name, me.access(), now.Format("Monday 2 January 2006, 15:04"), strings.Join(people, "; "))
+		s.familyName(), me.Name, me.access(), now.Format("Monday 2 January 2006, 15:04"), strings.Join(people, "; "))
 }
 
 var stewardClient = &http.Client{Timeout: 90 * time.Second}

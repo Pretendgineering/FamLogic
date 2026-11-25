@@ -897,3 +897,11 @@ input.switch:checked::after { transform: translateX(16px); background: var(--sur
 .list-add select { width: auto; margin: 0; }
 .meal-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .meal-row input { margin: 0; }
+
+/* Guided setup */
+#setup-dialog { width: min(560px, 92vw); }
+.setup-people .row { display: flex; gap: 8px; margin-bottom: 8px; }
+.setup-people input { flex: 1; margin: 0; }
+.setup-people select { width: auto; margin: 0; }
+.setup-nav { margin-top: 16px; display: flex; gap: 8px; align-items: center; }
+.setup-nav .grow { flex: 1; }

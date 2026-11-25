@@ -28,6 +28,8 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `PATCH` or `POST /api/me` `{name?, paused?, shareLowBattery?, home?, big?, pictures?, voice?}` | `Bearer <token>` | Rename yourself / pause / feature switches / arrange your home screen (adults; parents arrange children's) |
 | `DELETE /api/me` | `Bearer <token>` | Leave |
 | `DELETE /api/admin/members/{id}/devices/{dev}` | admin session | Sign out one device (the console's Devices page lists each one) |
+| `PUT /api/admin/family {name}` | admin session | The family's name (else `FAMILY_NAME`) |
+| `POST /api/admin/invites {name, access: "display"}` | admin session | Pair a family display: a code for the display's app; it signs in as a display (no location, posts nothing, sees the day) |
 | `/api/admin/*` | console login cookie | Admin pages (invites, members, roles, modules, backups). `GET /api/admin/session` says who's logged in |
 | `/api/chat`, `/api/chat/{id}/messages`, … | `Bearer <token>` or a parent's console session | Chat: see [Architecture](Architecture.md#chat-built-in-0160) |
 | `POST /api/chat/{id}/messages` `{text, replyTo?}` or multipart (`photo` or `audio` + `audioMs`, `text`, `replyTo`) | `Bearer <token>` | Send a message, a photo or a voice message (AAC .m4a, Ogg or WAV, up to 4 MB) |

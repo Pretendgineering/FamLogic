@@ -117,6 +117,8 @@ fun SetupScreen(prefs: Prefs, initialServer: String, initialCode: String, onJoin
         prefs.memberId = res.member.id
         prefs.role = res.member.role
         prefs.access = res.member.access
+        // Paired as a family display (Corkboard): this device is a display.
+        if (res.member.access == "display") prefs.deviceMode = "display"
         prefs.serverFeatures = res.server.features ?: emptySet()
         prefs.username = res.username
         prefs.familyName = res.server.name

@@ -298,7 +298,9 @@ class Api(private val baseUrl: String, private val token: String = "") {
     suspend fun members(since: Long): MembersResponse {
         val o = request("GET", "/api/members?since=$since")
         val arr = o.getJSONArray("members")
-        val list = (0 until arr.length()).map { parseMember(arr.getJSONObject(it)) }
+        val meID = o.getString("me")
+        // Family displays (Corkboard) aren't people: not on the map or in lists.
+        val list = (0 until arr.length()).map { parseMember(arr.getJSONObject(it)) }.filter { it.access != "display" || it.id == meID }
         Directory.phones = list.filter { it.phone.isNotEmpty() }.associate { it.id to it.phone }
         Directory.names = list.associate { it.id to it.name }
         val settings = o.optJSONObject("settings")

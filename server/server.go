@@ -212,6 +212,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/vault", s.admin(s.handleAdminVault))
 	mux.HandleFunc("PUT /api/family/pin", s.device(s.handleFamilyPIN))
 	mux.HandleFunc("GET /api/admin/pin", s.admin(s.handleAdminPIN))
+	mux.HandleFunc("PUT /api/admin/family", s.admin(s.handleAdminFamily))
 	mux.HandleFunc("PUT /api/admin/pin", s.admin(s.handleAdminPIN))
 	mux.HandleFunc("GET /api/members/{id}/kid", s.device(s.handleKidSettings))
 	mux.HandleFunc("PUT /api/members/{id}/kid", s.device(s.handleKidSettings))
@@ -367,7 +368,7 @@ func (s *Server) serverInfo() map[string]any {
 		}
 	}
 	return map[string]any{
-		"name":            s.cfg.FamilyName,
+		"name":            s.familyName(),
 		"version":         version,
 		"tileUrl":         s.cfg.TileURL,
 		"tileUrlDark":     s.cfg.TileURLDark,
@@ -1759,7 +1760,7 @@ func (s *Server) handleJoinPage(w http.ResponseWriter, r *http.Request) {
 	q := url.Values{"server": {base}, "code": {code}}
 	inv, member, ok := s.store.InviteInfo(code)
 	data := map[string]any{
-		"Family":  s.cfg.FamilyName,
+		"Family":  s.familyName(),
 		"Server":  base,
 		"Code":    code,
 		"AppLink": template.URL("famlogic://join?" + q.Encode()),
@@ -1791,4 +1792,32 @@ func (s *Server) handleAdminSignOutDevice(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// familyName: as set in the console, else FAMILY_NAME.
+func (s *Server) familyName() string {
+	if n := s.store.FamilyName(); n != "" {
+		return n
+	}
+	return s.cfg.FamilyName
+}
+
+// PUT /api/admin/family {name}: the family's name, shown in the apps and console.
+func (s *Server) handleAdminFamily(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	name := strings.Join(strings.Fields(body.Name), " ")
+	if name == "" || utf8.RuneCountInString(name) > 40 {
+		writeError(w, http.StatusBadRequest, "a name of up to 40 characters, like The Bakers")
+		return
+	}
+	if err := s.store.SetFamilyName(name); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"name": name})
 }

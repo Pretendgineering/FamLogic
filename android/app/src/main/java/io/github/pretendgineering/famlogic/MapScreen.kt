@@ -242,7 +242,7 @@ fun MapScreen(
                 prefs.locationModule = locationOn
                 LocationService.start(context)
             }
-            res.members.find { it.id == prefs.memberId }?.let { prefs.role = it.role; prefs.access = it.access }
+            res.members.find { it.id == prefs.memberId }?.let { prefs.role = it.role; prefs.access = it.access; if (it.access == "display") prefs.deviceMode = "display" }
             Access.update(context, res)
             if (res.features != prefs.serverFeatures) {
                 prefs.serverFeatures = res.features

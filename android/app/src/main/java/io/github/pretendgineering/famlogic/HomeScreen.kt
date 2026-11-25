@@ -207,6 +207,7 @@ fun HomeScreen(
 
     val gate = rememberSettingsGate(prefs, onOpenSettings)
     LaunchedEffect(Unit) { if (HomeLayout.columns == 0) HomeLayout.columns = prefs.homeColumns }
+    LaunchedEffect(Unit) { Widgets.refresh(context) } // home-screen widgets catch up when the app opens
     // Tiles across: the person's choice (Look and Feel), or 2 on phones and 3 on tablets.
     val cols = if (landscape && tiles.any { it.id == "map" } && !editing) 2 else HomeLayout.columns(config.screenWidthDp)
 
