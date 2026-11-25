@@ -744,7 +744,7 @@ private fun ConversationView(
                         if (canIcon) {
                             DropdownMenuItem(text = { Text("Change icon…") }, leadingIcon = { Icon(Icons.Filled.Face, null) }, onClick = { menu = false; iconPicking = true })
                         }
-                        if (moderator && conv != null) {
+                        if (moderator) {
                             HorizontalDivider()
                             if (conv.status == "pending") DropdownMenuItem(text = { Text("Say yes to this group") }, leadingIcon = { Icon(Icons.Filled.Check, null) }, onClick = { menu = false; moderate("approve") })
                             when (conv.status) {

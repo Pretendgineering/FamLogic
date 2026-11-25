@@ -21,39 +21,21 @@ func (s *Store) Snapshot() ([]byte, error) {
 	return json.MarshalIndent(s.d, "", "  ")
 }
 
-// DailyBackup writes today's backup if there isn't one yet and deletes all but the newest `keep`.
+// DailyBackup writes today's backup if there isn't one yet and deletes all but the
+// newest `keep` (then runs the other daily backups, e.g. the chat database).
 func (s *Store) DailyBackup(dir string, keep int) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	name := filepath.Join(dir, "famlogic-"+time.Now().Format("2006-01-02")+".json")
-	if _, err := os.Stat(name); err != nil {
+	err := keepDaily(dir, "famlogic-", ".json", keep, func(path string) error {
 		b, err := s.Snapshot()
 		if err != nil {
 			return err
 		}
-		tmp := name + ".tmp"
-		if err := os.WriteFile(tmp, b, 0o600); err != nil {
-			return err
-		}
-		if err := os.Rename(tmp, name); err != nil {
-			return err
-		}
-	}
-	entries, err := os.ReadDir(dir)
+		return os.WriteFile(path, b, 0o600)
+	})
 	if err != nil {
 		return err
-	}
-	var backups []string
-	for _, e := range entries {
-		if n := e.Name(); strings.HasPrefix(n, "famlogic-") && strings.HasSuffix(n, ".json") {
-			backups = append(backups, n)
-		}
-	}
-	sort.Strings(backups) // dates sort in order
-	for len(backups) > keep {
-		_ = os.Remove(filepath.Join(dir, backups[0]))
-		backups = backups[1:]
 	}
 	for _, hook := range s.backupHooks {
 		if err := hook(dir, keep); err != nil {

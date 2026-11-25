@@ -151,6 +151,19 @@ func (s *Server) personID(who string) string {
 	return who
 }
 
+// peopleIDs turns a list of names or ids from the model into member ids.
+func (s *Server) peopleIDs(v any) []string {
+	who := []string{}
+	if list, ok := v.([]any); ok {
+		for _, w := range list {
+			if ws, ok := w.(string); ok {
+				who = append(who, s.personID(ws))
+			}
+		}
+	}
+	return who
+}
+
 func argStr(a map[string]any, k string) string {
 	v, _ := a[k].(string)
 	return strings.TrimSpace(v)
@@ -182,15 +195,7 @@ var stewardTools = []stewardTool{
 			if n, ok := a["stars"].(float64); ok {
 				body["stars"] = int(n)
 			}
-			who := []string{}
-			if list, ok := a["who"].([]any); ok {
-				for _, w := range list {
-					if ws, ok := w.(string); ok {
-						who = append(who, s.personID(ws))
-					}
-				}
-			}
-			body["who"] = who
+			body["who"] = s.peopleIDs(a["who"])
 			return s.callAs(me, s.handleCreateChore, "POST", "/api/chores", nil, body)
 		}},
 	{"complete_chore", "Tick a chore off as done. Only for the person who did it, or when a parent says so.", obj(map[string]any{
@@ -230,15 +235,7 @@ var stewardTools = []stewardTool{
 			if e := argStr(a, "every"); e != "" {
 				body["every"] = e
 			}
-			who := []string{}
-			if list, ok := a["who"].([]any); ok {
-				for _, w := range list {
-					if ws, ok := w.(string); ok {
-						who = append(who, s.personID(ws))
-					}
-				}
-			}
-			body["who"] = who
+			body["who"] = s.peopleIDs(a["who"])
 			return s.callAs(me, s.handleSaveEvent, "POST", "/api/events", nil, body)
 		}},
 	{"list_lists", "Shared lists (shopping, packing) and to-dos, with their items (id, text, done).", obj(map[string]any{}),

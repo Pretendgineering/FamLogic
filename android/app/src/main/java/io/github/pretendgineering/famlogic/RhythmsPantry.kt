@@ -275,12 +275,14 @@ fun MealsScreen(prefs: Prefs) {
                     Text("Week " + data.week.substringAfter("-W").trimStart('0'), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = { week = shiftWeek(data.week, 1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next week") }
                 }
+                // One parser and one formatter for the whole week, not one per day on every redraw.
+                val parse = remember { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US) }
+                val show = remember { java.text.DateFormat.getDateInstance(java.text.DateFormat.FULL) }
                 LazyColumn(contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(data.days, key = { it.date }) { d ->
                         ElevatedCard(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(14.dp)) {
-                                val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(d.date)
-                                Text(java.text.DateFormat.getDateInstance(java.text.DateFormat.FULL).format(day!!), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                                Text(runCatching { show.format(parse.parse(d.date)!!) }.getOrDefault(d.date), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                                 MEALS.forEach { meal ->
                                     Row(Modifier.fillMaxWidth().clickable(enabled = data.canEdit) { setting = d.date to meal }.padding(vertical = 4.dp)) {
                                         Text(meal, Modifier.width(90.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)

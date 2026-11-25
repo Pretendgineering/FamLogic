@@ -987,9 +987,6 @@ const MODULE_PLANS = {
   profiles: ["Allergies, medicines, sleep and naps, likes and dislikes, birthday, sizes.", "Parents' names, phone numbers and emergency contacts.", "One printable page for babysitters and grandparents."],
   homestead: ["Bin and recycling day on the calendar, and as a chore if you like.", "Air filters, smoke alarms, gutters and the other upkeep a home needs, owned or rented, as reminders."],
   contacts: ["The family's address book as notes, synced with phones over CardDAV.", "Linked to people, pets, cars and the home (the vet, the mechanic, the plumber)."],
-  calendar: ["Shared calendar with CalDAV sync.", "Events kept as Markdown in the vault."],
-  todos: ["To-dos and shared lists.", "Kept as Markdown task lists in the vault."],
-  meals: ["Weekly meal plans and recipes.", "Ingredients go to the shopping list."],
 };
 
 let view = "";
@@ -1037,13 +1034,6 @@ function renderView() {
   else if (view === "settings") renderSettings();
   else if (view === "chat" && (moduleInfo("chat") || {}).available) renderChat();
   else if (moduleInfo(view) && view !== "thereabouts") renderModulePage(view);
-}
-
-function card(href, iconName, title, text, cls = "") {
-  const a = el("a", { class: "card-link " + cls, href });
-  a.innerHTML = `<span class="ri">${icon(iconName)}</span>`;
-  a.append(el("h3", {}, title), el("p", {}, text));
-  return a;
 }
 
 // Home: a dashboard of everything at once (who's where, today, what's coming,
@@ -1127,7 +1117,7 @@ async function renderHome() {
 }
 
 // The home map: everyone sharing, fitted to them, a click away from the full map.
-let homeMap = null, homeTiles = "", homeMarkers = [];
+let homeMap = null, homeTiles = "", homeMarkers = [], homeFitFor = "";
 function homeMapDraw() {
   const box = $("#home-map");
   if (!box || !moduleOn("thereabouts") || typeof L === "undefined") return;
@@ -1151,9 +1141,12 @@ function homeMapDraw() {
       html: `<div class="avatar${m.sosSince ? " sos" : ""}${m.emoji ? " emoji" : ""}" style="background:${m.color}">${m.emoji || initial(m.name)}</div>` }) }).bindTooltip(m.name).addTo(homeMap));
   }
   if (!pts.length) for (const p of places) pts.push([p.lat, p.lon]);
+  // Fit to everyone once, and again only when who's on the map changes, so a
+  // zoom or pan isn't undone by the 10-second refresh.
+  const fitFor = lastMembers.filter((m) => m.loc && !m.paused).map((m) => m.id).join(",") || "places";
   setTimeout(() => {
     homeMap.invalidateSize();
-    if (pts.length) homeMap.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
+    if (pts.length && fitFor !== homeFitFor) { homeFitFor = fitFor; homeMap.fitBounds(pts, { padding: [40, 40], maxZoom: 15 }); }
   }, 0);
 }
 
@@ -1480,7 +1473,7 @@ document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.addEvent
 
 function moduleRows(target, checked) {
   target.replaceChildren(...modules.map((m) => {
-    const box = el("input", { type: "checkbox", "data-module": m.id });
+    const box = el("input", { type: "checkbox", class: "switch", role: "switch", "data-module": m.id });
     box.checked = checked(m);
     return el("li", {}, el("label", {},
       box,
@@ -1703,7 +1696,6 @@ let chatMsgs = [];
 let chatTimer = null;
 const personById = (id) => lastMembers.find((m) => m.id === id);
 const nameOf = (id) => (personById(id) || {}).name || "Someone";
-const chatUnread = () => chatConvs.reduce((n, c) => n + (c.unread || 0), 0);
 const chatBase = () => me.owner ? "/api/admin/chat" : "/api/chat";
 
 async function loadChats() {
@@ -2310,7 +2302,7 @@ async function renderMeals(box) {
     const dt = new Date(day.date + "T12:00");
     return el("li", {}, el("span", { class: "feed-time muted small" }, dt.toLocaleDateString([], { weekday: "short", day: "numeric" })),
       el("div", { class: "grow meal-row" }, ...meals.map((m) => {
-        const inp = el("input", { value: day.meals[m] || "", placeholder: m, maxlength: "100", ...(d.canEdit ? {} : { readonly: "" }) });
+        const inp = el("input", { value: day.meals[m] || "", "aria-label": m, maxlength: "100", ...(d.canEdit ? {} : { readonly: "" }) });
         inp.addEventListener("change", async () => { try { await api("PUT", `/api/meals/${d.week}`, { date: day.date, meal: m, dish: inp.value }); } catch (err) { alert(err.message); } });
         return inp;
       })));
@@ -2338,7 +2330,7 @@ async function renderMeals(box) {
     if (!rt.value.trim()) return;
     try { await api("POST", "/api/recipes", { title: rt.value.trim(), ingredients: ing.value.split("\n").map((x) => x.trim()).filter(Boolean), method: method.value }); renderMeals(box); } catch (err) { alert(err.message); }
   });
-  box.replaceChildren(el("div", { class: "row" }, prev, el("strong", {}, "Week " + Number(d.week.split("-W")[1])), next), el("div", { class: "meals-head" }, el("span"), ...meals.map((m) => el("span", { class: "muted small" }, m))), el("ul", { class: "list meals-week" }, ...rows),
+  box.replaceChildren(el("div", { class: "row", style: "align-items:center" }, prev, el("strong", {}, "Week " + Number(d.week.split("-W")[1])), next), el("div", { class: "meals-head" }, el("span"), ...meals.map((m) => el("span", { class: "muted small" }, m))), el("ul", { class: "list meals-week" }, ...rows),
     el("h2", {}, "Recipes"), recipes.length ? el("ul", { class: "list" }, ...recipes) : el("p", { class: "muted" }, "No recipes yet."),
     ...(d.canEdit ? [el("h2", {}, "Add a recipe"), form] : []));
 }
