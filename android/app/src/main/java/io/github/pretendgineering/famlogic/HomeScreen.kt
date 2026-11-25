@@ -85,6 +85,13 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.HomeRepairService
+import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ElevatedCard
@@ -177,7 +184,9 @@ fun HomeScreen(
         "checkin" -> locationOn && Access.can("checkin") && "checkin" in features && !Access.isDisplay
         "convo.new" -> false // only while a new chat shortcut waits for its chat
         // Modules still being built: "coming soon" tiles, so a layout can be planned.
-        "nudges", "ride", "steward" -> t !in Modules.hidden
+        "nudges", "ride" -> t !in Modules.hidden
+        "steward" -> Steward.available(prefs) && t !in Modules.hidden
+        in SOON_TILES -> "soon:$t" in features
         "chores" -> Modules.has(features, Modules.CHORES) && Access.can("chores") && prefs.access != "dependent"
         "todos" -> Modules.has(features, Modules.TODOS) && Access.can("todos") && prefs.access != "dependent"
         "calendar" -> Modules.has(features, Modules.CALENDAR) && Access.can("calendar") && prefs.access != "dependent"
@@ -275,6 +284,8 @@ fun HomeScreen(
                     "calendar" -> CalendarTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Calendar) }
                     "routines" -> RoutinesTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Routines) }
                     "meals" -> MealsTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Meals) }
+                    "steward" -> SimpleTile(Access.name("steward"), "Ask, add or change anything", h, big, icon = FamIcons.Spark) { Steward.sheetOpen = true }
+                    in SOON_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) { if (Steward.available(prefs)) Steward.sheetOpen = true }
                     in PLACEHOLDER_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) {}
                     "convo.new" -> SimpleTile(Access.name(t.id), "Choosing a chat…", h, big, icon = tileIcon(t.id)) {}
                     else -> if (t.id.startsWith("convo.")) {
@@ -474,10 +485,13 @@ fun fitUnit(height: Dp, base: Dp, gap: Dp = 12.dp, pad: Dp = 12.dp): Dp {
     return (room / rows - gap).coerceIn(base * .8f, base * 1.25f)
 }
 
-val PLACEHOLDER_TILES = listOf("nudges", "ride", "steward")
+val PLACEHOLDER_TILES = listOf("nudges", "ride")
+
+/** Modules switched on but still being built: a tile that says so (and opens Steward, which can keep their notes already). */
+val SOON_TILES = listOf("outings", "garage", "ledger", "pets", "profiles", "homestead", "contacts")
 
 /** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
-val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals") + PLACEHOLDER_TILES
+val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "steward") + SOON_TILES + PLACEHOLDER_TILES
 
 private val DRAWER_HEIGHT = 132.dp
 
@@ -495,6 +509,14 @@ fun tileIcon(id: String): ImageVector = when (id) {
     "routines" -> Icons.Filled.Refresh
     "nudges" -> Icons.Filled.Favorite
     "ride" -> Icons.Filled.Place
+    "steward" -> FamIcons.Spark
+    "outings" -> Icons.AutoMirrored.Filled.DirectionsWalk
+    "garage" -> Icons.Filled.DirectionsCar
+    "ledger" -> Icons.Filled.AccountBalanceWallet
+    "pets" -> Icons.Filled.Pets
+    "profiles" -> Icons.Filled.Badge
+    "homestead" -> Icons.Filled.HomeRepairService
+    "contacts" -> Icons.Filled.Contacts
     else -> Icons.Filled.Build
 }
 

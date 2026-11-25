@@ -111,7 +111,7 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f),
         )
         Row(Modifier.fillMaxSize()) {
-            Box(Modifier.weight(1f).fillMaxHeight()) { content(current) }
+            Box(Modifier.weight(1f).fillMaxHeight()) { content(current); if (stewardHere(current)) StewardButton(prefs, tileFor(current)) }
             AnimatedVisibility(
                 showNav,
                 enter = slideInHorizontally(tween(260)) { it } + expandHorizontally(tween(260), expandFrom = Alignment.Start),
@@ -179,9 +179,12 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
         },
     ) { padding ->
         // The screens have their own top bars; this just keeps them above the tab bar.
-        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { content(current) }
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { content(current); if (stewardHere(current)) StewardButton(prefs, tileFor(current)) }
     }
 }
+
+/** Steward's corner button: everywhere but Chat (it has its own voice) and the map (its sheet sits there). */
+private fun stewardHere(t: Tab) = t != Tab.Chat && t != Tab.Map
 
 /** The home tile that opens a section. */
 private fun tileFor(t: Tab) = when (t) {

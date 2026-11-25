@@ -343,22 +343,6 @@ fun MealsScreen(prefs: Prefs) {
             title = { Text("Add a recipe") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (Steward.available(prefs)) {
-                        // Say it instead: Steward tidies it into a proper recipe and saves it.
-                        Text("Hold and read it out (or talk it through). ${Access.name("steward")} tidies it up and saves it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TalkButton(prefs, 52.dp, bar = true, label = "Hold to say the recipe", onText = { said ->
-                            if (said.isBlank()) return@TalkButton
-                            addingRecipe = false
-                            Toast.makeText(context, "Saving the recipe…", Toast.LENGTH_SHORT).show()
-                            scope.launch {
-                                runCatching { Api(prefs.serverUrl, prefs.token).stewardSay("Save this recipe for me: $said") }
-                                    .onSuccess { m -> m.lastOrNull { it.role == "assistant" }?.let { Toast.makeText(context, it.text, Toast.LENGTH_LONG).show() } }
-                                    .onFailure { Toast.makeText(context, "Couldn't reach ${Access.name("steward")}: ${it.message}", Toast.LENGTH_LONG).show() }
-                                Pantry.refresh(prefs, data?.week.orEmpty())
-                            }
-                        })
-                        Text("Or type it:", style = MaterialTheme.typography.labelLarge)
-                    }
                     OutlinedTextField(title, { title = it.take(80) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(ingredients, { ingredients = it }, label = { Text("Ingredients, one per line") }, minLines = 4, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(method, { method = it }, label = { Text("Method") }, minLines = 3, modifier = Modifier.fillMaxWidth())

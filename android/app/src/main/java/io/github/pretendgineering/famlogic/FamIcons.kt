@@ -50,6 +50,18 @@ object FamIcons {
         }.build()
     }
 
+    /** Steward: two sparkles, the family's helper. */
+    val Spark: ImageVector by lazy {
+        ImageVector.Builder("Spark", 24.dp, 24.dp, 24f, 24f).apply {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(12f, 3.5f); curveTo(12.6f, 7.4f, 14.6f, 9.4f, 18.5f, 10f); curveTo(14.6f, 10.6f, 12.6f, 12.6f, 12f, 16.5f)
+                curveTo(11.4f, 12.6f, 9.4f, 10.6f, 5.5f, 10f); curveTo(9.4f, 9.4f, 11.4f, 7.4f, 12f, 3.5f); close()
+                moveTo(18.5f, 15.5f); curveTo(18.8f, 17f, 19.5f, 17.7f, 21f, 18f); curveTo(19.5f, 18.3f, 18.8f, 19f, 18.5f, 20.5f)
+                curveTo(18.2f, 19f, 17.5f, 18.3f, 16f, 18f); curveTo(17.5f, 17.7f, 18.2f, 17f, 18.5f, 15.5f); close()
+            }
+        }.build()
+    }
+
     /** Upkeep: a little scroll, rolled at the top left and bottom right, with two lines on it. */
     val Upkeep: ImageVector by lazy {
         ImageVector.Builder("Upkeep", 24.dp, 24.dp, 24f, 24f).apply {

@@ -110,5 +110,8 @@ object Access {
         "agents" to ("Steward" to "AI"), "sos" to ("SOS" to "SOS"), "checkin" to ("Check in" to "Check in"),
         "steward" to ("Steward" to "AI"), "routines" to ("Rhythms" to "Routines"), "nudges" to ("Nudges" to "Nudges"),
         "ride" to ("Where's My Ride" to "Where's my ride"), "convo.new" to ("Chat shortcut" to "Chat shortcut"),
+        "outings" to ("Outings" to "Walks & rides"), "garage" to ("Garage" to "Cars"), "ledger" to ("Ledger" to "Budget"),
+        "pets" to ("Menagerie" to "Pets"), "profiles" to ("Who's Who" to "Profiles"), "homestead" to ("Homestead" to "Home care"),
+        "contacts" to ("Rolodex" to "Contacts"),
     )
 }
