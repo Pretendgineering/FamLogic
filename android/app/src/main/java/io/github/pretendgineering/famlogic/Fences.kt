@@ -221,7 +221,7 @@ fun PlaceDialog(
                     value = name,
                     onValueChange = { name = it.take(40) },
                     label = { Text("Name") },
-                    placeholder = { Text("Home, School, Work…") },
+                    placeholder = { Text("Home, Work, Co-op…") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -240,7 +240,7 @@ fun PlaceDialog(
                         Column(Modifier.weight(1f)) {
                             Text("Only alert at certain times", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                "E.g. school days, 07:00–17:00. Where people are still shows on the map.",
+                                "E.g. weekdays, 07:00–17:00. Where people are still shows on the map.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

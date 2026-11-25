@@ -1146,12 +1146,12 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
             },
         contentAlignment = Alignment.Center,
     ) {
-        val style = if (tall || tile) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
+        val style = (if (tall || tile) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium).merge(SosType)
         // The label is red on the pale bar and white where the fill has reached.
         @Composable fun Label() {
-            Text(label, style = style, color = red, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Text(label, style = style, color = red, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             Text(
-                label, style = style, color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                label, style = style, color = Color.White, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().drawWithContent {
                     clipRect(right = size.width * progress.value) { this@drawWithContent.drawContent() }
                 },
@@ -1162,7 +1162,7 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
             Column(Modifier.fillMaxSize().padding(vertical = 10.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 val s = if (tall) 64.dp else 48.dp
                 if (Access.pictures) Pictures.Sos(s + 12.dp)
-                else Icon(Icons.Filled.Warning, contentDescription = null, tint = if (progress.value > .5f) Color.White else red, modifier = Modifier.size(s))
+                else Icon(FamIcons.Sos, contentDescription = null, tint = if (progress.value > .5f) Color.White else red, modifier = Modifier.size(s))
                 Box(Modifier.fillMaxWidth().padding(top = 6.dp)) { Label() }
             }
             return@Box
@@ -1170,7 +1170,7 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
         // A picture of an alarm (or the warning sign), so it reads without words.
         Box(Modifier.fillMaxSize().padding(start = 14.dp), contentAlignment = Alignment.CenterStart) {
             if (Access.pictures) Pictures.Sos(if (tall) 52.dp else 38.dp)
-            else Icon(Icons.Filled.Warning, contentDescription = null, tint = if (progress.value > .12f) Color.White else red, modifier = Modifier.size(if (tall) 36.dp else 28.dp))
+            else Icon(FamIcons.Sos, contentDescription = null, tint = if (progress.value > .12f) Color.White else red, modifier = Modifier.size(if (tall) 36.dp else 28.dp))
         }
         Label()
     }

@@ -170,7 +170,7 @@ var stewardTools = []stewardTool{
 		"who":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Names or ids of who it's for"},
 		"every": str("Empty for once; day, weekdays, week, 2 weeks, month, or days like mon,thu"),
 		"due":   str("YYYY-MM-DD, empty for today"),
-		"when":  str("Optional time of day: morning, after school, evening, bedtime or HH:MM"),
+		"when":  str("Optional time of day: morning, afternoon, after school, evening, bedtime or HH:MM"),
 		"stars": map[string]any{"type": "integer", "description": "Optional stars (only if a parent asked)"},
 		"notes": str("Optional details"),
 	}, "title"),
@@ -275,6 +275,55 @@ var stewardTools = []stewardTool{
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handleRewards, "GET", "/api/rewards", nil, nil)
 		}},
+	{"list_meals", "This week's meal plan (days with Breakfast, Lunch, Dinner) and the family's recipes (id, title, ingredients, method, serves).", obj(map[string]any{
+		"week": str("Optional ISO week like 2026-W49; empty for this week"),
+	}),
+		func(s *Server, me *Member, a map[string]any) any {
+			q := "/api/meals"
+			if wk := argStr(a, "week"); wk != "" {
+				q += "?week=" + url.QueryEscape(wk)
+			}
+			return s.callAs(me, s.handleMeals, "GET", q, nil, nil)
+		}},
+	{"plan_meal", "Put a dish on the meal plan for one day (or clear it with an empty dish).", obj(map[string]any{
+		"date": str("YYYY-MM-DD"),
+		"meal": str("Breakfast, Lunch or Dinner"),
+		"dish": str("Short, e.g. Tacos"),
+	}, "date", "meal", "dish"),
+		func(s *Server, me *Member, a map[string]any) any {
+			d, err := time.ParseInLocation(dayLayout, argStr(a, "date"), time.Local)
+			if err != nil {
+				return map[string]any{"error": "date must be YYYY-MM-DD"}
+			}
+			wk := isoWeek(d)
+			return s.callAs(me, s.handleSetMeal, "PUT", "/api/meals/"+wk, map[string]string{"week": wk},
+				map[string]any{"date": argStr(a, "date"), "meal": argStr(a, "meal"), "dish": argStr(a, "dish")})
+		}},
+	{"add_recipe", "Save a recipe to the family's recipe book (a note in the vault). Tidy what was said into a clean recipe first: a short title, one ingredient per entry with amounts (\"2 cups flour\"), and the method as short numbered steps, one per line. Keep the cook's own tips. Don't invent amounts or steps that weren't said; ask if something important is missing.", obj(map[string]any{
+		"title":       str("Short, e.g. Grandma's banana bread"),
+		"ingredients": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "One per entry, with amounts"},
+		"method":      str("Steps, one per line, numbered (1. ..., 2. ...)"),
+		"serves":      str("Optional, e.g. 4 or 1 loaf"),
+	}, "title", "ingredients"),
+		func(s *Server, me *Member, a map[string]any) any {
+			ing := []string{}
+			if list, ok := a["ingredients"].([]any); ok {
+				for _, x := range list {
+					if xs, ok := x.(string); ok && strings.TrimSpace(xs) != "" {
+						ing = append(ing, strings.TrimSpace(xs))
+					}
+				}
+			}
+			return s.callAs(me, s.handleAddRecipe, "POST", "/api/recipes", nil,
+				map[string]any{"title": argStr(a, "title"), "ingredients": ing, "method": argStr(a, "method"), "serves": argStr(a, "serves")})
+		}},
+	{"shop_recipe", "Put a recipe's ingredients on the shopping list.", obj(map[string]any{
+		"recipe_id": str("The recipe's id (from list_meals)"),
+	}, "recipe_id"),
+		func(s *Server, me *Member, a map[string]any) any {
+			id := argStr(a, "recipe_id")
+			return s.callAs(me, s.handleShopRecipe, "POST", "/api/recipes/"+url.PathEscape(id)+"/shop", map[string]string{"id": id}, nil)
+		}},
 	{"read_feed", "What happened recently: arrivals, check-ins, trips, chores done.", obj(map[string]any{
 		"hours": map[string]any{"type": "integer", "description": "How far back (default 12, at most 48)"},
 	}),
@@ -324,7 +373,9 @@ Rules:
 - Keep chore names short ("Unload the dishwasher"); put details in notes.
 - Only give stars when a parent asks. Never retire chores or change who they're for unless a parent asks.
 - If you're unsure who someone means, ask instead of guessing.
-- If a tool returns an error, say plainly what went wrong.`,
+- If a tool returns an error, say plainly what went wrong.
+- Recipes: when someone reads or talks through a recipe, tidy it into a clean one and save it with add_recipe, then say its name and how many ingredients and steps it has.
+- Don't assume children go to school; families homeschool, unschool or keep their own hours.`,
 		s.familyName(), me.Name, me.access(), now.Format("Monday 2 January 2006, 15:04"), strings.Join(people, "; "))
 }
 

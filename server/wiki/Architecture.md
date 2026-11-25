@@ -243,11 +243,17 @@ Press-to-talk and read-aloud are meant to be a main way of using FamLogic on eve
 
 ## TV launcher (Phase 6 design)
 
-- On Android TV, FamLogic registers as a **home-screen app** (`HOME` intent, leanback). Set it as the TV's home screen and it becomes a persistent family dashboard; the settings screen connects it to your server, and a parent approves it in the console (no personal account).
-- **Top: a horizontally scrolling row of rounded cards, three in view**, moved with the D-pad: today's agenda, a small map of who's where, to-dos for this time of day, the **current routine** (switching with the daily rhythm: Morning, Nap time, Bedtime…), this week's menu, recent chat. Cards are chosen and ordered in the console per TV.
-- **Below: shortcuts** to the most-used apps (picked on the TV), so it fully replaces the stock launcher.
-- **Talk:** a remote button (via a button remapper) or an on-screen button opens press-to-talk.
-- Dark, low-motion, slowly shifting layout to avoid burn-in; serif headings that read well from the sofa.
+Logged from the family's own wish list (0.38). A separate APK for Android TV that becomes the TV's home screen, and the same screens for display tablets.
+
+- **Home screen app:** registers as the TV's launcher (`HOME` intent, leanback). The settings screen connects it to your server; a parent approves it in the console (no personal account).
+- **What it shows:** the family **feed**, **what's coming up** on the calendar, and the **daily rhythms**: once set, the screen changes with the time of day on its own (the morning routine in the morning, the evening routine in the evening).
+- **Light to dark through the day:** the background slowly shifts from a light "morning mode" to a darker "night mode" as the day goes on, so it suits the room and is easy on the eyes at night.
+- **Naptime / quiet time:** a mode with its own unmistakable look (calm colours, a sleeping symbol, quiet clock), so everyone knows to keep it down. Started from a parent's phone (or on a schedule); ends the same way.
+- **Push a message to a screen:** from a phone, send a short message to the TV or any display tablet ("Inside voices please, baby's asleep"). It shows big over whatever is on, with who sent it, until dismissed or after a while; optionally read aloud. For the parent stuck in the nursery while the others get loud.
+- **A launcher for a few apps:** a small row of app shortcuts picked on the TV. Some households use only a few (Jellyfin, Spotify, SmartTube); others use many: the design handles both, a short row of big tiles for a few apps and a scrolling grid when there are more.
+- **Layout:** a horizontally scrolling row of rounded cards, three in view, moved with the D-pad (agenda, who's where, the current routine, this week's menu, recent chat), chosen and ordered in the console per screen; app shortcuts below.
+- **Talk:** a remote button (via a button remapper) or an on-screen button opens press-to-talk to Steward.
+- Low-motion, slowly shifting layout to avoid burn-in; serif headings that read well from the sofa.
 
 ## Tablets
 

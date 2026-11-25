@@ -202,7 +202,7 @@ fun FenceEditBar(
                 value = draft.name,
                 onValueChange = { onChange(draft.copy(name = it.take(40))) },
                 label = { Text("Name") },
-                placeholder = { Text("e.g. Home, School") },
+                placeholder = { Text("e.g. Home, Co-op") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             )

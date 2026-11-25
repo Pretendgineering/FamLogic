@@ -536,7 +536,7 @@ private fun FencesPage(
     val groupName = circles.associate { it.id to it.name }
 
     SettingsCard("Your Fences") {
-        Hint("A fence is an area like Home or School. Everyone in its group is told when someone arrives or leaves. Tap one to change it; switch one off to stop its alerts on this phone.")
+        Hint("A fence is an area like Home, Work or Grandma's. Everyone in its group is told when someone arrives or leaves. Tap one to change it; switch one off to stop its alerts on this phone.")
         if (places.isEmpty()) {
             Text("No fences yet.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp))
         }

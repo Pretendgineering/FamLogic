@@ -836,7 +836,8 @@ button.danger { background: var(--danger); color: #fff; }
 
 /* The family chat's crest: its initial in an ornate blackletter, in a gold ring (as in the app). */
 @font-face { font-family: "UnifrakturMaguntia"; src: url("/fonts/UnifrakturMaguntia.ttf") format("truetype"); font-display: swap; }
-.avatar.crest { font-family: "UnifrakturMaguntia", var(--serif); font-weight: 400; font-size: 1.75rem; line-height: 1; padding-bottom: 3px; box-sizing: border-box; box-shadow: inset 0 0 0 2px var(--secondary); }
+.avatar.crest { font-family: "UnifrakturMaguntia", var(--serif); font-weight: 400; font-size: 1.75rem; line-height: 1; box-sizing: border-box; box-shadow: inset 0 0 0 2px var(--secondary); overflow: hidden; }
+.avatar.crest svg { display: block; }
 /* Upkeep (chores) in the console. */
 .upkeep-add { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
 .upkeep-add .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
@@ -945,3 +946,10 @@ input.switch:checked::after { transform: translateX(16px); background: var(--sur
 .map-everyone { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px 8px 10px; border: 0; border-radius: 999px; background: var(--surface); color: var(--text); font: 600 .85rem var(--sans, inherit); box-shadow: var(--shadow); cursor: pointer; }
 .map-everyone:hover { box-shadow: var(--shadow-lg); }
 .map-everyone svg { width: 18px; height: 18px; color: var(--secondary); }
+
+/* SOS everywhere: the round beacon icon and a plain bold sans, apart from the page's serif. */
+.sos-banner .sos-item, .dash-panel.sos .dash-title, .card-link.sos h3 { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-weight: 800; }
+.sos-banner .sos-item { display: flex; align-items: center; gap: 8px; }
+.sos-mark { display: inline-grid; flex: none; } .sos-mark svg { width: 20px; height: 20px; }
+.dash-panel.sos .dash-head .ri { background: var(--sos); color: #fff; }
+.dash-panel.sos .dash-title { color: var(--sos); }

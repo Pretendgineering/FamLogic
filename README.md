@@ -46,6 +46,8 @@ More options: [Architecture](server/wiki/Architecture.md#server-settings).
 
 **Update:** `docker compose pull && docker compose up -d`. Everything lives in `/data`.
 
+**Backup and restore:** Settings → Server → Download backup gives one zip of everything (people and settings, chats with photos and voice clips, the feed, and the notes vault). Restore a backup there too: the server keeps what was there in `/data/backups/before-restore-…` and restarts. To move the vault to a folder outside the container: download a backup, set `VAULT_DIR` to the new mount, restart, then restore. (A zip saved as `/data/restore.zip` is also restored at the next start.)
+
 ## Build
 
 ```sh

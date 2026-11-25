@@ -94,8 +94,8 @@ private fun SosScreen(activity: Activity, prefs: Prefs, id: String, fallbackName
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val fg = if (ended) MaterialTheme.colorScheme.onSurface else Color.White
-        Text(if (ended) "$name is OK" else "SOS", style = MaterialTheme.typography.displayMedium, color = fg, fontWeight = FontWeight.Bold)
-        if (!ended) Text("$name needs help", style = MaterialTheme.typography.headlineSmall, color = fg, textAlign = TextAlign.Center)
+        Text(if (ended) "$name is OK" else "SOS", style = MaterialTheme.typography.displayMedium.merge(SosType), color = fg)
+        if (!ended) Text("$name needs help", style = MaterialTheme.typography.headlineSmall.merge(SosType), color = fg, textAlign = TextAlign.Center)
         val loc = m?.loc
         val where = when {
             m == null -> "Finding where they are…"

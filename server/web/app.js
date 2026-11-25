@@ -170,7 +170,7 @@ function renderSOS(list) {
   banner.hidden = list.length === 0;
   banner.replaceChildren(...list.map((m) =>
     el("button", { class: "sos-item", onclick: () => m.loc && map.setView([m.loc.lat, m.loc.lon], 17) },
-      `🆘 SOS from ${m.name} since ${new Date(m.sosSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` +
+      sosMark(), `SOS from ${m.name} since ${new Date(m.sosSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` +
       (m.sosSeenBy && m.sosSeenBy.length ? ` · seen by ${m.sosSeenBy.join(", ")}` : "") +
       (m.loc ? ` · last seen ${ago(m.loc.time)}, click to show` : " · no location yet"))));
 }
@@ -410,7 +410,7 @@ async function refresh(periodic = false) {
     $("#server-version").textContent = `server ${data.server.version}`;
     serverFeatures = data.server.features || [];
     const sos = data.members.filter((m) => m.sosSince);
-    document.title = (sos.length ? "🆘 SOS · " : "") + `${data.server.name} · FamLogic`;
+    document.title = (sos.length ? "SOS · " : "") + `${data.server.name} · FamLogic`;
     renderSOS(sos);
     ensureMap(data.server);
     circles = data.circles || [];
@@ -951,6 +951,8 @@ const ICONS = {
   chat: '<path d="M4 5.5h16v10.5H10l-6 4.5z"/>',
   calendar: '<rect x="3.5" y="5.5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3.5v4M16 3.5v4"/>',
   check: '<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="m8 12.3 2.8 2.8L16.2 9"/>',
+  upkeep: '<path d="M17 3.6H6.6A1.6 1.6 0 0 0 6.6 6.8H7.6M7.6 5V17.2M17 3.6V17.2M7 20.4H17.4A1.6 1.6 0 0 0 17.4 17.2H7.6M9.9 9l.9.9 1.6-1.7M13.6 9.1h1.2M9.9 12.2h4.9M9.9 15h3.3"/>',
+  sos: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M12 6.2a5.8 5.8 0 1 1 0 11.6a5.8 5.8 0 1 1 0-11.6ZM11.05 9.1a.95 .95 0 0 1 1.9 0L12.75 12.6a.75 .75 0 0 1-1.5 0ZM12 13.9a1.05 1.05 0 1 1 0 2.1a1.05 1.05 0 1 1 0-2.1Z"/><path d="M18.9 8.2A8 8 0 0 1 18.9 15.8M5.1 15.8A8 8 0 0 1 5.1 8.2M21.4 6.4A11 11 0 0 1 21.4 17.6M2.6 17.6A11 11 0 0 1 2.6 6.4"/>',
   star: '<path d="m12 3.5 2.6 5.6 6 .6-4.5 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6L3.4 9.7l6-.6z"/>',
   meal: '<path d="M7 3.5v17M4.5 3.5v5a2.5 2.5 0 0 0 5 0v-5M17 20.5V3.5c-2.5 1.5-3.5 5-3.5 8.5h3.5"/>',
   people: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 20c0-3.6 2.7-6.2 6-6.2s6 2.6 6 6.2"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.8 14.3c2.9.1 5.2 2.3 5.2 5.7"/>',
@@ -964,7 +966,7 @@ document.querySelectorAll("[data-icon]").forEach((s) => { s.innerHTML = icon(s.d
 
 let modules = [];      // from /api/admin/modules: id, name, description, available, enabled
 let modulesLoaded = false;
-const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "star", meals: "meal", display: "device", agents: "gear", routines: "check" };
+const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "upkeep", meals: "meal", display: "device", agents: "gear", routines: "check" };
 const moduleInfo = (id) => modules.find((m) => m.id === id);
 const moduleOn = (id) => !modulesLoaded || !!(moduleInfo(id) || {}).enabled;
 
@@ -1061,7 +1063,7 @@ async function renderHome() {
   const out = [];
   if (moduleOn("thereabouts")) {
     const sos = people.filter((m) => m.sosSince);
-    out.push(panel("#/thereabouts", "pin", sos.length ? "SOS" : "Who's where",
+    out.push(panel("#/thereabouts", sos.length ? "sos" : "pin", sos.length ? "SOS" : "Who's where",
       rows(people.map((m) => el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "dash-main" }, m.name), el("div", { class: "dash-sub" }, describe(m))))), "Nobody's sharing yet."),
       sos.length ? "sos" : ""));
   }
@@ -1076,7 +1078,7 @@ async function renderHome() {
     rows(events.events.slice(0, 8).map((e) => li(e.title, (new Date(e.start) < new Date(midnight.getTime() + 86400000) ? "Today" : new Date(e.start).toLocaleDateString([], { weekday: "short", day: "numeric" })) + " · " + (e.allDay ? "all day" : time(e.start)) + (e.where ? " · " + e.where : ""))), "Nothing in the next week.")));
   if (chores) {
     const due = chores.chores.filter((c) => !c.finished && (!c.due || c.due <= chores.today));
-    out.push(panel("#/chores", "star", displayName(moduleInfo("chores")),
+    out.push(panel("#/chores", "upkeep", displayName(moduleInfo("chores")),
       el("div", {}, rows(due.slice(0, 8).map((c) => li(c.title, c.who.length ? c.who.map(name).join(", ") : "Anyone", c.stars ? el("span", { class: "badge" }, "★ " + c.stars) : null)), "Nothing due."),
         Object.keys(chores.stars || {}).length ? el("p", { class: "dash-sub" }, "Stars: " + Object.entries(chores.stars).map(([id, n]) => `${name(id)} ${n}`).join(" · ")) : null)));
   }
@@ -1558,13 +1560,14 @@ const SETUP_STEPS = [
       }
     } },
   { title: "Places", render(box) {
-      box.append(el("p", { class: "muted small" }, "Fences tell you when someone arrives or leaves. Add Home now (and School, if you like); you can draw more on the map later."),
+      box.append(el("p", { class: "muted small" }, "Fences tell you when someone arrives or leaves. Add Home now, and one more place you go often if you like (a co-op, lessons, work, Grandma's). You can draw more on the map later."),
         el("label", {}, "Home address", el("input", { id: "setup-home", placeholder: "Street, town" })),
-        el("label", {}, "School address (optional)", el("input", { id: "setup-school", placeholder: "School name, town" })));
+        el("div", { class: "row" }, el("label", {}, "Another place (optional)", el("input", { id: "setup-other-name", placeholder: "e.g. Co-op", maxlength: "40" })),
+          el("label", { class: "grow" }, "Its address", el("input", { id: "setup-school", placeholder: "Street, town" }))));
       if (!serverFeatures.includes("geocode")) box.append(el("p", { class: "banner" }, "Address search is off on this server: add fences on the map instead."));
     },
     async save() {
-      for (const [id, name] of [["setup-home", "Home"], ["setup-school", "School"]]) {
+      for (const [id, name] of [["setup-home", "Home"], ["setup-school", ($("#setup-other-name") || {}).value?.trim() || "Place"]]) {
         const q = ($("#" + id) || {}).value?.trim();
         if (!q || !serverFeatures.includes("geocode")) continue;
         const res = await api("GET", "/api/admin/geocode?q=" + encodeURIComponent(q));
@@ -1647,7 +1650,7 @@ function renderChatList() {
     const who = c.last && c.kind !== "direct" ? nameOf(c.last.sender) + ": " : "";
     return el("li", { class: "clickable" + (c.id === chatOpen ? " active" : ""), onclick: () => openChat(c.id) },
       el("div", { class: "avatar" + (c.emoji ? " emoji" : "") + (!c.emoji && c.kind === "family" ? " crest" : ""), style: `background:${c.color || (c.kind === "direct" ? (personById(c.members.find((id) => id !== (me.member || {}).id)) || {}).color || "var(--accent)" : "var(--accent)")}` },
-        c.emoji || (c.kind === "family" ? (familyInitial() || "★") : (c.title || "?").trim().charAt(0).toUpperCase())),
+        c.emoji || (c.kind === "family" ? crestLetter(familyInitial() || "★") : (c.title || "?").trim().charAt(0).toUpperCase())),
       el("div", { class: "grow" },
         el("div", { class: "title" }, c.title, c.oversight ? el("span", { class: "badge" }, "Watching") : null,
           c.status ? el("span", { class: "badge warn" }, STATUS_LABELS[c.status] || c.status) : null),
@@ -1865,7 +1868,7 @@ const REPEATS = [["", "Once"], ["day", "Every day"], ["weekdays", "Weekdays"], [
 const repeatText = (e) => (REPEATS.find(([k]) => k === e) || [e, e ? "Every " + e : "Once"])[1];
 let upkeepDrawn = "";
 let upkeepEdit = null; // the chore being changed in the form, if any
-const WHENS = [["", "No reminder"], ["morning", "Morning"], ["after school", "After school"], ["evening", "Evening"], ["bedtime", "Bedtime"]];
+const WHENS = [["", "No reminder"], ["morning", "Morning"], ["after school", "Afternoon"], ["evening", "Evening"], ["bedtime", "Bedtime"]];
 
 async function renderUpkeep(box, force = false) {
   // Don't redraw under someone typing a new chore.
@@ -2296,3 +2299,23 @@ $("#restore-file")?.addEventListener("change", async (ev) => {
     setTimeout(back, 2500);
   } catch (err) { msg.textContent = ""; alert(err.message); }
 });
+
+// The crest's letter, centred by its ink (blackletter capitals sit high and lean,
+// so ordinary text centring leaves them off-centre): measured once the font is in,
+// then drawn as SVG text at the measured spot.
+function crestLetter(ch) {
+  const span = el("span", {}, ch);
+  if (ch === "★" || !document.fonts) return span;
+  document.fonts.load("100px UnifrakturMaguntia").then(() => {
+    const c = document.createElement("canvas").getContext("2d");
+    c.font = "100px UnifrakturMaguntia";
+    const m = c.measureText(ch);
+    const L = m.actualBoundingBoxLeft, R = m.actualBoundingBoxRight, A = m.actualBoundingBoxAscent, D = m.actualBoundingBoxDescent;
+    const k = 60 / Math.max(L + R, A + D, 1);
+    const x = 50 - k * (R - L) / 2, y = 50 + k * (A - D) / 2;
+    span.outerHTML = `<svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true"><text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-family="UnifrakturMaguntia" font-size="${(100 * k).toFixed(1)}" fill="currentColor">${ch}</text></svg>`;
+  }).catch(() => {});
+  return span;
+}
+
+function sosMark() { const s = el("span", { class: "sos-mark" }); s.innerHTML = icon("sos"); return s; }

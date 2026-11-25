@@ -30,7 +30,7 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `DELETE /api/admin/members/{id}/devices/{dev}` | admin session | Sign out one device (the console's Devices page lists each one) |
 | `PUT /api/admin/family {name}` | admin session | The family's name (else `FAMILY_NAME`) |
 | `POST /api/admin/invites {name, access: "display"}` | admin session | Pair a family display: a code for the display's app; it signs in as a display (no location, posts nothing, sees the day) |
-| `/api/admin/*` | console login cookie | Admin pages (invites, members, roles, modules, backups). `GET /api/admin/session` says who's logged in |
+| `/api/admin/*` | console login cookie | Admin pages (invites, members, roles, modules, backups). `GET /api/admin/backup` downloads everything as a zip; `POST /api/admin/restore` (the zip as the body) restores it and restarts the server. `GET /api/admin/session` says who's logged in |
 | `/api/chat`, `/api/chat/{id}/messages`, … | `Bearer <token>` or a parent's console session | Chat: see [Architecture](Architecture.md#chat-built-in-0160) |
 | `POST /api/chat/{id}/messages` `{text, replyTo?}` or multipart (`photo` or `audio` + `audioMs`, `text`, `replyTo`) | `Bearer <token>` | Send a message, a photo or a voice message (AAC .m4a, Ogg or WAV, up to 4 MB) |
 | `POST /api/chat/{id}/messages/{mid}/react` `{kind}`; `POST /api/chat/{id}/typing`; `GET /api/chat/search?q=` | `Bearer <token>` | React with a nudge (`""` takes it back); say you're typing (shown for 6 s in `typing` on the messages); search the chats you can read |

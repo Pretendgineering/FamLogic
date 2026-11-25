@@ -1224,7 +1224,7 @@ static void draw_avatar(GContext *g, GRect r, Person *p, bool selected) {
   if (p->state == 'd' || p->state == 'm') graphics_draw_circle(g, c, 17);
   graphics_context_set_text_color(g, on);
 #endif
-  graphics_draw_text(g, p->initial, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(c.x - 15, c.y - 13, 30, 22),
+  graphics_draw_text(g, p->initial, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(c.x - 14, c.y - 12, 30, 22),
                      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 #endif

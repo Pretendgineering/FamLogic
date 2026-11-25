@@ -29,7 +29,7 @@ private val DAY_NAMES = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
 /**
  * Check-in windows for a child (parents only): "at School between 8:00 and 8:45 on
- * school days". The child is nudged to check in at the start; if by the end they
+ * weekdays". The child is nudged to check in at the start; if by the end they
  * haven't arrived or checked in, the parents are told.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -46,7 +46,7 @@ fun CheckWindows(prefs: Prefs, child: Member) {
         Text("Check-in times", style = MaterialTheme.typography.titleSmall)
         plans.forEach { p ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val days = if (p.days.sorted() == listOf(1, 2, 3, 4, 5)) "School days" else p.days.sorted().joinToString(" ") { DAY_NAMES[it] }
+                val days = if (p.days.sorted() == listOf(1, 2, 3, 4, 5)) "Weekdays" else p.days.sorted().joinToString(" ") { DAY_NAMES[it] }
                 Text("At ${fences[p.placeId] ?: "a fence"} by ${p.until} · $days", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 TextButton(onClick = {
                     scope.launch {
@@ -56,7 +56,7 @@ fun CheckWindows(prefs: Prefs, child: Member) {
                 }) { Text("Remove") }
             }
         }
-        if (fences.isEmpty()) Text("Add a fence first (like School) to set a check-in time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (fences.isEmpty()) Text("Add a fence first (like Lessons or Practice) to set a check-in time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         else TextButton(onClick = { adding = true }) { Text("Add a check-in time") }
     }
     if (adding) {

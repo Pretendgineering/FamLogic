@@ -3,8 +3,11 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,5 +115,32 @@ func TestBackupAndRestore(t *testing.T) {
 	}
 	if _, err := OpenStore(filepath.Join(dataDir, "famlogic.json")); err != nil {
 		t.Fatalf("restored data file: %v", err)
+	}
+}
+
+func TestStewardRecipe(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		msgs := req["messages"].([]any)
+		if msgs[len(msgs)-1].(map[string]any)["role"] == "tool" {
+			fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"Saved Banana bread: 3 ingredients, 2 steps."}}]}`)
+			return
+		}
+		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"1","type":"function","function":{"name":"add_recipe","arguments":"{\"title\":\"Banana bread\",\"ingredients\":[\"3 bananas\",\"2 cups flour\",\"1 egg\"],\"method\":\"1. Mash and mix.\\n2. Bake 50 min at 175C.\",\"serves\":\"1 loaf\"}"}}]}}]}`)
+	}))
+	defer llm.Close()
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	e.status("PUT", "/api/admin/modules", "", map[string]any{"enabled": map[string]bool{"thereabouts": true, "chat": true, "meals": true, "agents": true}, "setupDone": true})
+	e.status("PUT", "/api/admin/steward", "", map[string]any{"enabled": true, "url": llm.URL, "model": "test", "key": "secret"})
+	if st, res := e.status("POST", "/api/steward", f.mom, map[string]any{"text": "Save my banana bread: three bananas, two cups of flour, an egg..."}); st != 200 || !strings.Contains(res["reply"].(string), "Saved") {
+		t.Fatalf("say: %d %v", st, res)
+	}
+	_, meals := e.status("GET", "/api/meals", f.mom, nil)
+	rs := meals["recipes"].([]any)
+	if len(rs) != 1 || rs[0].(map[string]any)["title"] != "Banana bread" || len(rs[0].(map[string]any)["ingredients"].([]any)) != 3 {
+		t.Fatalf("recipes: %v", rs)
 	}
 }

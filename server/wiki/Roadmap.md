@@ -11,6 +11,11 @@ FamLogic is a self-hosted family hub built from modules; location sharing (the T
 5. **Agent-friendly.** A documented API with scoped keys, so an agent (Hermes with a cloud model or a local Ollama, or anything else) can add to-dos, plan meals or post a reminder in chat.
 6. **Kid-proof.** Children never need to manage a password; parents can see children's chats, and can revoke any device.
 7. **Off means off, and each switch says what it shares.** Switches that affect others live on the server; personal alert choices live on the phone.
+8. **Every kind of family.** Don't assume the children go to school, that weekdays look alike, or that there are two parents. Homeschooling, unschooling, co-ops, shift work and shared custody are all normal: places are whatever the family names them, routines and check-ins are open-ended (any days, any times, changed as often as life does), and examples in the apps say "Co-op", "Grandma's" or "Practice" as often as "School".
+9. **Everything connects.** Any piece of information (a person, a pet, a car, a bill, a recipe, an appointment) can be linked to anything it's relevant to, entered by talking to Steward (self-hosted or cloud AI), seen and edited in Obsidian by those who like to, and kept local and private. FamLogic remembers it all and reminds you of what you need when you need it.
+
+### The long view
+FamLogic aims to be the one family platform: location (in place of Life360), the family calendar, lists and chores (FamilyWall, Yuvomi, Google Keep), car upkeep (LubeLogger), activity (Strava), budget and more, for any age, family shape, lifestyle and level of tech comfort. Self-hosted first; later perhaps a hosted cloud version by subscription, with the strictest privacy policy we can write (your data is yours, never sold, never used for ads or training, exportable and deletable in one click). We're in alpha: this is the direction, not a promise of dates.
 
 ## Prioritized plan
 
@@ -113,16 +118,17 @@ The map, chat and safety features are what families use every day. Next, each ge
 - **Where's my ride?** Answer a "Pick me up" (or an SOS) with "On my way" and the other person sees how far you are and about how long until you get there.
 - **Call buttons** on SOS, pick-up, low-battery, quiet-phone and missed check-in alerts, for everyone who adds their number (Settings → You).
 
-### ✅ 4. Guided setup (the on-ramp), 0.37.0 (first version: modules, family name and PIN, people, Home and School, phones, a short tour; Settings → Server → Run setup again)
+### ✅ 4. Guided setup (the on-ramp), 0.37.0 (first version: modules, family name and PIN, people, Home and one more place, phones, a short tour; Settings → Server → Run setup again)
 A walkthrough in the web console that sets everything up properly the first time, by asking questions rather than showing settings, and can be run again later (Settings → Run setup again) to revisit any step:
 - **About you and the server:** your name, the family's name, the admin password, and the **parent PIN** (what it's for, and why children's devices need it).
 - **Who's in your family?** Add each person with their role, in plain words: "a parent", "a grandparent", "a child", "someone who doesn't use the app (a baby)".
 - **For each child:** "Can they read yet?" (picks the younger or older preset and picture icons), "Do they have their own phone or tablet?", "Should they be able to start chats, send photos, pause their location?", "Male or female reading voice?". Each answer sets the matching switches, with a short line on what it does.
 - **Modules:** which parts the family wants (Thereabouts, Chitchat, and the ones coming), with a sentence each.
-- **Places and groups:** add Home and School as fences (address search), and whether anyone needs a separate group (grandparents, friends).
+- **Places and groups:** add Home and the places you go often (a co-op, lessons, work, Grandma's) as fences (address search), and whether anyone needs a separate group (grandparents, friends).
 - **Getting phones connected:** invites with QR codes for each person, in the order they were added, ticked off as each phone joins.
 - **A short tour** at the end: where each setting lives now, so they can find it again.
 - Setup can't be skipped on a new server, only paused and resumed; everything it sets can be changed later.
+- **Next: questions that suggest modules.** "Do you have pets?", "Do you drive?", "Do you own or rent your home?", "Do you homeschool?", "Want help with a budget?" Each answer suggests modules to switch on (and examples to start with), but the family always makes the final choice.
 
 ### ✅ 5. Android widgets, 0.37.0 (first version: Family, and Check in + SOS)
 - **Map snapshot,** **check in** in one tap, **SOS** (hold), **one person's card**, **latest chat message** with Reply, **talk to Mom** (for kids), **quick nudges**, **where's my ride?**. Module widgets come with each module.
@@ -136,6 +142,19 @@ In this order (each is finished before the next starts):
 5. ✅ **Pantry** (meals and recipes), 0.36.0: the week's meals as Markdown, recipes, ingredients to the Shopping list in one tap.
 6. **Steward** (the agent bridge): your own AI agent, using FamLogic's API with scoped keys and the vault guide; voice in, voice out.
 7. **Corkboard / Front Room** (Control Deck round two and the Android TV launcher, its own APK).
+
+### 💡 Future modules (ideas, logged to hone later)
+Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
+- **Walks, runs and rides:** an optional tracker for family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like.
+- **Cars (Garage):** each car as a note. Fuel log by talking to Steward ("I just filled up the Sienna, 15 gallons, 56 dollars" → a fuel entry with miles, cost and price per gallon), with graphs and averages over time (mpg, cost per mile, monthly spend); oil changes and maintenance as reminders on the calendar by date or mileage; registration and insurance renewals. Later: OBD-II (a Bluetooth adapter through the phone) for mileage and fault codes.
+- **Budget:** fixed recurring expenses, flexible variable spending, and debt payoff (snowball, avalanche, custom) with payoff calculators and interest; Steward can help build a budget from what you tell it. Imports transactions from SimpleFIN, or a bank statement uploaded by hand (CSV/PDF, OCR when needed), then sorted into categories. Ties into groceries, cars and bills. Needs a lot of honing.
+- **Bills on the calendar:** each bill's due day and amount shows in its own lane of the Datebook, so you see what's going out (and coming in) and when.
+- **Grocery spending:** what you bought and what it cost, by rambling to Steward or (better) a photo of the receipt read by OCR. Feeds the budget, a rough food inventory, price tracking over time, and meal planning.
+- **Trash and recycling day:** set the day(s) once; it shows on the calendar and can become a chore for someone.
+- **Pets:** each pet as a note: feeding and walking schedules (as routines or chores), medications, vet visits and vaccinations as reminders; prints as one page for a sitter.
+- **Profiles (everyone):** allergies, medications, sleep and nap schedule, likes and dislikes (foods, activities), sizes, birthday, doctor, parents' names and phone numbers, emergency contacts. Prints as a one-page sheet for babysitters and grandparents.
+- **Home (owners and renters):** recurring upkeep like air filters, smoke alarm batteries, gutters, HVAC service, water heater flush, with sensible defaults to pick from, as calendar reminders and chores; warranties and manuals linked.
+- **Contacts:** the family's address book as Markdown, two-way with phones through CardDAV (like Datebook's CalDAV); linked to profiles, pets (the vet), cars (the mechanic) and the home (the plumber).
 
 ### ⏳ Later and parked
 - **Voice, beyond chat:** the Pebble (hold to talk), the TV and Control Deck, read-aloud with quiet hours.

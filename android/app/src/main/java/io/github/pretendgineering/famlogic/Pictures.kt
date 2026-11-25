@@ -38,6 +38,10 @@ object Pictures {
     @Composable
     fun HereIAm(size: Dp = 40.dp, modifier: Modifier = Modifier) = Canvas(modifier.size(size)) { wavingHand() }
 
+    /** Upkeep: a cream to-do scroll with a green tick, rolled at both ends. */
+    @Composable
+    fun Upkeep(size: Dp = 40.dp, modifier: Modifier = Modifier) = Canvas(modifier.size(size)) { scroll() }
+
     @Composable
     fun Camera(size: Dp = 40.dp, modifier: Modifier = Modifier) = Canvas(modifier.size(size)) { camera() }
 }
@@ -147,4 +151,27 @@ private fun DrawScope.camera() {
     drawCircle(Color.White, s * .2f, Offset(s * .5f, s * .58f))
     drawCircle(INK, s * .12f, Offset(s * .5f, s * .58f))
     drawCircle(Color(0xFFFFCC3D), s * .05f, Offset(s * .78f, s * .4f))
+}
+
+/** A cream to-do scroll: the sheet, tan rolls top and bottom, a green tick and two lines to go. */
+private fun DrawScope.scroll() {
+    val k = size.minDimension / 24f
+    fun o(x: Float, y: Float) = Offset(x * k, y * k)
+    val paper = Color(0xFFFFF1CF)
+    val roll = Color(0xFFD9A066)
+    // The sheet.
+    drawRect(paper, o(7.6f, 4.4f), Size(9.4f * k, 13.6f * k))
+    drawLine(INK.copy(alpha = .25f), o(7.6f, 4.4f), o(7.6f, 17.6f), 1f * k)
+    drawLine(INK.copy(alpha = .25f), o(17f, 4.4f), o(17f, 17.6f), 1f * k)
+    // The rolls, offset so it seems to float.
+    drawRoundRect(roll, o(5f, 2.6f), Size(13f * k, 3.4f * k), CornerRadius(1.7f * k))
+    drawCircle(Color(0xFFB97A45), 1.05f * k, o(6.7f, 4.3f))
+    drawRoundRect(roll, o(6.6f, 17.4f), Size(13f * k, 3.4f * k), CornerRadius(1.7f * k))
+    drawCircle(Color(0xFFB97A45), 1.05f * k, o(17.9f, 19.1f))
+    // The list.
+    val tick = Path().apply { moveTo(9.4f * k, 8.6f * k); lineTo(10.6f * k, 9.8f * k); lineTo(12.6f * k, 7.6f * k) }
+    drawPath(tick, Color(0xFF3FA568), style = Stroke(1.5f * k, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    drawLine(INK.copy(alpha = .55f), o(13.5f, 8.8f), o(15.3f, 8.8f), 1.3f * k, StrokeCap.Round)
+    drawLine(INK.copy(alpha = .55f), o(9.6f, 12f), o(15.3f, 12f), 1.3f * k, StrokeCap.Round)
+    drawLine(INK.copy(alpha = .55f), o(9.6f, 15f), o(13.6f, 15f), 1.3f * k, StrokeCap.Round)
 }

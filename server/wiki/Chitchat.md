@@ -20,6 +20,6 @@ Switch on **Chat** in Settings → Modules (on by default for new families). The
 - Parents can also **pause** a chat with a child in it (everyone can read, nobody can post), **block** it (hidden from the children in it, still visible to parents) or **delete** it with all its messages and photos.
 - Parents choose per child whether they have chat at all, can start new chats, and can send photos (console → **Family → ⋯ → What they can use**).
 - **Opening a chat:** in portrait a chat opens full screen (Back returns to the list). For younger children the list splits open instead: the rows above slide up, the chat's name and picture stay pinned at the top, and the chat fills the space below, edge to edge. The list holds still while it's open, so scrolling the messages never drags the list along; tap the chat's row (or ✕) to close it. Landscape tablets show the list beside the open chat. Younger children get bigger pictures and buttons, and a group shows the faces of who's in it.
-- Messages are kept in `chat.db` and photos in `media/` in the data folder, both included in the daily backups (`backups/chat-<date>.db`; copy `media/` along with them).
+- Messages are kept in `chat.db` and photos in `media/` in the data folder, both included in the daily backups (`backups/chat-<date>.db`) and in the full backup zip from Settings → Server.
 
 How it's built: [Architecture](Architecture.md#chat-built-in-0160).

@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -56,11 +58,24 @@ fun FamilyCrest(size: Int, modifier: Modifier = Modifier, color: String = "") {
         if (initial == null) {
             Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size((size / 2).dp))
         } else {
-            Text(
-                initial.toString(),
-                style = TextStyle(fontFamily = Fraktur, fontSize = with(androidx.compose.ui.platform.LocalDensity.current) { (size * 0.8f).dp.toSp() }, color = MaterialTheme.colorScheme.onPrimary, textAlign = TextAlign.Center),
-                modifier = Modifier.padding(bottom = (size * 0.06f).dp),
-            )
+            // Centre the letter by its ink, not its line box: blackletter capitals sit
+            // high and lean, so text centring leaves them visibly off-centre.
+            val ink = MaterialTheme.colorScheme.onPrimary
+            val context = LocalContext.current
+            val face = androidx.compose.runtime.remember { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.unifraktur_maguntia) }
+            androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    typeface = face; this.color = ink.toArgb(); textSize = this@Canvas.size.minDimension * .7f
+                }
+                val str = initial.toString()
+                val b = android.graphics.Rect()
+                paint.getTextBounds(str, 0, 1, b)
+                // Fit the ink inside ~60% of the circle, whatever the letter's shape.
+                val fit = this@Canvas.size.minDimension * .6f / maxOf(b.width(), b.height()).coerceAtLeast(1)
+                paint.textSize *= fit
+                paint.getTextBounds(str, 0, 1, b)
+                drawContext.canvas.nativeCanvas.drawText(str, center.x - b.exactCenterX(), center.y - b.exactCenterY(), paint)
+            }
         }
     }
 }

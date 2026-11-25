@@ -84,7 +84,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ElevatedCard
@@ -486,11 +486,11 @@ fun tileIcon(id: String): ImageVector = when (id) {
     "map" -> Icons.Filled.LocationOn
     "chat" -> Icons.Filled.Email
     "convo.new" -> Icons.Filled.Face
-    "sos" -> Icons.Filled.Warning
+    "sos" -> FamIcons.Sos
     "checkin" -> Icons.Filled.CheckCircle
     "calendar" -> Icons.Filled.DateRange
     "todos" -> Icons.AutoMirrored.Filled.List
-    "chores" -> Icons.Filled.Star
+    "chores" -> FamIcons.Upkeep
     "meals" -> Icons.Filled.ShoppingCart
     "routines" -> Icons.Filled.Refresh
     "nudges" -> Icons.Filled.Favorite
@@ -886,9 +886,9 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
                     .offset { androidx.compose.ui.unit.IntOffset((finger.x - g.x - boardAt.x).toInt(), (finger.y - g.y - boardAt.y).toInt()) }
                     .size(with(density) { carriedBounds.width.toDp() }, with(density) { carriedBounds.height.toDp() })
                     .graphicsLayer { scaleX = if (over) .7f else 1.05f; scaleY = if (over) .7f else 1.05f; shadowElevation = 28f; alpha = if (over) .75f else 1f }
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(22.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
+                    .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(22.dp)),
             ) { tile(carried.tile, unit * carried.h + gap * (carried.h - 1)) }
         }
         // Resizing: the outline that follows the finger.
@@ -918,7 +918,7 @@ private fun androidx.compose.foundation.layout.BoxScope.EditChrome(
     edges: MutableMap<Char, Rect>, closes: MutableMap<String, Rect>,
 ) {
     val accent = MaterialTheme.colorScheme.primary
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(22.dp)
     Box(
         Modifier.matchParentSize().clip(shape)
             .background(accent.copy(alpha = if (active) .16f else if (selected) .1f else .04f))
@@ -1133,17 +1133,20 @@ private fun ButtonTile(
     title: String, height: Dp, big: Boolean,
     picture: (@Composable (Dp) -> Unit)? = null, icon: ImageVector, onClick: () -> Unit,
 ) {
+    // Same card as every other tile; the action shows in a soft Accent2 badge, not an inverted block.
     androidx.compose.material3.Surface(
         onClick = onClick,
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
+        color = androidx.compose.ui.graphics.Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth().height(height),
     ) {
         Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
             val s = if (big) 64.dp else 48.dp
             if (Access.pictures && picture != null) picture(s + 12.dp)
-            else Icon(icon, contentDescription = null, modifier = Modifier.size(s))
-            Text(title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            else Box(Modifier.size(s + 16.dp).clip(CircleShape).background(Accent2.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = Accent2, modifier = Modifier.size(s * .62f))
+            }
+            Text(title, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1249,7 +1252,7 @@ fun PinDialog(prefs: Prefs, onDismiss: () -> Unit, onOk: () -> Unit) {
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Warning, contentDescription = null) },
+        icon = { Icon(Icons.Filled.Lock, contentDescription = null) },
         title = { Text("Parent PIN") },
         text = {
             Column {
