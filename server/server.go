@@ -33,6 +33,7 @@ type Server struct {
 	typing   typingNow
 	lists    *lists
 	cal      *calendar
+	restart  func() // stops and starts the server again (restoring a backup); nil in tests
 	routines *lists
 	dav      davLogins
 	cfg      Config
@@ -114,6 +115,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/admin/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/admin/members", s.admin(s.handleAdminMembers))
 	mux.HandleFunc("GET /api/admin/backup", s.admin(s.handleAdminBackup))
+	mux.HandleFunc("POST /api/admin/restore", s.admin(s.handleAdminRestore))
 	mux.HandleFunc("GET /api/admin/modules", s.consoleUser(s.handleAdminModules)) // any console user: which modules are on
 	mux.HandleFunc("PUT /api/admin/modules", s.admin(s.handleAdminSetModules))
 	mux.HandleFunc("GET /api/modules", s.device(s.handleDeviceModules))
@@ -1311,19 +1313,6 @@ func (s *Server) handleAdminMembers(w http.ResponseWriter, r *http.Request) {
 			m.App, m.Device, publicDevices(m.Devices), append([]string{}, m.Issues...), m.StatusAt, m.LastContact, m.SilentSince != 0}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"members": out, "circles": s.store.Circles(), "places": s.store.AllPlaces(), "server": s.serverInfo()})
-}
-
-// handleAdminBackup downloads the whole data file. It holds password and token
-// hashes, so keep it as safe as the server itself.
-func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
-	b, err := s.store.Snapshot()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "could not make a backup")
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", `attachment; filename="famlogic-backup-`+time.Now().Format("2006-01-02")+`.json"`)
-	_, _ = w.Write(b)
 }
 
 // handleAdminResetSignIn makes a one-time link that lets a member who forgot

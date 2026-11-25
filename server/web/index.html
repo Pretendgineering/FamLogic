@@ -49,8 +49,7 @@
           <select id="mode-select" aria-label="Light or dark"><option value="system">Same as this device</option><option value="light">Light</option><option value="dark">Dark</option></select>
           <label class="switch-label" title="Map, Chat, Calendar… instead of Thereabouts, Chitchat, Datebook…"><input type="checkbox" class="switch" id="plain-names" role="switch"> Plain Labels</label>
         </div></header>
-      <div class="cards" id="home-cards"></div>
-      <div class="panel wide-panel" id="feed-panel"><h2>Today</h2><ul class="list feed" id="feed-list"></ul></div>
+      <div class="dash" id="home-dash"></div>
     </main>
 
     <main class="page" data-page="family" hidden>
@@ -111,9 +110,17 @@
       <section class="panel wide-panel" data-sub-panel="server" hidden>
         <dl class="facts" id="server-facts"></dl>
         <div class="row">
-          <a class="button secondary" href="/api/admin/backup" download title="The whole data file. It contains password hashes: keep it somewhere safe.">Download backup</a>
           <button type="button" class="secondary" id="rerun-setup">Run setup again</button>
           <button id="logout-btn2" class="secondary">Log out</button>
+        </div>
+        <h2>Backup and restore</h2>
+        <p class="muted small">A backup is one zip of everything: people, devices, fences and settings, every chat with its photos and voice clips, the feed, Steward chats, and the whole notes vault. It holds password hashes, so keep it as safe as the server. The server also keeps a copy of the data file and chats each day in <code>backups/</code>.</p>
+        <p class="muted small">Restoring replaces everything with the backup, then restarts the server (about ten seconds). What was there moves to <code>backups/before-restore-…</code> first, so nothing is lost. The notes go to the vault folder the server uses now, so to move the vault: download a backup, point <code>VAULT_DIR</code> at the new folder, restart, then restore.</p>
+        <div class="row">
+          <a class="button secondary" href="/api/admin/backup" download>Download backup</a>
+          <label class="button secondary" for="restore-file">Restore a backup…</label>
+          <input type="file" id="restore-file" accept=".zip,application/zip" hidden>
+          <span class="muted small" id="restore-msg"></span>
         </div>
         <h2>Notes vault</h2>
         <dl class="facts" id="vault-facts"></dl>
@@ -200,7 +207,7 @@
             <select id="map-style"></select>
           </label>
           <label class="filter check-row"><input type="checkbox" id="dim-map"> Soften the map in dark mode</label>
-          <a class="button secondary wide admin-only" id="backup-btn" href="/api/admin/backup" download title="The whole data file. It contains password hashes: keep it somewhere safe.">Download backup</a>
+          <a class="button secondary wide admin-only" id="backup-btn" href="/api/admin/backup" download title="Everything, as one zip. It holds password hashes: keep it somewhere safe.">Download backup</a>
           <button id="logout-btn" class="secondary wide">Log out</button>
         </div>
       </aside>

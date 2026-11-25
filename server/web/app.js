@@ -278,8 +278,21 @@ function ensureMap(server) {
   map.on("zoomanim", (e) => labelsByZoom(e.zoom));
   map.on("zoom zoomend", () => labelsByZoom());
   labelsByZoom();
+  // "Show everyone": fit the map to every person sharing (and the fences, if nobody is).
+  const Everyone = L.Control.extend({ options: { position: "topright" }, onAdd() {
+    const b = L.DomUtil.create("button", "map-everyone");
+    b.type = "button"; b.innerHTML = icon("people") + "<span>Show everyone</span>"; b.title = "Fit the map to everyone";
+    L.DomEvent.disableClickPropagation(b);
+    b.addEventListener("click", () => {
+      const pts = everyoneBounds.length ? everyoneBounds : places.map((p) => [p.lat, p.lon]);
+      if (pts.length) map.fitBounds(pts, { padding: [50, 50], maxZoom: 15 });
+    });
+    return b;
+  } });
+  new Everyone().addTo(map);
   applyTiles();
 }
+let everyoneBounds = [];
 
 function renderMembers(members) {
   const list = $("#members");
@@ -360,6 +373,7 @@ function renderMembers(members) {
     }
   }
 
+  everyoneBounds = bounds;
   if (!fittedOnce && bounds.length) {
     map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
     fittedOnce = true;
@@ -1014,60 +1028,77 @@ function card(href, iconName, title, text, cls = "") {
   return a;
 }
 
-function renderHome() {
+// Home: a dashboard of everything at once (who's where, today, what's coming,
+// chores, lists, meals, routines, chats, devices); each panel opens its page.
+let homeDrawn = "";
+async function renderHome() {
   $("#home-title").textContent = $("#family-name").textContent || "FamLogic";
-  const parents = lastMembers.filter((m) => m.role !== "child").length;
-  const kids = lastMembers.length - parents;
-  $("#home-sub").textContent = lastMembers.length ? `${lastMembers.length} ${lastMembers.length === 1 ? "person" : "people"}` + (kids ? ` · ${parents} ${parents === 1 ? "parent" : "parents"}, ${kids} ${kids === 1 ? "child" : "children"}` : "") : "Nobody has joined yet: invite your family from the Family page.";
-  const cards = [];
-  if (moduleOn("thereabouts")) {
-    const sos = lastMembers.filter((m) => m.sosSince);
-    const atFence = lastMembers.filter((m) => m.place && !m.paused).length;
-    const driving = lastMembers.filter(isDriving).length;
-    cards.push(sos.length
-      ? card("#/thereabouts", "pin", "SOS", `${sos.map((m) => m.name).join(", ")} ${sos.length === 1 ? "needs" : "need"} help. Open the map.`, "sos")
-      : card("#/thereabouts", "pin", displayName(moduleInfo("thereabouts") || { name: "Thereabouts", plain: "Map" }), [atFence ? `${atFence} at a fence` : null, driving ? `${driving} driving` : null, `${places.length} ${places.length === 1 ? "fence" : "fences"}`].filter(Boolean).join(" · ") || "Who's where, on the map"));
-  }
-  for (const m of modules) {
-    if (m.id === "thereabouts" || !m.enabled || !MODULE_ICONS[m.id] || !document.querySelector(`.rail a[data-view="${m.id}"]`)) continue;
-    const unread = m.id === "chat" ? chatUnread() : 0;
-    cards.push(card("#/" + m.id, MODULE_ICONS[m.id], displayName(m) + (unread ? ` · ${unread} new` : ""), m.available ? m.description : "Coming soon"));
-  }
-  const quiet = lastMembers.filter((m) => m.silent || (m.issues || []).length).length;
-  cards.push(card("#/family", "people", "Family", "People, parents and children, invites."));
-  cards.push(card("#/access", "key", "Access & Control", "What each person can use, their home screen, and the parent PIN."));
-  if (isAdmin()) {
-    cards.push(card("#/devices", "device", "Devices", quiet ? `${quiet} ${quiet === 1 ? "phone needs" : "phones need"} attention` : "All phones look fine"));
-    cards.push(card("#/settings", "gear", "Settings", "Modules, backups, AI and API access."));
-  }
-  $("#home-cards").replaceChildren(...cards);
-  renderFeed();
-}
-
-// The family feed: today's timeline (arrivals, check-ins, trips, chores, rewards).
-let feedDrawn = "";
-async function renderFeed() {
+  const people = lastMembers.filter((m) => m.role !== "dependent" && m.access !== "display");
+  $("#home-sub").textContent = lastMembers.length ? `${people.length} ${people.length === 1 ? "person" : "people"}` : "Nobody has joined yet: invite your family from the Family page.";
+  const on = (id) => moduleOn(id) && (moduleInfo(id) || {}).available !== false;
   const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
-  let items;
-  try { items = (await api("GET", `/api/feed?from=${midnight.getTime()}&to=${Date.now() + 60000}`)).items; } catch (_) { return; }
-  const sig = JSON.stringify(items);
-  if (sig === feedDrawn) return;
-  feedDrawn = sig;
-  const place = (e) => e.place || (places.find((p) => p.id === e.placeId) || {}).name || "a place";
-  const text = (e) => ({
-    arrived: `${e.name} got to ${place(e)}`, left: `${e.name} left ${place(e)}`, checkin: `${e.name} checked in` + (e.note ? `: ${e.note}` : ""),
-    sos: `${e.name} sent an SOS`, sos_end: `${e.name} is OK`, drive_start: `${e.name} started driving`, trip: `${e.name} finished a trip`,
-    chore_done: `${e.name} did "${e.title}"` + (e.level ? ` ★ ${e.level}` : ""), reward_spent: `${e.name} got "${e.title}" (★ ${e.level})`,
-  }[e.type] || `${e.name}: ${e.type}`);
-  const open = (e) => (e.type === "chore_done" || e.type === "reward_spent") ? "#/chores" : "#/thereabouts";
-  const list = $("#feed-list");
-  list.replaceChildren(...items.map((e) => {
-    const m = personById(e.memberId);
-    return el("li", { class: "clickable", onclick: () => { location.hash = open(e); } },
-      el("span", { class: "muted small feed-time" }, new Date(e.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
-      m ? avatarOf(m) : null, el("div", { class: "grow" }, el("div", { class: "title" }, text(e))));
-  }));
-  if (!items.length) list.append(el("li", { class: "muted" }, "Nothing yet today."));
+  const get = (cond, path) => cond ? api("GET", path).catch(() => null) : Promise.resolve(null);
+  const [feed, events, chores, lists, meals, routines] = await Promise.all([
+    get(true, `/api/feed?from=${midnight.getTime()}&to=${Date.now() + 60000}`),
+    get(on("calendar"), `/api/events?from=${midnight.getTime()}&to=${midnight.getTime() + 8 * 86400000}`),
+    get(on("chores"), "/api/chores"), get(on("todos"), "/api/lists"), get(on("meals"), "/api/meals"), get(on("routines"), "/api/routines"),
+  ]);
+  if (view !== "home") return;
+  const sig = JSON.stringify([lastMembers.map((m) => [m.id, describe(m), m.sosSince]), feed, events, chores, lists, meals, routines, chatConvs.map((c) => [c.id, c.unread, c.last && c.last.id]), places.length]);
+  if (sig === homeDrawn && $("#home-dash").childElementCount) return;
+  homeDrawn = sig;
+  const name = (id) => (personById(id) || {}).name || "?";
+  const time = (ms) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const panel = (href, ic, title, body, cls = "") => {
+    const a = el("a", { class: "dash-panel " + cls, href });
+    const h = el("div", { class: "dash-head" }); h.innerHTML = `<span class="ri">${ic ? icon(ic) : ""}</span>`;
+    h.append(el("span", { class: "dash-title" }, title));
+    a.append(h, body);
+    return a;
+  };
+  const rows = (items, empty) => items.length ? el("ul", { class: "dash-list" }, ...items) : el("p", { class: "muted small" }, empty);
+  const li = (main, sub, extra) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "dash-main" }, main), sub ? el("div", { class: "dash-sub" }, sub) : null), extra || null);
+  const out = [];
+  if (moduleOn("thereabouts")) {
+    const sos = people.filter((m) => m.sosSince);
+    out.push(panel("#/thereabouts", "pin", sos.length ? "SOS" : "Who's where",
+      rows(people.map((m) => el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "dash-main" }, m.name), el("div", { class: "dash-sub" }, describe(m))))), "Nobody's sharing yet."),
+      sos.length ? "sos" : ""));
+  }
+  if (feed) {
+    const at = (e) => e.place || (places.find((p) => p.id === e.placeId) || {}).name || "a place";
+    const label = { arrived: (e) => `got to ${at(e)}`, left: (e) => `left ${at(e)}`, checkin: (e) => "checked in" + (e.note ? `: ${e.note}` : ""),
+      sos: () => "sent an SOS", sos_end: () => "is OK", drive_start: () => "started driving", trip: () => "finished a trip",
+      chore_done: (e) => `did "${e.title}"`, reward_spent: (e) => `got "${e.title}"` };
+    out.push(panel("#/thereabouts", "people", "Today", rows(feed.items.slice(0, 10).map((e) => li(`${e.name} ${(label[e.type] || (() => e.type))(e)}`, time(e.time))), "Nothing yet today.")));
+  }
+  if (events) out.push(panel("#/calendar", "calendar", displayName(moduleInfo("calendar")),
+    rows(events.events.slice(0, 8).map((e) => li(e.title, (new Date(e.start) < new Date(midnight.getTime() + 86400000) ? "Today" : new Date(e.start).toLocaleDateString([], { weekday: "short", day: "numeric" })) + " · " + (e.allDay ? "all day" : time(e.start)) + (e.where ? " · " + e.where : ""))), "Nothing in the next week.")));
+  if (chores) {
+    const due = chores.chores.filter((c) => !c.finished && (!c.due || c.due <= chores.today));
+    out.push(panel("#/chores", "star", displayName(moduleInfo("chores")),
+      el("div", {}, rows(due.slice(0, 8).map((c) => li(c.title, c.who.length ? c.who.map(name).join(", ") : "Anyone", c.stars ? el("span", { class: "badge" }, "★ " + c.stars) : null)), "Nothing due."),
+        Object.keys(chores.stars || {}).length ? el("p", { class: "dash-sub" }, "Stars: " + Object.entries(chores.stars).map(([id, n]) => `${name(id)} ${n}`).join(" · ")) : null)));
+  }
+  if (lists) out.push(panel("#/todos", "check", displayName(moduleInfo("todos")),
+    rows(lists.lists.slice(0, 6).map((l) => { const open = l.items.filter((i) => !i.done); return li(l.title, open.length ? open.slice(0, 4).map((i) => i.text).join(", ") + (open.length > 4 ? ` +${open.length - 4}` : "") : "all done", el("span", { class: "badge" }, String(open.length))); }), "No lists yet.")));
+  if (routines) {
+    const nowRows = Object.entries(routines.now || {}).map(([who, id]) => { const r = routines.routines.find((x) => x.id === id); return r ? li(`${name(who)}: ${r.title}`, `${r.items.filter((i) => i.done).length} of ${r.items.length} done`) : null; }).filter(Boolean);
+    out.push(panel("#/routines", "check", displayName(moduleInfo("routines")), rows(nowRows, "No routine on right now.")));
+  }
+  if (meals) {
+    const n = new Date(), today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+    out.push(panel("#/meals", "meal", displayName(moduleInfo("meals")),
+      rows(meals.days.filter((d) => d.date >= today).map((d) => el("li", {}, el("span", { class: "dash-day" }, new Date(d.date + "T12:00").toLocaleDateString([], { weekday: "short" })),
+        el("div", { class: "grow dash-main" + (Object.keys(d.meals).length ? "" : " muted") }, Object.entries(d.meals).map(([k, v]) => `${k}: ${v}`).join(" · ") || "Not planned"))), "This week's done.")));
+  }
+  if (moduleOn("chat") && chatConvs.length) out.push(panel("#/chat", "chat", displayName(moduleInfo("chat")),
+    rows(chatConvs.filter((c) => c.last).slice(0, 6).map((c) => li(c.title + (c.unread ? ` (${c.unread} new)` : ""), (c.last.text || "Photo").slice(0, 80))), "No messages yet.")));
+  if (isAdmin()) {
+    const quiet = lastMembers.filter((m) => m.silent || (m.issues || []).length);
+    out.push(panel("#/devices", "device", "Devices", rows(quiet.map((m) => li(m.name, m.silent ? "Not heard from in a while" : (m.issues || []).join(", "))), "All phones look fine.")));
+  }
+  $("#home-dash").replaceChildren(...out);
 }
 
 function avatarOf(m) {
@@ -1451,6 +1482,13 @@ function renderModulePage(id) {
   $("#module-title").textContent = displayName(m);
   $("#module-desc").textContent = m.description;
   const box = $("#module-soon");
+  // Switching between module pages: start from an empty page (and forget what the
+  // last one drew), so one page's content never lingers on another's.
+  if (box.dataset.module !== id) {
+    box.dataset.module = id;
+    box.replaceChildren();
+    upkeepDrawn = listsDrawn = calDrawn = "";
+  }
   if (id === "chores" && m.available) { box.classList.remove("soon"); renderUpkeep(box); return; }
   if (id === "todos" && m.available) { box.classList.remove("soon"); renderLists(box); return; }
   if (id === "calendar" && m.available) { box.classList.remove("soon"); renderCalendar(box); return; }
@@ -1836,6 +1874,7 @@ async function renderUpkeep(box, force = false) {
   try { data = await api("GET", "/api/chores"); }
   catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   try { rewards = await api("GET", "/api/rewards"); } catch (_) {}
+  if (box.dataset.module !== "chores") return; // the page changed while loading
   // Redraw only when something changed (the 10-second refresh calls this too).
   const sig = JSON.stringify([data, rewards, upkeepEdit && upkeepEdit.id]);
   if (!force && sig === upkeepDrawn && box.childElementCount) return;
@@ -2054,6 +2093,7 @@ async function renderLists(box, force = false) {
   if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select, textarea")) return;
   let data;
   try { data = await api("GET", "/api/lists"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "todos") return; // the page changed while loading
   const sig = JSON.stringify([data, listOpen]);
   if (!force && sig === listsDrawn && box.childElementCount) return;
   listsDrawn = sig;
@@ -2099,6 +2139,7 @@ async function renderCalendar(box, force = false) {
   const from = new Date(); from.setHours(0, 0, 0, 0);
   let data;
   try { data = await api("GET", `/api/events?from=${from.getTime()}&to=${from.getTime() + 45 * 86400000}`); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "calendar") return; // the page changed while loading
   const sig = JSON.stringify(data);
   if (!force && sig === calDrawn && box.childElementCount) return;
   calDrawn = sig;
@@ -2158,6 +2199,7 @@ async function renderCalendar(box, force = false) {
 async function renderRoutines(box) {
   let d;
   try { d = await api("GET", "/api/routines"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "routines") return; // the page changed while loading
   if (box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
   const name = (id) => (personById(id) || {}).name || "?";
   const cards = d.routines.map((r) => {
@@ -2184,6 +2226,7 @@ let mealsWeek = "";
 async function renderMeals(box) {
   let d;
   try { d = await api("GET", "/api/meals" + (mealsWeek ? "?week=" + mealsWeek : "")); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "meals") return; // the page changed while loading
   if (box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
   mealsWeek = d.week;
   const meals = ["Breakfast", "Lunch", "Dinner"];
@@ -2219,7 +2262,7 @@ async function renderMeals(box) {
     if (!rt.value.trim()) return;
     try { await api("POST", "/api/recipes", { title: rt.value.trim(), ingredients: ing.value.split("\n").map((x) => x.trim()).filter(Boolean), method: method.value }); renderMeals(box); } catch (err) { alert(err.message); }
   });
-  box.replaceChildren(el("div", { class: "row" }, prev, el("strong", {}, "Week " + Number(d.week.split("-W")[1])), next), el("ul", { class: "list" }, ...rows),
+  box.replaceChildren(el("div", { class: "row" }, prev, el("strong", {}, "Week " + Number(d.week.split("-W")[1])), next), el("div", { class: "meals-head" }, el("span"), ...meals.map((m) => el("span", { class: "muted small" }, m))), el("ul", { class: "list meals-week" }, ...rows),
     el("h2", {}, "Recipes"), recipes.length ? el("ul", { class: "list" }, ...recipes) : el("p", { class: "muted" }, "No recipes yet."),
     ...(d.canEdit ? [el("h2", {}, "Add a recipe"), form] : []));
 }
@@ -2235,3 +2278,21 @@ document.getElementById("pair-display")?.addEventListener("click", async () => {
   } catch (err) { alert(err.message); }
 });
 $("#rerun-setup")?.addEventListener("click", () => openSetup());
+
+// Restore a backup zip: it replaces everything, so ask first; the server restarts to finish.
+$("#restore-file")?.addEventListener("change", async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = "";
+  if (!file) return;
+  if (!confirm(`Restore "${file.name}"?\n\nEverything on this server is replaced by the backup. What's here now is kept in backups/before-restore-… on the server.`)) return;
+  const msg = $("#restore-msg");
+  msg.textContent = "Uploading…";
+  try {
+    const res = await fetch("/api/admin/restore", { method: "POST", headers: { "Content-Type": "application/zip" }, body: file, credentials: "same-origin" });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || `Restore failed (${res.status})`);
+    msg.textContent = "Restoring and restarting…";
+    const back = async () => { try { if ((await fetch("/healthz")).ok) { location.reload(); return; } } catch (_) {} setTimeout(back, 1500); };
+    setTimeout(back, 2500);
+  } catch (err) { msg.textContent = ""; alert(err.message); }
+});

@@ -905,3 +905,43 @@ input.switch:checked::after { transform: translateX(16px); background: var(--sur
 .setup-people select { width: auto; margin: 0; }
 .setup-nav { margin-top: 16px; display: flex; gap: 8px; align-items: center; }
 .setup-nav .grow { flex: 1; }
+
+/* Pantry: the week as a grid, every day's meals in the same columns. */
+.meals-week li, .meals-head { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; gap: 8px; }
+.meals-week li .feed-time { text-align: left; min-width: 0; }
+.meals-head { padding: 0 12px; margin-top: 8px; }
+.meals-head { grid-template-columns: 7.5em repeat(3, 1fr); }
+
+/* Home: a dense dashboard of panels, each opening its page. */
+.dash { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.dash-panel { display: block; background: var(--surface); border-radius: 18px; padding: 12px 14px; box-shadow: var(--shadow); color: var(--text); text-decoration: none; min-width: 0; transition: box-shadow .15s; }
+.dash-panel:hover { box-shadow: var(--shadow-lg); }
+.dash-panel.sos { outline: 2px solid var(--sos); }
+.dash-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.dash-head .ri { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-soft-text); flex: none; }
+.dash-head .ri svg { width: 18px; height: 18px; }
+.dash-title { font-family: var(--serif); font-size: 1.1rem; font-weight: 600; }
+.dash-list { list-style: none; margin: 0; padding: 0; }
+.dash-list li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--line, rgba(127,127,127,.15)); min-width: 0; }
+.dash-list li:first-child { border-top: 0; }
+.dash-list .avatar { width: 28px; height: 28px; font-size: .8rem; flex: none; }
+.dash-main { font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-sub { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
+.dash-list .grow { min-width: 0; flex: 1; }
+.dash-list .badge { flex: none; }
+#view-home .page-head { max-width: none; }
+/* The rail grows with every module: tighten it on shorter windows, and never show a
+   scrollbar for the last few pixels (it still scrolls when it truly must). */
+.rail { scrollbar-width: none; }
+.rail::-webkit-scrollbar { display: none; }
+@media (min-width: 721px) and (max-height: 960px) {
+  .rail { padding: 10px 8px; gap: 0; }
+  .rail a { padding: 4px 2px 5px; gap: 2px; font-size: .7rem; }
+  .rail a .ri { height: 28px; }
+  .rail .rail-brand { padding-bottom: 6px; }
+  .rail .rail-sep { margin: 5px 10px; }
+}
+.dash-day { width: 2.6em; flex: none; font-size: .8rem; color: var(--muted); }
+.map-everyone { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px 8px 10px; border: 0; border-radius: 999px; background: var(--surface); color: var(--text); font: 600 .85rem var(--sans, inherit); box-shadow: var(--shadow); cursor: pointer; }
+.map-everyone:hover { box-shadow: var(--shadow-lg); }
+.map-everyone svg { width: 18px; height: 18px; color: var(--secondary); }

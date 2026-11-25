@@ -106,6 +106,9 @@ func main() {
 	if err := dropPrivileges(cfg.DataDir, cfg.VaultDir); err != nil {
 		log.Fatalf("switching user: %v", err)
 	}
+	if err := applyPendingRestore(cfg.DataDir, cfg.VaultDir); err != nil {
+		log.Printf("restore: %v", err)
+	}
 	dataFile := filepath.Join(cfg.DataDir, "famlogic.json")
 	store, err := OpenStore(dataFile)
 	if err == nil {
@@ -149,10 +152,35 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	restart := make(chan struct{}, 1)
+	app.restart = func() {
+		select {
+		case restart <- struct{}{}:
+		default:
+		}
+	}
+	again := false
+	select {
+	case <-stop:
+	case <-restart:
+		again = true
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+	stopBg()
+	if app.chat != nil {
+		app.chat.Close()
+	}
+	if again {
+		// Start over in the same process (so it works with or without Docker's restart policy).
+		exe, err := os.Executable()
+		if err == nil {
+			log.Printf("restarting")
+			err = syscall.Exec(exe, os.Args, os.Environ())
+		}
+		log.Fatalf("restart: %v (start FamLogic again to finish)", err)
+	}
 }
 
 func runHealthcheck(listen string) int {
