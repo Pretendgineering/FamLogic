@@ -12,3 +12,5 @@ A self-hosted family hub. These pages come with FamLogic and are replaced when i
 - [Releasing](Releasing.md): how releases are built
 
 Source: https://github.com/Pretendgineering/FamLogic
+- [Style guide](Style-Guide.md): the look and voice for every screen.
+- [Maintenance](Maintenance.md): the weekly look-over.

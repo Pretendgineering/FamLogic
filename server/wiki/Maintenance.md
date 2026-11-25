@@ -21,6 +21,8 @@ what couldn't be checked.
 
 ## 2. Visual sweep (console)
 
+Check everything against the [Style guide](Style-Guide.md).
+
 - Build and run a test server, sign in, and screenshot every page (Home, Thereabouts and its
   tabs, Chat, every module page, Family, Access & Control, Devices, Settings and its tabs, a
   coming-soon page, the Steward panel, setup) in **light and dark**, and at **phone width
