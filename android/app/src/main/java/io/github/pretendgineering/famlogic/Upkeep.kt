@@ -189,10 +189,14 @@ fun UpkeepScreen(prefs: Prefs) {
             if (doneToday.isNotEmpty()) {
                 item { SectionTitle("Done today") }
                 items(doneToday, key = { "d" + it.id }) { c ->
-                    ChoreCard(c, people, today, big = false, done = true, canUndo = data.canEdit, manage = manage(c), onUndo = {
+                    // Grown-ups can take back anyone's tick; children their own (tap the tick).
+                    val mineToday = c.done.any { it.first == today && it.second == me }
+                    ChoreCard(c, people, today, big = big && mineToday, done = true, canUndo = data.canEdit || mineToday, manage = manage(c), onUndo = {
                         scope.launch {
                             runCatching { Api(prefs.serverUrl, prefs.token).choreUndo(c.id, today) }
-                            Upkeep.refresh(prefs)
+                                .onSuccess { if (it.stars > 0) Toast.makeText(context, "Taken back: −${it.stars} ★", Toast.LENGTH_SHORT).show() }
+                                .onFailure { Toast.makeText(context, "Couldn't take it back: ${it.message}", Toast.LENGTH_LONG).show() }
+                            refreshAll()
                         }
                     }) {}
                 }
@@ -379,7 +383,14 @@ private fun ChoreCard(
                 Modifier.size(ring).clip(CircleShape)
                     .background(if (done) MaterialTheme.colorScheme.primary else Color.Transparent)
                     .border(3.dp, if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape)
-                    .then(if (!done && canTick) Modifier.clickable(onClickLabel = "Done") { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onTick() } else Modifier),
+                    .then(
+                        when {
+                            !done && canTick -> Modifier.clickable(onClickLabel = "Done") { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onTick() }
+                            // Tapping a done tick takes it back (a misclick, or not quite done).
+                            done && canUndo -> Modifier.clickable(onClickLabel = "Not done") { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onUndo() }
+                            else -> Modifier
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 if (done) Icon(Icons.Filled.Check, contentDescription = "Done", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(ring * 0.6f))

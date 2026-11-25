@@ -296,10 +296,6 @@ func (s *Server) handleChoreUndo(w http.ResponseWriter, r *http.Request, me *Mem
 	if !s.choreSetup(w, me) {
 		return
 	}
-	if !isAdult(me) {
-		writeError(w, http.StatusForbidden, "only a grown-up can take a tick back")
-		return
-	}
 	var body struct {
 		Date string `json:"date"`
 	}
@@ -307,6 +303,30 @@ func (s *Server) handleChoreUndo(w http.ResponseWriter, r *http.Request, me *Mem
 		return
 	}
 	people := s.chorePeople()
+	// Grown-ups can take back anyone's tick; a child, only their own (a misclick,
+	// or not quite done after all).
+	if !isAdult(me) {
+		list, _ := s.chores.list(people, false)
+		mine := false
+		for _, c := range list {
+			if c.ID != r.PathValue("id") || len(c.Done) == 0 {
+				continue
+			}
+			date := body.Date
+			if date == "" {
+				date = c.Done[0].Date
+			}
+			for _, d := range c.Done {
+				if d.Date == date && d.By == me.ID {
+					mine = true
+				}
+			}
+		}
+		if !mine {
+			writeError(w, http.StatusForbidden, "only the person who ticked it, or a grown-up, can take it back")
+			return
+		}
+	}
 	ch, by, err := s.chores.untick(r.PathValue("id"), body.Date, people)
 	if errors.Is(err, errNoChore) {
 		writeError(w, http.StatusNotFound, "no such chore")

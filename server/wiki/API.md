@@ -48,7 +48,7 @@ FamLogic's HTTP API, used by the Android app, the web console, the Pebble bridge
 | `GET /api/chores` | `Bearer <token>`, a key with `chores`, or the console | Upkeep: `{chores:[{id, title, who:[ids], every, due, when, stars, notes, done:[{date, by}], finished, file}], stars:{id:n}, today, canEdit, level}`. Chores are Markdown notes in the vault's `Chores/` folder |
 | `POST /api/chores` `{title, who, every?, due?, when?, stars?, notes?}`; `PATCH`/`DELETE /api/chores/{id}` (or `POST …/delete`) | parents, keys, children with `full` (children with `add`: their own, without stars) | Add, change or retire a chore (retiring sets `archived: true`; the note stays) |
 | `POST /api/chores/{id}/done` `{date?, by?}` | anyone it's for; parents and keys for anyone | Tick it off: stars go to `by`, parents are told, the feed records it, a repeating chore moves to its next date |
-| `POST /api/chores/{id}/undo` `{date?}` | parents, keys | Take a tick back (and its stars) |
+| `POST /api/chores/{id}/undo` `{date?}` | grown-ups and keys; a child for their own tick | Take a tick back (and its stars) |
 | `POST /api/members/{id}/stars` `{add}` or `{set}` | parents, keys with `chores` | Give or spend stars |
 | `GET /api/rewards`; `POST /api/rewards {title, cost}`; `DELETE /api/rewards/{id}` | anyone with Upkeep; parents and keys change the list | Rewards stars can buy, and asks (everyone's for parents, your own for children) |
 | `POST /api/rewards/{id}/ask`; `POST /api/rewards/asks/{id}/approve` or `/decline` | the child asks; a parent answers | Approving takes the stars (409 if there aren't enough) and goes on the feed |

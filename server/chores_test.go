@@ -106,10 +106,20 @@ func TestChores(t *testing.T) {
 		t.Fatalf("feed: %v", feed)
 	}
 
-	// A parent takes it back: the star goes, the date comes back.
-	if st, ch = e.status("POST", "/api/chores/"+id+"/undo", f.kid, nil); st != 403 {
-		t.Fatalf("kid undoing: %d", st)
+	// Only the child who ticked it (or a grown-up) can take it back.
+	if st, _ := e.status("POST", "/api/chores/"+id+"/undo", f.teen, nil); st != 403 {
+		t.Fatalf("teen undoing kid's tick: %d", st)
 	}
+	// The kid takes it back (a misclick): the star goes.
+	if st, ch = e.status("POST", "/api/chores/"+id+"/undo", f.kid, nil); st != 200 || ch["due"] != today() {
+		t.Fatalf("kid undoing own tick: %d %v", st, ch)
+	}
+	_, list = e.status("GET", "/api/chores", f.mom, nil)
+	if stars := list["stars"].(map[string]any); stars[f.kidID] != nil {
+		t.Fatalf("stars after the kid's undo: %v", stars)
+	}
+	// Ticked again; then a parent takes it back: the star goes, the date comes back.
+	e.status("POST", "/api/chores/"+id+"/done", f.kid, nil)
 	st, ch = e.status("POST", "/api/chores/"+id+"/undo", f.mom, map[string]any{"date": today()})
 	if st != 200 || ch["due"] != today() {
 		t.Fatalf("undo: %d %v", st, ch)
