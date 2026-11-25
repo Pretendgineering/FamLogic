@@ -197,6 +197,23 @@ fun HomeScreen(
         else -> t.startsWith("convo.") && chatOn && Access.can("chat")
     }
     val saved = parseTiles(Access.home.ifEmpty { Access.defaultHome() })
+    // A module switched on (or newly built) gets its tile on Home once, so new things
+    // aren't hidden in the drawer. One the person removes stays removed. Children's and
+    // displays' homes are set by a parent, so they're left alone.
+    LaunchedEffect(features, Access.home) {
+        if (Access.isChild || Access.isDisplay || features.isEmpty()) return@LaunchedEffect
+        val moduleTiles = listOf("calendar", "todos", "chores", "routines", "meals", "steward", "profiles") + SOON_TILES
+        val placed = saved.map { it.id }.toSet()
+        val seen = prefs.seenTiles ?: placed
+        val fresh = moduleTiles.filter { usable(it) && it !in placed && it !in seen }
+        if (fresh.isEmpty()) { if (prefs.seenTiles == null) prefs.seenTiles = seen; return@LaunchedEffect }
+        val list = (saved + parseTiles(fresh.map { "$it:half" })).map { it.encode() }
+        runCatching { Api(prefs.serverUrl, prefs.token).setHome(list) }.onSuccess {
+            prefs.homeTiles = list
+            Access.home = list
+            prefs.seenTiles = seen + fresh
+        }
+    }
     // While arranging: a draft, saved with Done.
     var draft by remember { mutableStateOf<List<HomeTile>?>(null) }
     val editing = draft != null
@@ -1052,7 +1069,8 @@ private fun ChatTile(
                 Modifier.fillMaxWidth().clickable(onClickLabel = "Open all chats", onClick = onOpen).padding(start = 12.dp, end = 12.dp, top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(Access.name("chat"), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                androidx.compose.foundation.text.BasicText(Access.name("chat"), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface), maxLines = 1,
+                    autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MaterialTheme.typography.titleMedium.fontSize, stepSize = 0.5.sp))
                 if (unread > 0) androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$unread") }
             }
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(8.dp)) {
@@ -1192,7 +1210,7 @@ private fun SimpleTile(
             title,
             style = style.copy(color = MaterialTheme.colorScheme.onSurface),
             maxLines = 2,
-            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = style.fontSize, stepSize = 1.sp),
+            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
         )
         Text(sub, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2)
     }
@@ -1324,6 +1342,32 @@ object Sos {
             } catch (_: Exception) {
                 Toast.makeText(context, "Couldn't reach the server. FamLogic will keep trying.", Toast.LENGTH_LONG).show()
             }
+        }
+    }
+}
+
+
+/**
+ * A module tile's name and icon. The name is never cut off: it shrinks to fit, and on a
+ * one-wide tile the icon sits above it so the name has the whole width.
+ */
+@Composable
+fun TileHead(wide: Int, big: Boolean, title: String, icon: @Composable () -> Unit, trailing: (@Composable () -> Unit)? = null) {
+    val style = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface)
+    @Composable fun Name(m: Modifier) = androidx.compose.foundation.text.BasicText(
+        title, m, style = style, maxLines = 1,
+        autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+    )
+    if (wide <= 1) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) { icon(); Spacer(Modifier.weight(1f)); trailing?.invoke() }
+            Name(Modifier.fillMaxWidth().padding(top = 4.dp))
+        }
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            icon()
+            Name(Modifier.padding(start = 8.dp).weight(1f))
+            trailing?.invoke()
         }
     }
 }

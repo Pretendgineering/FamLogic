@@ -518,12 +518,10 @@ fun UpkeepTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onO
     val me = prefs.memberId
     val due = data?.chores?.filter { Upkeep.isMine(it, me) && Upkeep.dueNow(it, data.today) }.orEmpty()
     Column(Modifier.fillMaxWidth().height(height).clickable(onClickLabel = "Open ${Access.name("chores")}", onClick = onOpen).padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (Access.pictures) Pictures.Upkeep(if (big) 38.dp else 32.dp) else Icon(tileIcon("chores"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp))
-            Text(Access.name("chores"), Modifier.padding(start = 8.dp).weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val stars = data?.stars?.get(me) ?: 0
-            if (stars > 0) Text("★ $stars", color = Color(0xFFE0A82E), fontWeight = FontWeight.Bold)
-        }
+        val stars = data?.stars?.get(me) ?: 0
+        TileHead(wide, big, Access.name("chores"),
+            icon = { if (Access.pictures) Pictures.Upkeep(if (big) 38.dp else 32.dp) else Icon(tileIcon("chores"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp)) },
+            trailing = if (stars > 0) { { Text("★ $stars", color = Color(0xFFE0A82E), fontWeight = FontWeight.Bold) } } else null)
         val tickBox: @Composable (Chore) -> Unit = { c ->
             Box(
                 Modifier.size(26.dp).clip(CircleShape).border(2.5.dp, MaterialTheme.colorScheme.outline, CircleShape)

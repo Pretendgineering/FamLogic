@@ -202,10 +202,7 @@ fun RoutinesTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, o
     val data = Rhythms.data
     val mine = data?.routines?.find { it.list.id == data.now[prefs.memberId] }
     Column(Modifier.fillMaxWidth().height(height).clickable(onClickLabel = "Open ${Access.name("routines")}", onClick = onOpen).padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(tileIcon("routines"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp))
-            Text(mine?.list?.title ?: Access.name("routines"), Modifier.padding(start = 8.dp).weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        TileHead(wide, big, mine?.list?.title ?: Access.name("routines"), icon = { Icon(tileIcon("routines"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp)) })
         if (mine == null) { Spacer(Modifier.weight(1f)); Text("Nothing on now", color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
         val left = mine.list.items.filter { !it.done }
         if (tall >= 2 || wide >= 2) {
@@ -371,10 +368,7 @@ fun MealsTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onOp
     val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
     val days = Pantry.data?.days.orEmpty().filter { it.date >= today }
     Column(Modifier.fillMaxWidth().height(height).clickable(onClickLabel = "Open ${Access.name("meals")}", onClick = onOpen).padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(tileIcon("meals"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp))
-            Text(Access.name("meals"), Modifier.padding(start = 8.dp).weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
-        }
+        TileHead(wide, big, Access.name("meals"), icon = { Icon(tileIcon("meals"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp)) })
         if (tall >= 2 && days.isNotEmpty()) {
             days.take(5).forEach { d ->
                 Row(Modifier.padding(top = 4.dp)) {

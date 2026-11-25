@@ -110,6 +110,17 @@ picture icons). Each theme has light and dark versions.
   short list, and a line saying Steward can keep notes for it already.
 - **SOS:** red, unmistakable, held (never tapped) to send; the beacon icon; bold sans.
 
+### Every new module needs its UI everywhere
+When a module is built (or added as coming soon), it gets all of these in the same change:
+- **App:** a home tile (shortcut when small, mini version at 2×2 or larger, a name that never
+  cuts off), its icon in `tileIcon`, a picture icon for children and grandparents, its own and
+  plain names in `Access.NAMES`, the Steward button on its screen, and an entry in the
+  home-tile list so its tile joins Home once when it's switched on.
+- **Server:** its tile id in `homeTiles` (kids.go), its module entry and description, a level
+  for children if they can use it, and its page in Steward's page list.
+- **Console:** a rail link with its icon, a page, a panel on the Home dashboard, its plans
+  while coming soon, and a "Help me choose" question that suggests it.
+
 ## 7. Motion
 
 - Short and calm: 150–260ms, ease out. Nothing bounces except the talk button's "listening"

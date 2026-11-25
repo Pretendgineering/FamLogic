@@ -1047,13 +1047,14 @@ async function renderHome() {
   const on = (id) => moduleOn(id) && (moduleInfo(id) || {}).available !== false;
   const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
   const get = (cond, path) => cond ? api("GET", path).catch(() => null) : Promise.resolve(null);
-  const [feed, events, chores, lists, meals, routines] = await Promise.all([
+  const [feed, events, chores, lists, meals, routines, profiles] = await Promise.all([
     get(true, `/api/feed?from=${midnight.getTime()}&to=${Date.now() + 60000}`),
     get(on("calendar"), `/api/events?from=${midnight.getTime()}&to=${midnight.getTime() + 8 * 86400000}`),
     get(on("chores"), "/api/chores"), get(on("todos"), "/api/lists"), get(on("meals"), "/api/meals"), get(on("routines"), "/api/routines"),
+    get(on("profiles"), "/api/profiles"),
   ]);
   if (view !== "home") return;
-  const sig = JSON.stringify([lastMembers.map((m) => [m.id, describe(m), m.sosSince]), feed, events, chores, lists, meals, routines, chatConvs.map((c) => [c.id, c.unread, c.last && c.last.id]), places.length]);
+  const sig = JSON.stringify([lastMembers.map((m) => [m.id, describe(m), m.sosSince]), feed, events, chores, lists, meals, routines, profiles, chatConvs.map((c) => [c.id, c.unread, c.last && c.last.id]), places.length]);
   if (sig === homeDrawn && $("#home-dash").childElementCount) return;
   homeDrawn = sig;
   const name = (id) => (personById(id) || {}).name || "?";
@@ -1101,6 +1102,17 @@ async function renderHome() {
     out.push(panel("#/meals", "meal", displayName(moduleInfo("meals")),
       rows(meals.days.filter((d) => d.date >= today).map((d) => el("li", {}, el("span", { class: "dash-day" }, new Date(d.date + "T12:00").toLocaleDateString([], { weekday: "short" })),
         el("div", { class: "grow dash-main" + (Object.keys(d.meals).length ? "" : " muted") }, Object.entries(d.meals).map(([k, v]) => `${k}: ${v}`).join(" · ") || "Not planned"))), "This week's done.")));
+  }
+  // Who's Who: allergies at a glance, and whose birthday is next.
+  if (profiles) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const nextBday = (v) => { const d = new Date(v + "T12:00"); if (isNaN(d)) return null; const n = new Date(today.getFullYear(), d.getMonth(), d.getDate()); if (n < today) n.setFullYear(n.getFullYear() + 1); return n; };
+    const rowsP = profiles.people.filter((p) => p.profile.Allergies || p.profile.Birthday).map((p) => {
+      const b = p.profile.Birthday ? nextBday(p.profile.Birthday) : null;
+      const allergy = (p.profile.Allergies || "").split("\n").map((l) => l.replace(/^[-*]\s*/, "").trim()).filter(Boolean).join(", ");
+      return li(p.name, [allergy && "Allergies: " + allergy, b && "Birthday " + b.toLocaleDateString([], { day: "numeric", month: "short" })].filter(Boolean).join(" · "));
+    });
+    out.push(panel("#/profiles", "idcard", displayName(moduleInfo("profiles")), rows(rowsP, "No profiles filled in yet.")));
   }
   if (moduleOn("chat") && chatConvs.length) out.push(panel("#/chat", "chat", displayName(moduleInfo("chat")),
     rows(chatConvs.filter((c) => c.last).slice(0, 6).map((c) => li(c.title + (c.unread ? ` (${c.unread} new)` : ""), (c.last.text || "Photo").slice(0, 80))), "No messages yet.")));

@@ -249,10 +249,7 @@ fun CalendarTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, o
     val now = System.currentTimeMillis()
     val next = Datebook.data?.events?.filter { it.end > now }.orEmpty()
     Column(Modifier.fillMaxWidth().height(height).clickable(onClickLabel = "Open ${Access.name("calendar")}", onClick = onOpen).padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(tileIcon("calendar"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp))
-            Text(Access.name("calendar"), Modifier.padding(start = 8.dp).weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
-        }
+        TileHead(wide, big, Access.name("calendar"), icon = { Icon(tileIcon("calendar"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp)) })
         if (next.isEmpty()) {
             Spacer(Modifier.weight(1f)); Text("Nothing coming up", color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column
         }

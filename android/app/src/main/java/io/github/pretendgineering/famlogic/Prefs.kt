@@ -228,6 +228,10 @@ class Prefs(context: Context) {
         get() = sp.getString("kid_preset", "") ?: ""
         set(v) = sp.edit { putString("kid_preset", v) }
     /** Home screen tiles, in order (empty = default). */
+    /** Module tiles this person has already been given (or removed): a new module's tile joins Home once, then it's theirs to keep or remove. Null until first set. */
+    var seenTiles: Set<String>?
+        get() = if (sp.contains("seen_tiles")) sp.getStringSet("seen_tiles", emptySet())?.toSet() else null
+        set(v) = sp.edit { putStringSet("seen_tiles", v ?: emptySet()) }
     var homeTiles: List<String>
         get() = (sp.getString("home_tiles", "") ?: "").split(',').filter { it.isNotBlank() }
         set(v) = sp.edit { putString("home_tiles", v.joinToString(",")) }
