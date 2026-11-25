@@ -57,7 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** The app's sections: the home screen, then each module that's on (and that this person may use). */
-enum class Tab { Home, Map, Chat, Chores, Lists, Calendar }
+enum class Tab { Home, Map, Chat, Chores, Lists, Calendar, Routines, Meals }
 
 /** The tabs this person sees, in order. */
 fun visibleTabs(features: Set<String>, prefs: Prefs): List<Tab> = buildList {
@@ -67,6 +67,8 @@ fun visibleTabs(features: Set<String>, prefs: Prefs): List<Tab> = buildList {
     if (Modules.has(features, Modules.CHORES) && prefs.access != "dependent" && Access.can("chores")) add(Tab.Chores)
     if (Modules.has(features, Modules.TODOS) && prefs.access != "dependent" && Access.can("todos")) add(Tab.Lists)
     if (Modules.has(features, Modules.CALENDAR) && prefs.access != "dependent" && Access.can("calendar")) add(Tab.Calendar)
+    if (Modules.has(features, Modules.ROUTINES) && prefs.access != "dependent" && Access.can("routines")) add(Tab.Routines)
+    if (Modules.has(features, Modules.MEALS) && prefs.access != "dependent" && Access.can("meals")) add(Tab.Meals)
 }
 
 @Composable
@@ -151,7 +153,9 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
                 exit = slideOutVertically(tween(220)) { it } + shrinkVertically(tween(220), shrinkTowards = Alignment.Top),
             ) {
             NavigationBar {
-                tabs.forEach { t ->
+                // A phone's bar holds five; the other sections open from their home tiles.
+                val shown = tabs.take(5).let { if (current in it || current !in tabs) it else it.dropLast(1) + current }
+                shown.forEach { t ->
                     val on = current == t
                     val label = tabLook(t).third
                     NavigationBarItem(
@@ -187,6 +191,8 @@ private fun tileFor(t: Tab) = when (t) {
     Tab.Chores -> "chores"
     Tab.Lists -> "todos"
     Tab.Calendar -> "calendar"
+    Tab.Routines -> "routines"
+    Tab.Meals -> "meals"
 }
 
 fun tabLook(t: Tab): Triple<ImageVector, ImageVector, String> = when (t) {
@@ -196,6 +202,8 @@ fun tabLook(t: Tab): Triple<ImageVector, ImageVector, String> = when (t) {
     Tab.Chores -> Triple(Icons.Filled.Star, Icons.Outlined.Star, Access.name("chores"))
     Tab.Lists -> Triple(tileIcon("todos"), tileIcon("todos"), Access.name("todos"))
     Tab.Calendar -> Triple(tileIcon("calendar"), tileIcon("calendar"), Access.name("calendar"))
+    Tab.Routines -> Triple(tileIcon("routines"), tileIcon("routines"), Access.name("routines"))
+    Tab.Meals -> Triple(tileIcon("meals"), tileIcon("meals"), Access.name("meals"))
 }
 
 /** A tab's icon: the usual symbol (filled when selected), or a picture for people who use picture icons. */
@@ -210,6 +218,8 @@ fun TabIcon(t: Tab, on: Boolean, size: androidx.compose.ui.unit.Dp) {
             Tab.Chores -> Icon(Icons.Filled.Star, contentDescription = null, tint = Color(0xFFE0A82E), modifier = Modifier.size(s))
             Tab.Lists -> Icon(tileIcon("todos"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
             Tab.Calendar -> Icon(tileIcon("calendar"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
+            Tab.Routines -> Icon(tileIcon("routines"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
+            Tab.Meals -> Icon(tileIcon("meals"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
         }
         return
     }

@@ -41,25 +41,37 @@ type ListItem struct {
 }
 
 type List struct {
-	ID    string     `json:"id"`
-	Title string     `json:"title"`
-	Kind  string     `json:"kind"`           // list or todos
-	Who   []string   `json:"who"`            // member ids; empty = everyone's
-	When  string     `json:"when,omitempty"` // a time of day it matters
-	Items []ListItem `json:"items"`
-	File  string     `json:"file"`
+	ID    string   `json:"id"`
+	Title string   `json:"title"`
+	Kind  string   `json:"kind"`           // list or todos
+	Who   []string `json:"who"`            // member ids; empty = everyone's
+	When  string   `json:"when,omitempty"` // a time of day it matters
+	// Routines: when it comes round (HH:MM) and on which days (mon…sun; none: every day).
+	Starts string     `json:"starts,omitempty"`
+	Days   []string   `json:"days,omitempty"`
+	Items  []ListItem `json:"items"`
+	File   string     `json:"file"`
 }
 
 type lists struct {
-	root string
-	mu   sync.Mutex
+	root    string
+	folders map[string]string // note type → folder
+	mu      sync.Mutex
 }
 
 func newLists(v *Vault) *lists {
 	if v == nil {
 		return nil
 	}
-	return &lists{root: v.dir}
+	return &lists{root: v.dir, folders: map[string]string{"list": "Lists", "todos": "To-dos"}}
+}
+
+// newRoutines: Rhythms' routines are checklists too (Routines/, type routine).
+func newRoutines(v *Vault) *lists {
+	if v == nil {
+		return nil
+	}
+	return &lists{root: v.dir, folders: map[string]string{"routine": "Routines"}}
 }
 
 var (
@@ -70,7 +82,15 @@ var (
 )
 
 func (l *lists) dirs() []string {
-	return []string{filepath.Join(l.root, "Lists"), filepath.Join(l.root, "To-dos")}
+	seen := map[string]bool{}
+	out := []string{}
+	for _, t := range []string{"list", "todos", "routine"} {
+		if f, ok := l.folders[t]; ok && !seen[f] {
+			seen[f] = true
+			out = append(out, filepath.Join(l.root, f))
+		}
+	}
+	return out
 }
 
 // all reads every list and to-do note.
@@ -90,7 +110,7 @@ func (l *lists) all(members []Member) []List {
 				continue
 			}
 			t, _ := n.field("type")
-			if t != "list" && t != "todos" {
+			if _, ok := l.folders[t]; !ok {
 				continue
 			}
 			if a, _ := n.field("archived"); a == "true" {
@@ -123,6 +143,8 @@ func (l *lists) parse(n *note, id, kind string, members []Member) List {
 		}
 	}
 	ls.When, _ = n.field("when")
+	ls.Starts, _ = n.field("starts")
+	_, ls.Days = n.field("days")
 	section := ""
 	seen := map[string]int{}
 	for _, line := range strings.Split(n.body, "\n") {
@@ -231,10 +253,7 @@ func (l *lists) get(id string, members []Member) (List, error) {
 func (l *lists) create(title, kind string, who []string, members []Member) (List, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	dir := filepath.Join(l.root, "Lists")
-	if kind == "todos" {
-		dir = filepath.Join(l.root, "To-dos")
-	}
+	dir := filepath.Join(l.root, l.folders[kind])
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return List{}, err
 	}

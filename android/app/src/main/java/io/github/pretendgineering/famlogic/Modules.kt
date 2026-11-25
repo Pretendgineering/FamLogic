@@ -15,6 +15,7 @@ object Modules {
     const val TODOS = "todos"
     const val CHORES = "chores"
     const val MEALS = "meals"
+    const val ROUTINES = "routines"
     const val DISPLAY = "display"
 
     /** Modules hidden on this phone by its owner (Settings → Look and Feel). */

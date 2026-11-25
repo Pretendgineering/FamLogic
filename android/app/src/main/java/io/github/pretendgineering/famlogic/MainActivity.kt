@@ -94,6 +94,8 @@ class MainActivity : ComponentActivity() {
                             Tab.Chores -> UpkeepScreen(prefs)
                             Tab.Lists -> ListsScreen(prefs)
                             Tab.Calendar -> CalendarScreen(prefs)
+                            Tab.Routines -> RoutinesScreen(prefs)
+                            Tab.Meals -> MealsScreen(prefs)
                             Tab.Chat -> ChatScreen(prefs, openRequest = openChat, onOpenHandled = { openChat = null })
                             Tab.Map -> MapScreen(
                                 prefs = prefs,

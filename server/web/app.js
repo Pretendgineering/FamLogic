@@ -1454,6 +1454,8 @@ function renderModulePage(id) {
   if (id === "chores" && m.available) { box.classList.remove("soon"); renderUpkeep(box); return; }
   if (id === "todos" && m.available) { box.classList.remove("soon"); renderLists(box); return; }
   if (id === "calendar" && m.available) { box.classList.remove("soon"); renderCalendar(box); return; }
+  if (id === "routines" && m.available) { box.classList.remove("soon"); renderRoutines(box); return; }
+  if (id === "meals" && m.available) { box.classList.remove("soon"); renderMeals(box); return; }
   box.classList.add("soon");
   box.replaceChildren(
     el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
@@ -2066,4 +2068,74 @@ async function renderCalendar(box, force = false) {
       el("li", {}, el("strong", {}, "Thunderbird: "), "New Calendar → On the network, location ", el("code", {}, location.origin + "/dav/"), ".")));
   box.replaceChildren(...(agenda.length ? agenda : [el("p", { class: "muted" }, "Nothing on the calendar for the next few weeks.")]),
     ...(data.canEdit ? [el("h2", {}, "Add an event"), form] : []), sync);
+}
+
+// Rhythms: routines, and who's on which now.
+async function renderRoutines(box) {
+  let d;
+  try { d = await api("GET", "/api/routines"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
+  const name = (id) => (personById(id) || {}).name || "?";
+  const cards = d.routines.map((r) => {
+    const on = Object.entries(d.now).filter(([, id]) => id === r.id).map(([who]) => name(who));
+    return el("div", { class: "panel list-card" }, el("div", { class: "list-head" }, el("div", { class: "title" }, r.title),
+      el("span", { class: "muted small" }, [r.who.length ? r.who.map(name).join(", ") : "Everyone", r.starts && "from " + r.starts, (r.days || []).join(" ")].filter(Boolean).join(" · "))),
+      on.length ? el("p", { class: "small", style: "color:var(--secondary);margin:4px 6px" }, "On now for " + on.join(", ")) : null,
+      el("ul", { class: "list compact" }, ...r.items.map((i) => el("li", { class: i.done ? "done-item" : "" }, el("span", { class: "item-check" }, el("span", {}, (i.done ? "✓ " : "") + i.text))))));
+  });
+  const title = el("input", { placeholder: "e.g. Bedtime", maxlength: "60" });
+  const starts = el("input", { type: "time", value: "19:30" });
+  const steps = el("textarea", { rows: "4", placeholder: "Steps, one per line" });
+  const form = el("form", { class: "upkeep-add" }, el("div", { class: "row" }, el("label", { class: "grow" }, "Routine", title), el("label", {}, "Starts", starts)), steps, el("div", { class: "row" }, el("button", { type: "submit" }, "Make routine")));
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (!title.value.trim()) return;
+    try { await api("POST", "/api/routines", { title: title.value.trim(), starts: starts.value, items: steps.value.split("\n").map((x) => x.trim()).filter(Boolean) }); renderRoutines(box); } catch (err) { alert(err.message); }
+  });
+  box.replaceChildren(...(cards.length ? cards : [el("p", { class: "muted" }, "No routines yet.")]), ...(d.canEdit ? [el("h2", {}, "Make a routine"), form] : []));
+}
+
+// Pantry: this week's meals and the recipes.
+let mealsWeek = "";
+async function renderMeals(box) {
+  let d;
+  try { d = await api("GET", "/api/meals" + (mealsWeek ? "?week=" + mealsWeek : "")); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
+  mealsWeek = d.week;
+  const meals = ["Breakfast", "Lunch", "Dinner"];
+  const rows = d.days.map((day) => {
+    const dt = new Date(day.date + "T12:00");
+    return el("li", {}, el("span", { class: "feed-time muted small" }, dt.toLocaleDateString([], { weekday: "short", day: "numeric" })),
+      el("div", { class: "grow meal-row" }, ...meals.map((m) => {
+        const inp = el("input", { value: day.meals[m] || "", placeholder: m, maxlength: "100", ...(d.canEdit ? {} : { readonly: "" }) });
+        inp.addEventListener("change", async () => { try { await api("PUT", `/api/meals/${d.week}`, { date: day.date, meal: m, dish: inp.value }); } catch (err) { alert(err.message); } });
+        return inp;
+      })));
+  });
+  const shift = (by) => {
+    const [y, w] = d.week.split("-W").map(Number);
+    const jan4 = new Date(y, 0, 4); const mon = new Date(jan4); mon.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (w - 1 + by) * 7);
+    const t = new Date(mon); t.setDate(t.getDate() + 3); const y2 = t.getFullYear(); const j4 = new Date(y2, 0, 4);
+    const wk = 1 + Math.round(((t - j4) / 86400000 - 3 + ((j4.getDay() + 6) % 7)) / 7);
+    mealsWeek = `${y2}-W${String(wk).padStart(2, "0")}`; renderMeals(box);
+  };
+  const prev = el("button", { type: "button", class: "secondary" }, "‹ Last week"); prev.addEventListener("click", () => shift(-1));
+  const next = el("button", { type: "button", class: "secondary" }, "Next week ›"); next.addEventListener("click", () => shift(1));
+  const recipes = d.recipes.map((r) => {
+    const shop = el("button", { type: "button", class: "link" }, "Add to Shopping");
+    shop.addEventListener("click", async () => { try { const x = await api("POST", `/api/recipes/${r.id}/shop`); alert(`Added ${x.added} to Shopping.`); } catch (err) { alert(err.message); } });
+    return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, r.title), el("div", { class: "sub" }, r.ingredients.join(", "))), shop);
+  });
+  const rt = el("input", { placeholder: "Recipe name", maxlength: "80" });
+  const ing = el("textarea", { rows: "4", placeholder: "Ingredients, one per line" });
+  const method = el("textarea", { rows: "3", placeholder: "Method" });
+  const form = el("form", { class: "upkeep-add" }, rt, ing, method, el("div", { class: "row" }, el("button", { type: "submit" }, "Add recipe")));
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (!rt.value.trim()) return;
+    try { await api("POST", "/api/recipes", { title: rt.value.trim(), ingredients: ing.value.split("\n").map((x) => x.trim()).filter(Boolean), method: method.value }); renderMeals(box); } catch (err) { alert(err.message); }
+  });
+  box.replaceChildren(el("div", { class: "row" }, prev, el("strong", {}, "Week " + Number(d.week.split("-W")[1])), next), el("ul", { class: "list" }, ...rows),
+    el("h2", {}, "Recipes"), recipes.length ? el("ul", { class: "list" }, ...recipes) : el("p", { class: "muted" }, "No recipes yet."),
+    ...(d.canEdit ? [el("h2", {}, "Add a recipe"), form] : []));
 }

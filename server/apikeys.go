@@ -66,7 +66,7 @@ func scopeFor(method, path string) string {
 		return "chores"
 	case strings.HasPrefix(path, "/api/events"):
 		return "calendar"
-	case strings.HasPrefix(path, "/api/lists"):
+	case strings.HasPrefix(path, "/api/lists"), strings.HasPrefix(path, "/api/routines"), strings.HasPrefix(path, "/api/meals"), strings.HasPrefix(path, "/api/recipes"):
 		return "lists"
 	case path == "/api/feed":
 		return "feed"

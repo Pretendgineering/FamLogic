@@ -44,11 +44,11 @@ func TestModulesDefaults(t *testing.T) {
 	if m.Enabled["thereabouts"] || !m.Enabled["chat"] || m.Enabled["bogus"] || !m.SetupDone {
 		t.Fatalf("after set: %+v", m)
 	}
-	if err := s.SetModules(map[string]bool{"meals": true}, true); err != nil {
+	if err := s.SetModules(map[string]bool{"display": true}, true); err != nil {
 		t.Fatal(err)
 	}
 	if feats := s.moduleFeatures(); len(feats) != 0 {
-		t.Fatalf("features should be empty until meals is built: %v", feats)
+		t.Fatalf("features should be empty until display is built: %v", feats)
 	}
 }
 

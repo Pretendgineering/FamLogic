@@ -895,3 +895,5 @@ input.switch:checked::after { transform: translateX(16px); background: var(--sur
 .list-add { display: flex; gap: 8px; align-items: center; margin: 8px 6px; }
 .list-add input { flex: 1; margin: 0; }
 .list-add select { width: auto; margin: 0; }
+.meal-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.meal-row input { margin: 0; }

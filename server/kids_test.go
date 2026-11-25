@@ -39,11 +39,11 @@ func TestParentPIN(t *testing.T) {
 func TestKidSettings(t *testing.T) {
 	f := newChatFamily(t)
 	e := f.e
-	// Presets: the younger child has Thereabouts and Chitchat only; the older child everything.
+	// Presets: the younger child has Thereabouts and Chitchat in full, and looks at the rest; the older child everything.
 	_, m := e.do("GET", "/api/members", f.kid, nil)
 	kid := m["settings"].(map[string]any)["kid"].(map[string]any)
 	mods := kid["modules"].(map[string]any)
-	if kid["preset"] != "younger" || mods["thereabouts"] != "full" || mods["chat"] != "full" || mods["meals"] != "off" ||
+	if kid["preset"] != "younger" || mods["thereabouts"] != "full" || mods["chat"] != "full" || mods["meals"] != "view" ||
 		kid["features"].(map[string]any)["sos"] != true || kid["features"].(map[string]any)["chat_delete"] != false {
 		t.Fatalf("younger preset: %v", kid)
 	}

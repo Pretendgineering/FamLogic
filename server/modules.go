@@ -27,7 +27,8 @@ var allModules = []ModuleInfo{
 	{"calendar", "Datebook", "Calendar", "Shared calendar, synced with CalDAV.", true, true},
 	{"todos", "Odds & Ends", "Lists", "To-dos and shared lists.", true, true},
 	{"chores", "Upkeep", "Chores", "Chores, with optional stars.", true, true},
-	{"meals", "Pantry", "Meals", "Meal plans and recipes.", false, false},
+	{"routines", "Rhythms", "Routines", "Checklists that change with the day.", true, false},
+	{"meals", "Pantry", "Meals", "Meal plans and recipes.", true, false},
 	{"display", "Corkboard", "Family display", "The family's day on a wall tablet or TV.", false, false},
 	{"agents", "Steward", "AI & API", "API keys for your own AI agent.", true, false},
 }

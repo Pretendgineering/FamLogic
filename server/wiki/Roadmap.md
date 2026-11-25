@@ -131,9 +131,9 @@ A walkthrough in the web console that sets everything up properly the first time
 In this order (each is finished before the next starts):
 1. ✅ **Odds & Ends** (lists and to-dos), 0.34.0: shared lists and someone's to-dos as Markdown, sections, `@who`, tick from the tile, Steward can add and tick.
 2. ✅ **Upkeep** (chores), 0.27.0. Next for it: chores on the Pebble, a "spend stars" list of rewards, and talking to Steward from the app ("I finished the dishwasher").
-3. **Rhythms** (routines and daily rhythms): checklists that switch with the time of day.
+3. ✅ **Rhythms** (routines), 0.36.0: checklists that come round at a time on chosen days, current routine per person, ticks clear each time.
 4. ✅ **Datebook** (calendar), 0.35.0: events as Markdown, repeats, two-way CalDAV with phones (DAVx5, iPhone, Thunderbird), agenda tile, Steward can read and add. Next: outside calendars by link.
-5. **Pantry** (meals and recipes), feeding the shopping list.
+5. ✅ **Pantry** (meals and recipes), 0.36.0: the week's meals as Markdown, recipes, ingredients to the Shopping list in one tap.
 6. **Steward** (the agent bridge): your own AI agent, using FamLogic's API with scoped keys and the vault guide; voice in, voice out.
 7. **Corkboard / Front Room** (Control Deck round two and the Android TV launcher, its own APK).
 

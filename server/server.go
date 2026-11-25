@@ -30,13 +30,14 @@ const (
 )
 
 type Server struct {
-	typing typingNow
-	lists  *lists
-	cal    *calendar
-	dav    davLogins
-	cfg    Config
-	store  *Store
-	static fs.FS
+	typing   typingNow
+	lists    *lists
+	cal      *calendar
+	routines *lists
+	dav      davLogins
+	cfg      Config
+	store    *Store
+	static   fs.FS
 
 	loginMu sync.Mutex    // serialises failed logins so guessing is slow
 	limiter *loginLimiter // locks a username after repeated wrong passwords
@@ -56,7 +57,8 @@ func NewServer(cfg Config, store *Store, static fs.FS) *Server {
 		s.vault = openVault(cfg.VaultDir)
 		s.chores = newChores(s.vault)
 		s.lists = newLists(s.vault)
-		s.cal = newCalendar(s.vault, cfg.DataDir)
+		s.cal = newCalendar(s.vault, filepath.Dir(store.path))
+		s.routines = newRoutines(s.vault)
 	}
 	s.voice = openVoice(env("VOICE_DIR", "/voice"), filepath.Join(filepath.Dir(store.path), "tmp"))
 	if s.chat = openChatNextTo(store.path); s.chat != nil {
@@ -159,6 +161,15 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/rewards", s.choreAuth(s.handleRewards))
 	mux.HandleFunc("GET /api/lists", s.choreAuth(s.handleLists))
 	mux.HandleFunc("GET /api/events", s.choreAuth(s.handleEvents))
+	mux.HandleFunc("GET /api/routines", s.choreAuth(s.handleRoutines))
+	mux.HandleFunc("POST /api/routines", s.choreAuth(s.handleCreateRoutine))
+	mux.HandleFunc("POST /api/routines/{id}/items/{item}", s.choreAuth(s.handleTickRoutine))
+	mux.HandleFunc("POST /api/routines/{id}/delete", s.choreAuth(s.handleArchiveRoutine))
+	mux.HandleFunc("GET /api/meals", s.choreAuth(s.handleMeals))
+	mux.HandleFunc("PUT /api/meals/{week}", s.choreAuth(s.handleSetMeal))
+	mux.HandleFunc("POST /api/meals/{week}", s.choreAuth(s.handleSetMeal))
+	mux.HandleFunc("POST /api/recipes", s.choreAuth(s.handleAddRecipe))
+	mux.HandleFunc("POST /api/recipes/{id}/shop", s.choreAuth(s.handleShopRecipe))
 	mux.HandleFunc("POST /api/events", s.choreAuth(s.handleSaveEvent))
 	mux.HandleFunc("GET /api/events/{id}", s.choreAuth(s.handleEvent))
 	mux.HandleFunc("PATCH /api/events/{id}", s.choreAuth(s.handleSaveEvent))
