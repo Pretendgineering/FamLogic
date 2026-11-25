@@ -205,6 +205,36 @@ var stewardTools = []stewardTool{
 			id := argStr(a, "chore_id")
 			return s.callAs(me, s.handleChoreDone, "POST", "/api/chores/"+url.PathEscape(id)+"/done", map[string]string{"id": id}, body)
 		}},
+	{"list_lists", "Shared lists (shopping, packing) and to-dos, with their items (id, text, done).", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleLists, "GET", "/api/lists", nil, nil)
+		}},
+	{"add_to_list", "Add an item to a list (e.g. milk to Shopping).", obj(map[string]any{
+		"list_id": str("The list's id (from list_lists)"),
+		"text":    str("The item, short"),
+		"who":     str("Optional: name or id of who it's for"),
+	}, "list_id", "text"),
+		func(s *Server, me *Member, a map[string]any) any {
+			id := argStr(a, "list_id")
+			body := map[string]any{"text": argStr(a, "text")}
+			if w := argStr(a, "who"); w != "" {
+				body["who"] = s.personID(w)
+			}
+			return s.callAs(me, s.handleAddItem, "POST", "/api/lists/"+url.PathEscape(id)+"/items", map[string]string{"id": id}, body)
+		}},
+	{"tick_list_item", "Tick an item off a list (or untick it).", obj(map[string]any{
+		"list_id": str("The list's id"),
+		"item_id": str("The item's id"),
+		"done":    map[string]any{"type": "boolean"},
+	}, "list_id", "item_id"),
+		func(s *Server, me *Member, a map[string]any) any {
+			id, item := argStr(a, "list_id"), argStr(a, "item_id")
+			done, ok := a["done"].(bool)
+			if !ok {
+				done = true
+			}
+			return s.callAs(me, s.handleTickItem, "POST", "/api/lists/"+url.PathEscape(id)+"/items/"+url.PathEscape(item), map[string]string{"id": id, "item": item}, map[string]any{"done": done})
+		}},
 	{"list_rewards", "Rewards stars can buy, and open asks.", obj(map[string]any{}),
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handleRewards, "GET", "/api/rewards", nil, nil)

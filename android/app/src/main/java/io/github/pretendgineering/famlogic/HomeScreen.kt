@@ -179,7 +179,8 @@ fun HomeScreen(
         // Modules still being built: "coming soon" tiles, so a layout can be planned.
         "routines", "nudges", "ride", "steward" -> t !in Modules.hidden
         "chores" -> Modules.has(features, Modules.CHORES) && Access.can("chores") && prefs.access != "dependent"
-        "calendar", "todos", "meals" -> t !in Modules.hidden
+        "todos" -> Modules.has(features, Modules.TODOS) && Access.can("todos") && prefs.access != "dependent"
+        "calendar", "meals" -> t !in Modules.hidden
         else -> t.startsWith("convo.") && chatOn && Access.can("chat")
     }
     val saved = parseTiles(Access.home.ifEmpty { Access.defaultHome() })
@@ -267,6 +268,7 @@ fun HomeScreen(
                     "checkin" -> ButtonTile(if (Access.pictures) "I'm here!" else "Check in", h, big,
                         picture = { Pictures.HereIAm(it) }, icon = Icons.Filled.CheckCircle) { confirmCheckIn = true }
                     "chores" -> UpkeepTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Chores) }
+                    "todos" -> ListsTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Lists) }
                     in PLACEHOLDER_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) {}
                     "convo.new" -> SimpleTile(Access.name(t.id), "Choosing a chat…", h, big, icon = tileIcon(t.id)) {}
                     else -> if (t.id.startsWith("convo.")) {
@@ -466,10 +468,10 @@ fun fitUnit(height: Dp, base: Dp, gap: Dp = 12.dp, pad: Dp = 12.dp): Dp {
     return (room / rows - gap).coerceIn(base * .8f, base * 1.25f)
 }
 
-val PLACEHOLDER_TILES = listOf("calendar", "todos", "meals", "routines", "nudges", "ride", "steward")
+val PLACEHOLDER_TILES = listOf("calendar", "meals", "routines", "nudges", "ride", "steward")
 
 /** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
-val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores") + PLACEHOLDER_TILES
+val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos") + PLACEHOLDER_TILES
 
 private val DRAWER_HEIGHT = 132.dp
 

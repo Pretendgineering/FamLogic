@@ -1452,6 +1452,7 @@ function renderModulePage(id) {
   $("#module-desc").textContent = m.description;
   const box = $("#module-soon");
   if (id === "chores" && m.available) { box.classList.remove("soon"); renderUpkeep(box); return; }
+  if (id === "todos" && m.available) { box.classList.remove("soon"); renderLists(box); return; }
   box.classList.add("soon");
   box.replaceChildren(
     el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
@@ -1957,4 +1958,49 @@ async function stewardSettings() {
     catch (err) { status.textContent = "Couldn't reach it: " + err.message; }
   });
   return el("div", {}, el("p", { class: "muted small" }, "Steward answers as itself and acts as whoever is talking: everything it does goes through the same permissions as the app."), form);
+}
+
+// Odds & Ends: shared lists and to-dos (Markdown notes in the vault's Lists/ and To-dos/).
+let listsDrawn = "";
+let listOpen = "";
+async function renderLists(box, force = false) {
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select, textarea")) return;
+  let data;
+  try { data = await api("GET", "/api/lists"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  const sig = JSON.stringify([data, listOpen]);
+  if (!force && sig === listsDrawn && box.childElementCount) return;
+  listsDrawn = sig;
+  const people = lastMembers.filter((m) => m.role !== "dependent");
+  const act = async (method, path, body) => { try { await api(method, path, body); renderLists(box, true); } catch (err) { alert(err.message); } };
+  const listCard = (l) => {
+    const open = listOpen === l.id || data.lists.length === 1;
+    const left = l.items.filter((i) => !i.done).length;
+    const head = el("div", { class: "list-head clickable", onclick: () => { listOpen = open ? "" : l.id; renderLists(box, true); } },
+      el("div", { class: "title" }, l.title), el("span", { class: "muted small" }, `${l.kind === "todos" ? "To-dos" : "List"} · ${left ? left + " to go" : "all done"}`));
+    if (!open) return el("div", { class: "panel list-card" }, head);
+    const rows = [...l.items.filter((i) => !i.done), ...l.items.filter((i) => i.done)].map((it) => {
+      const box2 = el("input", { type: "checkbox", ...(it.done ? { checked: "" } : {}) });
+      box2.addEventListener("change", () => act("POST", `/api/lists/${l.id}/items/${it.id}`, { done: box2.checked }));
+      const rm = el("button", { type: "button", class: "link" }, "Remove");
+      rm.addEventListener("click", () => act("DELETE", `/api/lists/${l.id}/items/${it.id}`));
+      const who = people.find((p) => p.id === it.who);
+      return el("li", { class: it.done ? "done-item" : "" }, el("label", { class: "item-check" }, box2, el("span", {}, it.text)),
+        el("span", { class: "muted small" }, [it.section, who && who.name, it.due].filter(Boolean).join(" · ")), rm);
+    });
+    const input = el("input", { placeholder: "Add an item", maxlength: "200" });
+    const add = el("form", { class: "row list-add" }, input, el("button", { type: "submit" }, "Add"));
+    add.addEventListener("submit", (ev) => { ev.preventDefault(); if (input.value.trim()) act("POST", `/api/lists/${l.id}/items`, { text: input.value.trim() }); });
+    const clear = el("button", { type: "button", class: "secondary" }, "Clear ticked");
+    clear.addEventListener("click", () => act("POST", `/api/lists/${l.id}/clear`));
+    const retire = el("button", { type: "button", class: "link" }, "Retire list");
+    retire.addEventListener("click", () => { if (confirm(`Retire "${l.title}"? Its note stays in the vault.`)) act("DELETE", `/api/lists/${l.id}`); });
+    return el("div", { class: "panel list-card" }, head, el("ul", { class: "list compact" }, ...rows), add, el("div", { class: "row" }, clear, retire));
+  };
+  // A new list.
+  const title = el("input", { placeholder: "e.g. Shopping, Beach trip", maxlength: "60" });
+  const kind = el("select", {}, el("option", { value: "list" }, "Shared list"), el("option", { value: "todos" }, "To-dos"));
+  const make = el("form", { class: "row list-add" }, title, kind, el("button", { type: "submit" }, "New list"));
+  make.addEventListener("submit", (ev) => { ev.preventDefault(); if (title.value.trim()) act("POST", "/api/lists", { title: title.value.trim(), kind: kind.value }); });
+  box.replaceChildren(...(data.lists.length ? data.lists.map(listCard) : [el("p", { class: "muted" }, "No lists yet.")]),
+    ...(data.canEdit ? [el("h2", {}, "Make a list"), make] : []));
 }

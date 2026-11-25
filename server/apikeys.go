@@ -49,6 +49,7 @@ type KeyUse struct {
 var keyScopes = []struct{ ID, Text string }{
 	{"people", "See who's in the family (names, roles, stars), not where they are"},
 	{"chores", "See, add, change and tick off chores (Upkeep), and give or spend stars"},
+	{"lists", "See, add to and tick off lists and to-dos (Odds & Ends)"},
 	{"feed", "Read the family feed (who arrived where, who did which chore)"},
 	{"location", "See where everyone is (the map)"},
 }
@@ -62,6 +63,8 @@ func scopeFor(method, path string) string {
 		return "people"
 	case strings.HasPrefix(path, "/api/chores"), strings.HasPrefix(path, "/api/rewards"), strings.HasPrefix(path, "/api/members/") && strings.HasSuffix(path, "/stars"):
 		return "chores"
+	case strings.HasPrefix(path, "/api/lists"):
+		return "lists"
 	case path == "/api/feed":
 		return "feed"
 	case path == "/api/members" && method == http.MethodGet:

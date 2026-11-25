@@ -57,7 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** The app's sections: the home screen, then each module that's on (and that this person may use). */
-enum class Tab { Home, Map, Chat, Chores }
+enum class Tab { Home, Map, Chat, Chores, Lists }
 
 /** The tabs this person sees, in order. */
 fun visibleTabs(features: Set<String>, prefs: Prefs): List<Tab> = buildList {
@@ -65,6 +65,7 @@ fun visibleTabs(features: Set<String>, prefs: Prefs): List<Tab> = buildList {
     if (Modules.on(features, Modules.THEREABOUTS) && Access.can("map")) add(Tab.Map)
     if (Modules.has(features, Modules.CHAT) && prefs.access != "dependent" && Access.can("chat")) add(Tab.Chat)
     if (Modules.has(features, Modules.CHORES) && prefs.access != "dependent" && Access.can("chores")) add(Tab.Chores)
+    if (Modules.has(features, Modules.TODOS) && prefs.access != "dependent" && Access.can("todos")) add(Tab.Lists)
 }
 
 @Composable
@@ -183,6 +184,7 @@ private fun tileFor(t: Tab) = when (t) {
     Tab.Map -> "map"
     Tab.Chat -> "chat"
     Tab.Chores -> "chores"
+    Tab.Lists -> "todos"
 }
 
 fun tabLook(t: Tab): Triple<ImageVector, ImageVector, String> = when (t) {
@@ -190,6 +192,7 @@ fun tabLook(t: Tab): Triple<ImageVector, ImageVector, String> = when (t) {
     Tab.Map -> Triple(Icons.Filled.LocationOn, Icons.Outlined.LocationOn, Access.name("map"))
     Tab.Chat -> Triple(Icons.Filled.Email, Icons.Outlined.Email, Access.name("chat"))
     Tab.Chores -> Triple(Icons.Filled.Star, Icons.Outlined.Star, Access.name("chores"))
+    Tab.Lists -> Triple(tileIcon("todos"), tileIcon("todos"), Access.name("todos"))
 }
 
 /** A tab's icon: the usual symbol (filled when selected), or a picture for people who use picture icons. */
@@ -202,6 +205,7 @@ fun TabIcon(t: Tab, on: Boolean, size: androidx.compose.ui.unit.Dp) {
             Tab.Map -> Pictures.Map(s)
             Tab.Chat -> Pictures.Talk(s)
             Tab.Chores -> Icon(Icons.Filled.Star, contentDescription = null, tint = Color(0xFFE0A82E), modifier = Modifier.size(s))
+            Tab.Lists -> Icon(tileIcon("todos"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
         }
         return
     }

@@ -263,6 +263,9 @@ console (Settings → AI & API) with the scopes it may use; send it as
 | Change or retire one | `PATCH` / `DELETE /api/chores/{id}` | chores |
 | Give or spend stars | `POST /api/members/{id}/stars {add or set}` | chores |
 | Rewards, and answering a child's ask | `GET /api/rewards`, `POST /api/rewards/asks/{id}/approve` | chores |
+| Lists and to-dos, with item ids | `GET /api/lists` | lists |
+| Add to a list ("add milk to the shopping") | `POST /api/lists/{id}/items {text, who?, due?, section?}` | lists |
+| Tick an item off (or back on) | `POST /api/lists/{id}/items/{item} {done}` | lists |
 | What happened today | `GET /api/feed?from=&to=` | feed |
 
 Rules for agents using the API:
@@ -275,8 +278,9 @@ Rules for agents using the API:
 
 ## What FamLogic does with the vault today
 
-FamLogic keeps the folders, the home note, this guide and the **People** notes, and
-**Upkeep** (chores) lives in `Chores/` as above. The other types are the agreed
+FamLogic keeps the folders, the home note, this guide and the **People** notes;
+**Upkeep** (chores) lives in `Chores/` and **Odds & Ends** (lists and to-dos) in `Lists/`
+and `To-dos/`, as above. The other types are the agreed
 format: lists, to-dos, the calendar, meals and routines are moving onto them in the
 coming versions. Notes you write in this format now will be picked up as each one
 arrives.

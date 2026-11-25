@@ -31,6 +31,7 @@ const (
 
 type Server struct {
 	typing typingNow
+	lists  *lists
 	cfg    Config
 	store  *Store
 	static fs.FS
@@ -52,6 +53,7 @@ func NewServer(cfg Config, store *Store, static fs.FS) *Server {
 	if cfg.VaultDir != "" {
 		s.vault = openVault(cfg.VaultDir)
 		s.chores = newChores(s.vault)
+		s.lists = newLists(s.vault)
 	}
 	s.voice = openVoice(env("VOICE_DIR", "/voice"), filepath.Join(filepath.Dir(store.path), "tmp"))
 	if s.chat = openChatNextTo(store.path); s.chat != nil {
@@ -152,6 +154,16 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/chores/{id}/undo", s.choreAuth(s.handleChoreUndo))
 	mux.HandleFunc("POST /api/members/{id}/stars", s.choreAuth(s.handleStars))
 	mux.HandleFunc("GET /api/rewards", s.choreAuth(s.handleRewards))
+	mux.HandleFunc("GET /api/lists", s.choreAuth(s.handleLists))
+	mux.HandleFunc("POST /api/lists", s.choreAuth(s.handleCreateList))
+	mux.HandleFunc("DELETE /api/lists/{id}", s.choreAuth(s.handleArchiveList))
+	mux.HandleFunc("POST /api/lists/{id}/delete", s.choreAuth(s.handleArchiveList))
+	mux.HandleFunc("POST /api/lists/{id}/items", s.choreAuth(s.handleAddItem))
+	mux.HandleFunc("PATCH /api/lists/{id}/items/{item}", s.choreAuth(s.handleTickItem))
+	mux.HandleFunc("POST /api/lists/{id}/items/{item}", s.choreAuth(s.handleTickItem))
+	mux.HandleFunc("DELETE /api/lists/{id}/items/{item}", s.choreAuth(s.handleRemoveItem))
+	mux.HandleFunc("POST /api/lists/{id}/items/{item}/delete", s.choreAuth(s.handleRemoveItem))
+	mux.HandleFunc("POST /api/lists/{id}/clear", s.choreAuth(s.handleClearList))
 	mux.HandleFunc("GET /api/checkplans", s.choreAuth(s.handleCheckPlans))
 	mux.HandleFunc("POST /api/checkplans", s.choreAuth(s.handleAddCheckPlan))
 	mux.HandleFunc("DELETE /api/checkplans/{id}", s.choreAuth(s.handleDeleteCheckPlan))

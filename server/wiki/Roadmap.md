@@ -129,7 +129,7 @@ A walkthrough in the web console that sets everything up properly the first time
 
 ### ⏳ 6. Modules, one at a time
 In this order (each is finished before the next starts):
-1. **Odds & Ends** (lists and to-dos) on the Markdown vault, with tags (`@Sam`, `#kids`) and time of day. The vault itself has started: its location setting, People notes and the agents' formatting guide.
+1. ✅ **Odds & Ends** (lists and to-dos), 0.34.0: shared lists and someone's to-dos as Markdown, sections, `@who`, tick from the tile, Steward can add and tick.
 2. ✅ **Upkeep** (chores), 0.27.0. Next for it: chores on the Pebble, a "spend stars" list of rewards, and talking to Steward from the app ("I finished the dishwasher").
 3. **Rhythms** (routines and daily rhythms): checklists that switch with the time of day.
 4. **Datebook** (calendar) with CalDAV and outside calendars by link.
