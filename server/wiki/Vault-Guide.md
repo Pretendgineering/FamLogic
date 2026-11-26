@@ -247,7 +247,7 @@ days: [mon, tue, wed, thu, fri]
 Which routine is current, and from when, on the given `days`. In `who`, `#name` means
 a group or tag.
 
-### Coming soon: Outings, Garage, Ledger, Pets, Homestead, Contacts (and Who's Who profiles, built)
+### Coming soon: Outings, Garage, Ledger, Pets, Contacts (Who's Who and Homestead are built)
 These modules aren't built yet, but a family can switch them on and keep their notes now
 (by hand, or by telling Steward). FamLogic will read these notes when each module arrives,
 so use the folders and fields below. Logs are dated lines in the body, newest last.
@@ -265,8 +265,10 @@ Pets/        one note per pet: Biscuit.md                    type: pet     (spec
 People/      profiles (Who's Who) are sections in each person's note, below the title: "## Birthday",
              "## Allergies", "## Medicines", "## Sleep", "## Likes", "## Dislikes", "## Sizes", "## Doctor",
              "## Emergency contacts", "## Notes" (one item per line)
-Home/        one note per job: Air filter.md                type: upkeep  (every: 3 months, last: 2026-09-01, next: 2026-12-01)
-             Bin day.md: type: upkeep, every: week, day: thu, who: "[[Sam]]"
+Home/        Home.md (type: home): the home's profile (tenure: own|rent, features: [hvac, smoke, ...],
+             bins: thu, recycling: thu, recycling_every: week|2 weeks). Homestead (built) keeps its upkeep
+             as ordinary chores in Chores/ with for: "[[Home]]" and source: home:<job>, and bin days
+             in Calendar/ the same way. Change the profile, not those chores' source.
 Contacts/    one note per person or business: Dr Lee.md     type: contact (phone, email, address, for: "[[Biscuit]]")
 ```
 

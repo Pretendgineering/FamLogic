@@ -158,6 +158,11 @@ In this order (each is finished before the next starts):
 - **Odds & Ends is now Docket:** what's on the docket. One-off jobs, errands and projects (not the regular chores, which are Upkeep), and shared lists like Shopping.
 - **Ramble it off:** tell Steward everything you need to do today and it sorts each thing: regular jobs become chores, anything at a set time goes on the calendar, one-off jobs go on your Docket, and things to buy go on Shopping. Everything can still be done by hand; Steward is optional.
 
+### ✅ 0.42.0: Homestead
+- **Homestead** is a simple profile of your home: tick what it has (furnace, smoke alarms, fridge filter, gutters, a lawn, a septic tank and more) and which days the bins and recycling go out. FamLogic keeps the matching upkeep as ordinary chores in Upkeep (for anyone) and puts bin days on the calendar. Untick something and its chores retire; each chore's history is the log.
+- Steward can set up the home and tick off its jobs ("I changed the furnace filter").
+- Garage (cars) and Menagerie (pets) will work the same way: a profile and a log for each, feeding chores, the calendar and, later, the budget.
+
 ### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
 - **Health & activity (Outings, grown from walks and runs):** family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like. Then:

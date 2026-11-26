@@ -57,7 +57,7 @@ cd android && ./gradlew assembleFossRelease
 
 ## Docs
 
-For developers: [Style guide](docs/Style-Guide.md), the [weekly look-over](docs/Maintenance.md), [Releasing](docs/Releasing.md) and the [Pebble App Store listing](docs/Pebble-App-Store.md).
+For developers: [Style guide](docs/Style-Guide.md), the [weekly look-over](docs/Maintenance.md), [Releasing](docs/Releasing.md) and the [Pebble App Store listing](docs/Pebble-App-Store.md), and how modules connect: [Connected design](docs/Connected-Design.md).
 
 
 The [wiki](server/wiki/Home.md). Every server also writes it into the notes vault as `_FamLogic/`, so it opens in Obsidian.

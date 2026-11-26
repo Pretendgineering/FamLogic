@@ -53,6 +53,8 @@ type Chore struct {
 	Finished bool        `json:"finished"`             // a one-off chore that's been done
 	File     string      `json:"file"`                 // its note, relative to the vault
 	Unknown  []string    `json:"unknownWho,omitempty"` // names in who that aren't anyone in the family
+	For      string      `json:"for,omitempty"`        // the thing it looks after: a home, a car, a pet ("Home", "Sienna")
+	Source   string      `json:"source,omitempty"`     // the rule that made it ("home:furnace-filter"); "" if made by hand
 }
 
 // ChoreDone is one time it was done.
@@ -220,7 +222,10 @@ func (c *chores) parse(n *note, members []Member) Chore {
 	if whoL == nil && whoS != "" {
 		whoL = []string{whoS}
 	}
+	forS, _ := n.field("for")
+	source, _ := n.field("source")
 	ch := Chore{ID: id, Every: every, Due: due, When: when, Stars: max(stars, 0), Who: []string{}, Done: []ChoreDone{},
+		For: linkName(forS), Source: source,
 		File: filepath.ToSlash(filepath.Join("Chores", filepath.Base(n.path)))}
 	for _, w := range whoL {
 		name := linkName(w)
@@ -322,13 +327,15 @@ func (c *chores) writeBody(n *note) error {
 
 // ChoreInput is what can be set on a chore. Nil fields stay as they are.
 type ChoreInput struct {
-	Title *string   `json:"title"`
-	Who   *[]string `json:"who"` // member ids
-	Every *string   `json:"every"`
-	Due   *string   `json:"due"`
-	When  *string   `json:"when"`
-	Stars *int      `json:"stars"`
-	Notes *string   `json:"notes"`
+	For    *string   `json:"for"`    // see Chore.For
+	Source *string   `json:"source"` // see Chore.Source
+	Title  *string   `json:"title"`
+	Who    *[]string `json:"who"` // member ids
+	Every  *string   `json:"every"`
+	Due    *string   `json:"due"`
+	When   *string   `json:"when"`
+	Stars  *int      `json:"stars"`
+	Notes  *string   `json:"notes"`
 }
 
 // validEvery checks a repeat rule.
@@ -440,6 +447,12 @@ func (c *chores) create(in ChoreInput, members []Member) (Chore, error) {
 	}
 	if in.Stars != nil && *in.Stars > 0 {
 		fields = append(fields, [2]string{"stars", strconv.Itoa(*in.Stars)})
+	}
+	if f := deref(in.For); f != "" {
+		fields = append(fields, [2]string{"for", yamlString("[[" + f + "]]")})
+	}
+	if src := deref(in.Source); src != "" {
+		fields = append(fields, [2]string{"source", src})
 	}
 	body := "# " + title + "\n\n"
 	if n := strings.TrimSpace(deref(in.Notes)); n != "" {

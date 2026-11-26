@@ -145,6 +145,7 @@ var stewardPages = map[string]string{
 	"calendar":    "Datebook (the family calendar)",
 	"routines":    "Rhythms (routines)",
 	"meals":       "Pantry (this week's meals and the recipes)",
+	"homestead":   "Homestead (the home's profile: what it has, bin days, and the upkeep chores it keeps)",
 	"profiles":    "Who's Who (everyone's profile: allergies, medicines, emergency contacts...)",
 	"family":      "the Family page",
 	"settings":    "Settings",

@@ -355,6 +355,21 @@ var stewardTools = []stewardTool{
 			}
 			return s.callAs(me, s.handleSetProfile, "PUT", "/api/profiles/"+url.PathEscape(id), map[string]string{"id": id}, map[string]any{"profile": prof})
 		}},
+	{"get_home", "The home's profile (Homestead): what it has (features), bin and recycling days, and the upkeep chores it keeps (with when each was last done and is next due). The features a home can have are listed too.", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleHome, "GET", "/api/home", nil, nil)
+		}},
+	{"set_home", "Change the home's profile; FamLogic then keeps the matching chores (and bin days on the calendar) by itself. Read it first with get_home and send the whole profile back with your change. To say when something was last done (\"I changed the furnace filter in October\"), tick its chore with complete_chore instead, or give lastDone when adding a feature.", obj(map[string]any{
+		"tenure":         str("own or rent"),
+		"features":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Feature keys from get_home's catalog"},
+		"bins":           str("Weekday the bins go out: mon, tue, wed, thu, fri, sat, sun; empty for none"),
+		"recycling":      str("Weekday for recycling; empty for none"),
+		"recyclingEvery": str("week or 2 weeks"),
+		"lastDone":       map[string]any{"type": "object", "description": "Optional: job key to YYYY-MM-DD it was last done, for newly added features", "additionalProperties": map[string]any{"type": "string"}},
+	}, "features"),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleSetHome, "PUT", "/api/home", nil, a)
+		}},
 	{"read_feed", "What happened recently: arrivals, check-ins, trips, chores done.", obj(map[string]any{
 		"hours": map[string]any{"type": "integer", "description": "How far back (default 12, at most 48)"},
 	}),
@@ -405,6 +420,7 @@ Rules:
 - Only give stars when a parent asks. Never retire chores or change who they're for unless a parent asks.
 - If you're unsure who someone means, ask instead of guessing.
 - If a tool returns an error, say plainly what went wrong.
+- Things the family looks after (the home, cars, pets) have profiles; their upkeep is ordinary chores marked with what they're for and the rule that made them (source). When someone says they did one ("changed the furnace filter"), tick that chore with complete_chore; don't make a new one.
 - When someone rambles off everything they need to do ("today I need to..."), sort each thing where it belongs, without asking about each one: a regular household job that comes round again (dishes, bins, sweeping) is a chore (add_chore, with how often); anything at a set day or time is a calendar event (add_event); a one-off job, errand or project (replace the car's wiper blades, return a parcel) goes on the Docket, on that person's to-dos (find it with list_lists; make_list if there isn't one); things to buy go on the Shopping list. Then reply with a short summary of where each thing went.
 - Recipes: when someone reads or talks through a recipe, tidy it into a clean one and save it with add_recipe, then say its name and how many ingredients and steps it has.
 - Don't assume children go to school; families homeschool, unschool or keep their own hours.

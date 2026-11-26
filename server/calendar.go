@@ -57,6 +57,7 @@ type CalEvent struct {
 	RRule  string   `json:"rrule,omitempty"`
 	File   string   `json:"file"`
 	mod    time.Time
+	Source string `json:"source,omitempty"` // the rule that made it, if any
 }
 
 // Occurrence is one showing of an event in a time range (repeats expanded).
@@ -160,6 +161,7 @@ func (c *calendar) parse(n *note, members []Member) CalEvent {
 	ev.End, _ = n.field("end")
 	ev.Where, _ = n.field("where")
 	ev.RRule, _ = n.field("rrule")
+	ev.Source, _ = n.field("source")
 	if ev.RRule == "" {
 		if every, _ := n.field("every"); every != "" {
 			ev.RRule = everyToRRule(every)
@@ -240,14 +242,16 @@ func (c *calendar) find(id string) (*note, error) {
 
 // EventInput is what can be set; nil fields stay as they are.
 type EventInput struct {
-	Title *string   `json:"title"`
-	Start *string   `json:"start"`
-	End   *string   `json:"end"`
-	Who   *[]string `json:"who"`
-	Where *string   `json:"where"`
-	Notes *string   `json:"notes"`
-	RRule *string   `json:"rrule"`
-	Every *string   `json:"every"` // day, weekdays, week, 2 weeks, month, year: turned into rrule
+	Title  *string   `json:"title"`
+	Start  *string   `json:"start"`
+	End    *string   `json:"end"`
+	Who    *[]string `json:"who"`
+	Where  *string   `json:"where"`
+	Notes  *string   `json:"notes"`
+	RRule  *string   `json:"rrule"`
+	Every  *string   `json:"every"`  // day, weekdays, week, 2 weeks, month, year: turned into rrule
+	For    *string   `json:"for"`    // the thing it's about: a home, a car, a pet
+	Source *string   `json:"source"` // the rule that made it ("home:bins"); "" if made by hand
 }
 
 func (in EventInput) check(creating bool) string {
@@ -315,6 +319,12 @@ func (c *calendar) save(id string, in EventInput, members []Member) (CalEvent, e
 	fields = append(fields, [2]string{"where", yamlString(get(in.Where, cur.Where))})
 	if in.RRule != nil {
 		fields = append(fields, [2]string{"rrule", *in.RRule}, [2]string{"every", ""})
+	}
+	if in.For != nil && *in.For != "" {
+		fields = append(fields, [2]string{"for", yamlString("[[" + *in.For + "]]")})
+	}
+	if in.Source != nil && *in.Source != "" {
+		fields = append(fields, [2]string{"source", *in.Source})
 	}
 	if in.Who != nil {
 		fields = append(fields, [2]string{"who", whoLinks(*in.Who, members)})

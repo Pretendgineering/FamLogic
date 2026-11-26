@@ -61,7 +61,8 @@ var kidModules = []kidModule{
 	{"chores", "Upkeep", "Chores", LevelView, LevelFull}, // younger children see and tick off their own chores
 	{"routines", "Rhythms", "Routines", LevelView, LevelFull},
 	{"meals", "Pantry", "Meals", LevelView, LevelFull},
-	{"profiles", "Who's Who", "Profiles", LevelView, LevelFull}, // children edit only their own (older ones)
+	{"profiles", "Who's Who", "Profiles", LevelView, LevelFull},   // children edit only their own (older ones)
+	{"homestead", "Homestead", "Home care", LevelView, LevelView}, // parents set up the home
 }
 
 type kidSwitch struct {

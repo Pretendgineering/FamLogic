@@ -164,6 +164,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/rewards", s.choreAuth(s.handleRewards))
 	mux.HandleFunc("GET /api/lists", s.choreAuth(s.handleLists))
 	mux.HandleFunc("GET /api/events", s.choreAuth(s.handleEvents))
+	mux.HandleFunc("GET /api/home", s.choreAuth(s.handleHome))
+	mux.HandleFunc("PUT /api/home", s.choreAuth(s.handleSetHome))
 	mux.HandleFunc("GET /api/profiles", s.choreAuth(s.handleProfiles))
 	mux.HandleFunc("PUT /api/profiles/{id}", s.choreAuth(s.handleSetProfile))
 	mux.HandleFunc("GET /api/calendar/feeds", s.choreAuth(s.handleFeeds))

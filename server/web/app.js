@@ -1047,14 +1047,14 @@ async function renderHome() {
   const on = (id) => moduleOn(id) && (moduleInfo(id) || {}).available !== false;
   const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
   const get = (cond, path) => cond ? api("GET", path).catch(() => null) : Promise.resolve(null);
-  const [feed, events, chores, lists, meals, routines, profiles] = await Promise.all([
+  const [feed, events, chores, lists, meals, routines, profiles, home] = await Promise.all([
     get(true, `/api/feed?from=${midnight.getTime()}&to=${Date.now() + 60000}`),
     get(on("calendar"), `/api/events?from=${midnight.getTime()}&to=${midnight.getTime() + 8 * 86400000}`),
     get(on("chores"), "/api/chores"), get(on("todos"), "/api/lists"), get(on("meals"), "/api/meals"), get(on("routines"), "/api/routines"),
-    get(on("profiles"), "/api/profiles"),
+    get(on("profiles"), "/api/profiles"), get(on("homestead"), "/api/home"),
   ]);
   if (view !== "home") return;
-  const sig = JSON.stringify([lastMembers.map((m) => [m.id, describe(m), m.sosSince]), feed, events, chores, lists, meals, routines, profiles, chatConvs.map((c) => [c.id, c.unread, c.last && c.last.id]), places.length]);
+  const sig = JSON.stringify([lastMembers.map((m) => [m.id, describe(m), m.sosSince]), feed, events, chores, lists, meals, routines, profiles, home, chatConvs.map((c) => [c.id, c.unread, c.last && c.last.id]), places.length]);
   if (sig === homeDrawn && $("#home-dash").childElementCount) return;
   homeDrawn = sig;
   const name = (id) => (personById(id) || {}).name || "?";
@@ -1102,6 +1102,12 @@ async function renderHome() {
     out.push(panel("#/meals", "meal", displayName(moduleInfo("meals")),
       rows(meals.days.filter((d) => d.date >= today).map((d) => el("li", {}, el("span", { class: "dash-day" }, new Date(d.date + "T12:00").toLocaleDateString([], { weekday: "short" })),
         el("div", { class: "grow dash-main" + (Object.keys(d.meals).length ? "" : " muted") }, Object.entries(d.meals).map(([k, v]) => `${k}: ${v}`).join(" · ") || "Not planned"))), "This week's done.")));
+  }
+  // Homestead: the home's upkeep coming up.
+  if (home) {
+    const soon = home.jobs.slice().sort((a, b) => (a.due || "").localeCompare(b.due || "")).slice(0, 6);
+    out.push(panel("#/homestead", "house", displayName(moduleInfo("homestead")),
+      rows(soon.map((c) => li(c.title, (c.due && c.due <= new Date().toISOString().slice(0, 10) ? "Due now" : "Next " + c.due) + " · " + EVERY_TEXT(c.every))), "Set up your home to see its upkeep here.")));
   }
   // Who's Who: allergies at a glance, and whose birthday is next.
   if (profiles) {
@@ -1593,7 +1599,7 @@ function renderModulePage(id) {
   if (box.dataset.module !== id) {
     box.dataset.module = id;
     box.replaceChildren();
-    upkeepDrawn = listsDrawn = calDrawn = profilesDrawn = "";
+    upkeepDrawn = listsDrawn = calDrawn = profilesDrawn = homeDrawnH = "";
   }
   if (id === "chores" && m.available) { box.classList.remove("soon"); renderUpkeep(box); return; }
   if (id === "todos" && m.available) { box.classList.remove("soon"); renderLists(box); return; }
@@ -1601,6 +1607,7 @@ function renderModulePage(id) {
   if (id === "routines" && m.available) { box.classList.remove("soon"); renderRoutines(box); return; }
   if (id === "meals" && m.available) { box.classList.remove("soon"); renderMeals(box); return; }
   if (id === "profiles" && m.available) { box.classList.remove("soon"); renderProfiles(box); return; }
+  if (id === "homestead" && m.available) { box.classList.remove("soon"); renderHomestead(box); return; }
   box.classList.add("soon");
   box.replaceChildren(
     el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
@@ -2478,7 +2485,7 @@ function sosMark() { const s = el("span", { class: "sos-mark" }); s.innerHTML = 
 // ---- Steward, from any page: a small round button in the corner (not on Chat,
 // which has its own voice). It opens a panel that knows which page you're on, and
 // the page redraws after each answer so changes show at once.
-const STEWARD_PAGES = ["home", "thereabouts", "calendar", "todos", "chores", "routines", "meals", "family", "profiles"];
+const STEWARD_PAGES = ["home", "thereabouts", "calendar", "todos", "chores", "routines", "meals", "family", "profiles", "homestead"];
 function stewardAllowed() {
   if (!serverFeatures.includes("steward")) return false;
   if (isAdmin() || !me.member) return true;
@@ -2522,7 +2529,7 @@ $("#steward-fab")?.addEventListener("click", async () => {
 $("#steward-close")?.addEventListener("click", () => { $("#steward-panel").hidden = true; stewardFab(); });
 $("#steward-clear")?.addEventListener("click", async () => { try { await api("DELETE", "/api/steward"); } catch (_) {} stewardDraw([], { canUndo: false }); });
 // After Steward changes something, the page shows it at once.
-function stewardAfter() { upkeepDrawn = listsDrawn = calDrawn = homeDrawn = profilesDrawn = ""; renderView(); }
+function stewardAfter() { upkeepDrawn = listsDrawn = calDrawn = homeDrawn = profilesDrawn = homeDrawnH = ""; renderView(); }
 $("#steward-text")?.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("#steward-form").requestSubmit(); } });
 $("#steward-form")?.addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -2661,4 +2668,58 @@ function printProfile(p, d) {
   w.document.close();
   w.focus();
   setTimeout(() => w.print(), 200);
+}
+
+// Homestead: the home's profile (what it has, bin days). FamLogic keeps the upkeep
+// chores and bin days in Upkeep and Datebook from it; each chore's history is the log.
+let homeDrawnH = "";
+const DAYS = [["", "None"], ["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
+const EVERY_TEXT = (e) => ({ week: "every week", month: "every month", "2 weeks": "every 2 weeks", "3 months": "every 3 months", "6 months": "every 6 months", "12 months": "every year", "36 months": "every 3 years" }[e]
+  || (DAYS.find(([k]) => k === e) ? "every " + DAYS.find(([k]) => k === e)[1] : e));
+async function renderHomestead(box, force = false) {
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select")) return;
+  let d;
+  try { d = await api("GET", "/api/home"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "homestead") return;
+  const sig = JSON.stringify(d);
+  if (!force && sig === homeDrawnH && box.childElementCount) return;
+  homeDrawnH = sig;
+  const p = d.profile;
+  // The upkeep it keeps: next due, last done, and Done.
+  const jobs = d.jobs.slice().sort((a, b) => (a.due || "").localeCompare(b.due || ""));
+  const jobRows = jobs.map((c) => {
+    const done = el("button", { type: "button", class: "tonal" }, "Done");
+    done.addEventListener("click", async () => { try { await api("POST", `/api/chores/${c.id}/done`, {}); renderHomestead(box, true); } catch (err) { alert(err.message); } });
+    const last = c.done[0];
+    return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, c.title),
+      el("div", { class: "sub" }, [EVERY_TEXT(c.every), c.due && (c.due <= new Date().toISOString().slice(0, 10) ? "due now" : "next " + c.due), last ? "last done " + last.date : "not done yet"].filter(Boolean).join(" · "))), done);
+  });
+  const parts = [el("h2", {}, "Upkeep for the home"), jobRows.length ? el("ul", { class: "list" }, ...jobRows)
+    : el("p", { class: "muted small" }, d.canEdit ? "Tick what your home has below, and its upkeep appears here, in Upkeep and on the calendar." : "Nothing set up yet.")];
+  if (d.canEdit) {
+    const tenure = el("select", {}, ...[["", "Not saying"], ["own", "We own it"], ["rent", "We rent it"]].map(([v, t]) => el("option", { value: v }, t)));
+    tenure.value = p.tenure || "";
+    const daySel = (v) => { const s = el("select", {}, ...DAYS.map(([k, t]) => el("option", { value: k }, t))); s.value = v || ""; return s; };
+    const bins = daySel(p.bins), recycling = daySel(p.recycling);
+    const recEvery = el("select", {}, el("option", { value: "week" }, "Every week"), el("option", { value: "2 weeks" }, "Every 2 weeks"));
+    recEvery.value = p.recyclingEvery || "week";
+    const feats = el("ul", { class: "list quiz" }, ...d.catalog.map((f) => {
+      const box2 = el("input", { type: "checkbox", class: "switch", role: "switch", "data-key": f.key });
+      box2.checked = p.features.includes(f.key);
+      return el("li", {}, el("label", { class: "switch-label" }, box2, el("span", {}, f.name, el("span", { class: "muted small" }, " · " + f.jobs.map((j) => j.title + " " + EVERY_TEXT(j.every)).join("; ")))));
+    }));
+    const save = el("button", { type: "submit" }, "Save");
+    const form = el("form", { class: "upkeep-add" },
+      el("div", { class: "row" }, el("label", {}, "The home", tenure), el("label", {}, "Bins go out", bins), el("label", {}, "Recycling", recycling), el("label", {}, "How often", recEvery)),
+      el("div", { class: "muted small" }, "What the home has (each adds its upkeep as a chore for anyone):"), feats, el("div", { class: "row" }, save));
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const body = { tenure: tenure.value, bins: bins.value, recycling: recycling.value, recyclingEvery: recEvery.value,
+        features: [...feats.querySelectorAll("input[data-key]")].filter((b) => b.checked).map((b) => b.dataset.key) };
+      save.disabled = true;
+      try { await api("PUT", "/api/home", body); renderHomestead(box, true); } catch (err) { alert(err.message); save.disabled = false; }
+    });
+    parts.push(el("h2", {}, "Your home"), form);
+  }
+  box.replaceChildren(...parts);
 }
