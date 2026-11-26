@@ -370,6 +370,23 @@ var stewardTools = []stewardTool{
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handleSetHome, "PUT", "/api/home", nil, a)
 		}},
+	{"tv_quiet", "Quiet time on the TV and family displays (Corkboard): they show a calm quiet-time screen, e.g. for a nap. Parents and grandparents only.", obj(map[string]any{
+		"minutes": map[string]any{"type": "integer", "description": "How long (at most 720); 0 = until someone ends it"},
+		"end":     map[string]any{"type": "boolean", "description": "true to end quiet time now"},
+	}),
+		func(s *Server, me *Member, a map[string]any) any {
+			if end, _ := a["end"].(bool); end {
+				return s.callAs(me, s.handleQuietEnd, "DELETE", "/api/display/quiet", nil, nil)
+			}
+			m, _ := a["minutes"].(float64)
+			return s.callAs(me, s.handleQuietStart, "POST", "/api/display/quiet", nil, map[string]any{"minutes": int(m)})
+		}},
+	{"tv_message", "Show a short message big on the TV and family displays until someone presses OK (\"Inside voices please, the baby's asleep\"). Parents and grandparents only.", obj(map[string]any{
+		"text": str("The message, 200 characters at most"),
+	}, "text"),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleDisplayMessage, "POST", "/api/display/messages", nil, map[string]any{"text": argStr(a, "text")})
+		}},
 	{"read_feed", "What happened recently: arrivals, check-ins, trips, chores done.", obj(map[string]any{
 		"hours": map[string]any{"type": "integer", "description": "How far back (default 12, at most 48)"},
 	}),

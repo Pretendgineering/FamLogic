@@ -29,7 +29,7 @@ var allModules = []ModuleInfo{
 	{"chores", "Upkeep", "Chores", "Chores, with optional stars.", true, true},
 	{"routines", "Rhythms", "Routines", "Checklists that change with the day.", true, false},
 	{"meals", "Pantry", "Meals", "Meal plans and recipes.", true, false},
-	{"display", "Corkboard", "Family display", "The family's day on a wall tablet or TV.", false, false},
+	{"display", "Corkboard", "Family display", "The family's day on the TV or a wall tablet: what's on, routines, meals, quiet time and messages from a phone.", true, false},
 	{"agents", "Steward", "AI & API", "Your family's AI helper, and API keys for your own agent.", true, false},
 	// Coming soon: they can be switched on now (a placeholder, and Steward can keep
 	// their notes in the vault already) and fill in as each is built.

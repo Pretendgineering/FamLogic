@@ -141,7 +141,7 @@ In this order (each is finished before the next starts):
 4. ✅ **Datebook** (calendar), 0.35.0: events as Markdown, repeats, two-way CalDAV with phones (DAVx5, iPhone, Thunderbird), agenda tile, Steward can read and add. Outside calendars by link since 0.40.0.
 5. ✅ **Pantry** (meals and recipes), 0.36.0: the week's meals as Markdown, recipes, ingredients to the Shopping list in one tap.
 6. **Steward** (the agent bridge): your own AI agent, using FamLogic's API with scoped keys and the vault guide; voice in, voice out.
-7. **Corkboard / Front Room** (Control Deck round two and the Android TV launcher, its own APK).
+7. ✅ **Corkboard** (the TV app, 0.43.0). Front Room (Control Deck round two) still to come.
 
 ### ✅ Steward everywhere, 0.39.0
 - A small Steward button in the corner of every screen (app and console, not Chat): tell it what to add, change or remove there. It knows which page it was asked from, and the page updates after it answers.
@@ -162,6 +162,13 @@ In this order (each is finished before the next starts):
 - **Homestead** is a simple profile of your home: tick what it has (furnace, smoke alarms, fridge filter, gutters, a lawn, a septic tank and more) and which days the bins and recycling go out. FamLogic keeps the matching upkeep as ordinary chores in Upkeep (for anyone) and puts bin days on the calendar. Untick something and its chores retire; each chore's history is the log.
 - Steward can set up the home and tick off its jobs ("I changed the furnace filter").
 - Garage (cars) and Menagerie (pets) will work the same way: a profile and a log for each, feeding chores, the calendar and, later, the budget.
+
+### ✅ 0.43.0: Corkboard, the TV app
+- **A FamLogic app for Google TV** (its own download, famlogic-tv.apk): the family's day on the big screen. Today's feed, what's coming up, routines on now, meals, chores and who's where, moved through with the remote, plus shortcuts to your TV apps (Jellyfin, Spotify, SmartTube or any you pick).
+- **Follows the sun:** light in the morning, dimming towards evening, dark at night, from sunrise and sunset at home.
+- **Quiet time:** parents and grandparents start it from the TV tile on their phone or the console's TV page (30 minutes, an hour, two, or until ended); the TV shows a calm quiet-time screen until it ends.
+- **Messages to the TV:** type or say one ("Inside voices please, the baby's asleep") and it shows big on the TV until someone presses OK.
+- Can be the TV's home screen (see the Corkboard guide).
 
 ### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.

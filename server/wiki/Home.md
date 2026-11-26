@@ -9,5 +9,6 @@ A self-hosted family hub. These pages come with FamLogic and are replaced when i
 - [Thereabouts](Thereabouts.md): location sharing, SOS, fences, trips
 - [Chitchat](Chitchat.md): chat
 - [Pebble](Pebble.md): the watch
+- [Corkboard](Corkboard.md): FamLogic on the TV
 
 Source: https://github.com/Pretendgineering/FamLogic

@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.pretendgineering.famlogic"
         minSdk = 26
         targetSdk = 35
-        versionCode = 68
-        versionName = "0.42.0"
+        versionCode = 69
+        versionName = "0.43.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo
@@ -49,6 +49,16 @@ android {
             dimension = "build"
             versionNameSuffix = "-google"
         }
+        // The TV app (Corkboard): the family's TV home screen. Its own app id, so it
+        // installs beside the phone app; shares the FOSS build's code.
+        create("tv") {
+            dimension = "build"
+            applicationIdSuffix = ".tv"
+            versionNameSuffix = "-tv"
+        }
+    }
+    sourceSets {
+        getByName("tv") { java.srcDirs("src/foss/java", "src/tv/java") }
     }
 
     buildTypes {

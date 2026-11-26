@@ -952,6 +952,7 @@ const ICONS = {
   calendar: '<rect x="3.5" y="5.5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3.5v4M16 3.5v4"/>',
   check: '<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="m8 12.3 2.8 2.8L16.2 9"/>',
   upkeep: '<path d="M17.5 4.5H7a2 2 0 0 0 0 4h1M8 6.5V19.5h10.5M16.5 4.5V17.5a2 2 0 0 0 4 0V16.5h-2M11 10h3M11 13.5h3"/>',
+  tv: '<rect x="3" y="5" width="18" height="12" rx="2.5"/><path d="M8.5 20.5h7M12 17v3.5"/>',
   walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="m9.5 21 2.5-6.5 2.5 2.5V21M8 11l3-3.5h3l2.5 3.5 2.5 1M11 7.5 9.5 13l-2 2"/>',
   car: '<path d="M4 16.5v-4l2-5.2A2 2 0 0 1 7.9 6h8.2a2 2 0 0 1 1.9 1.3l2 5.2v4H4z"/><path d="M4 12.5h16"/><circle cx="7.5" cy="16.5" r="1.8"/><circle cx="16.5" cy="16.5" r="1.8"/>',
   wallet: '<rect x="3.5" y="6" width="17" height="13" rx="2.5"/><path d="M3.5 9.5h17M15.5 14h2"/><path d="M6 6l9-2.5 1 2.5"/>',
@@ -975,7 +976,7 @@ document.querySelectorAll("[data-icon]").forEach((s) => { s.innerHTML = icon(s.d
 
 let modules = [];      // from /api/admin/modules: id, name, description, available, enabled
 let modulesLoaded = false;
-const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "upkeep", meals: "meal", display: "device", agents: "spark", routines: "check", outings: "walk", garage: "car", ledger: "wallet", pets: "paw", profiles: "idcard", homestead: "house", contacts: "book" };
+const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "upkeep", meals: "meal", display: "tv", agents: "spark", routines: "check", outings: "walk", garage: "car", ledger: "wallet", pets: "paw", profiles: "idcard", homestead: "house", contacts: "book" };
 const moduleInfo = (id) => modules.find((m) => m.id === id);
 const moduleOn = (id) => !modulesLoaded || !!(moduleInfo(id) || {}).enabled;
 
@@ -1599,7 +1600,7 @@ function renderModulePage(id) {
   if (box.dataset.module !== id) {
     box.dataset.module = id;
     box.replaceChildren();
-    upkeepDrawn = listsDrawn = calDrawn = profilesDrawn = homeDrawnH = "";
+    upkeepDrawn = listsDrawn = calDrawn = profilesDrawn = homeDrawnH = corkDrawn = "";
   }
   if (id === "chores" && m.available) { box.classList.remove("soon"); renderUpkeep(box); return; }
   if (id === "todos" && m.available) { box.classList.remove("soon"); renderLists(box); return; }
@@ -1608,6 +1609,7 @@ function renderModulePage(id) {
   if (id === "meals" && m.available) { box.classList.remove("soon"); renderMeals(box); return; }
   if (id === "profiles" && m.available) { box.classList.remove("soon"); renderProfiles(box); return; }
   if (id === "homestead" && m.available) { box.classList.remove("soon"); renderHomestead(box); return; }
+  if (id === "display" && m.available) { box.classList.remove("soon"); renderCorkboard(box); return; }
   box.classList.add("soon");
   box.replaceChildren(
     el("p", {}, el("strong", {}, "Coming soon. "), "It's switched on for your family, so it will appear here and in the app when it arrives."),
@@ -2722,4 +2724,43 @@ async function renderHomestead(box, force = false) {
     parts.push(el("h2", {}, "Your home"), form);
   }
   box.replaceChildren(...parts);
+}
+
+// Corkboard: the TV app and family displays. Parents start quiet time and send
+// messages; the displays themselves are paired on the Devices page.
+let corkDrawn = "";
+async function renderCorkboard(box, force = false) {
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
+  let b;
+  try { b = await api("GET", "/api/display/board"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "display") return;
+  const sig = JSON.stringify([b.quiet, b.messages]);
+  if (!force && sig === corkDrawn && box.childElementCount) return;
+  corkDrawn = sig;
+  const act = async (method, path, body) => { try { await api(method, path, body); renderCorkboard(box, true); } catch (err) { alert(err.message); } };
+  const parts = [el("h2", {}, "Quiet time")];
+  if (b.quiet.on) {
+    const end = el("button", { type: "button", class: "tonal" }, "End quiet time");
+    end.addEventListener("click", () => act("DELETE", "/api/display/quiet"));
+    parts.push(el("p", {}, b.quiet.until ? `On until ${new Date(b.quiet.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "On until someone ends it", b.quiet.by ? `, started by ${b.quiet.by}.` : "."), b.canControl ? end : null);
+  } else {
+    parts.push(el("p", { class: "muted small" }, "The TV and family displays show a calm quiet-time screen (nap time)."));
+    if (b.canControl) parts.push(el("div", { class: "row" }, ...[[30, "30 min"], [60, "1 hour"], [120, "2 hours"], [0, "Until I end it"]].map(([m, t]) => {
+      const btn = el("button", { type: "button", class: "secondary" }, t);
+      btn.addEventListener("click", () => act("POST", "/api/display/quiet", { minutes: m }));
+      return btn;
+    })));
+  }
+  parts.push(el("h2", {}, "Message to the TV"));
+  if (b.canControl) {
+    const text = el("input", { maxlength: "200", placeholder: "e.g. Inside voices please, the baby's asleep" });
+    const send = el("button", { type: "submit" }, "Send to the TV");
+    const form = el("form", { class: "upkeep-add" }, el("label", {}, "Message", text), el("div", { class: "row" }, send));
+    form.addEventListener("submit", (ev) => { ev.preventDefault(); if (text.value.trim()) act("POST", "/api/display/messages", { text: text.value.trim() }); });
+    parts.push(form);
+  }
+  if (b.messages && b.messages.length) parts.push(el("ul", { class: "list" }, ...b.messages.map((m) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, m.text),
+    el("div", { class: "sub" }, `${m.from} · ${new Date(m.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · showing until someone presses OK`))))));
+  parts.push(el("h2", {}, "Setting up a TV"), el("p", { class: "muted small" }, "Install famlogic-tv.apk on the TV (with Obtainium or a file manager). On the Devices page, choose Pair a family display, then type the server address and the code on the TV. To make FamLogic the TV's home screen on Google TV, see the guide in the wiki (Corkboard)."));
+  box.replaceChildren(...parts.filter(Boolean));
 }

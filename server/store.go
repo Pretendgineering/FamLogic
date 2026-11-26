@@ -158,7 +158,9 @@ type data struct {
 	RewardAsks []RewardAsk    `json:"rewardAsks,omitempty"`
 	Steward    *StewardConfig `json:"steward,omitempty"`
 	// Outside calendars shown in Datebook (see calendar_feeds.go).
-	Feeds   []CalFeed          `json:"calendarFeeds,omitempty"`
+	Feeds []CalFeed `json:"calendarFeeds,omitempty"`
+	// The family displays\' quiet time and messages (see display.go).
+	Display *DisplayState      `json:"display,omitempty"`
 	KeyLog  []KeyUse           `json:"keyLog,omitempty"`
 	Members map[string]*Member `json:"members"`
 	Invites map[string]*Invite `json:"invites"`

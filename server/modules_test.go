@@ -44,10 +44,10 @@ func TestModulesDefaults(t *testing.T) {
 	if m.Enabled["thereabouts"] || !m.Enabled["chat"] || m.Enabled["bogus"] || !m.SetupDone {
 		t.Fatalf("after set: %+v", m)
 	}
-	if err := s.SetModules(map[string]bool{"display": true}, true); err != nil {
+	if err := s.SetModules(map[string]bool{"contacts": true}, true); err != nil {
 		t.Fatal(err)
 	}
-	if feats := s.moduleFeatures(); len(feats) != 1 || feats[0] != "soon:display" {
+	if feats := s.moduleFeatures(); len(feats) != 1 || feats[0] != "soon:contacts" {
 		t.Fatalf("a module still being built is only a placeholder: %v", feats)
 	}
 }

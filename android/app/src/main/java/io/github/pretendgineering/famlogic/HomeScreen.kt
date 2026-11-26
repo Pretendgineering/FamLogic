@@ -85,6 +85,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Pets
@@ -143,6 +144,7 @@ fun HomeScreen(
 ) {
     if (Profiles.open) ProfilesDialog(prefs)
     if (Homestead.open) HomesteadDialog(prefs)
+    if (Corkboard.open) CorkboardDialog(prefs)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var members by remember { mutableStateOf<List<Member>>(emptyList()) }
@@ -189,6 +191,7 @@ fun HomeScreen(
         "nudges", "ride" -> t !in Modules.hidden
         "steward" -> Steward.available(prefs) && t !in Modules.hidden
         "profiles" -> Modules.has(features, "profiles") && Access.can("profiles") && prefs.access != "dependent"
+        "display" -> Modules.has(features, "display") && Corkboard.mayControl(prefs) && !Access.isDisplay
         "homestead" -> Modules.has(features, "homestead") && Access.can("homestead") && prefs.access != "dependent"
         in SOON_TILES -> "soon:$t" in features
         "chores" -> Modules.has(features, Modules.CHORES) && Access.can("chores") && prefs.access != "dependent"
@@ -204,7 +207,7 @@ fun HomeScreen(
     // displays' homes are set by a parent, so they're left alone.
     LaunchedEffect(features, Access.home) {
         if (Access.isChild || Access.isDisplay || features.isEmpty()) return@LaunchedEffect
-        val moduleTiles = listOf("calendar", "todos", "chores", "routines", "meals", "steward", "profiles", "homestead") + SOON_TILES
+        val moduleTiles = listOf("calendar", "todos", "chores", "routines", "meals", "steward", "profiles", "homestead", "display") + SOON_TILES
         val placed = saved.map { it.id }.toSet()
         val seen = prefs.seenTiles ?: placed
         val fresh = moduleTiles.filter { usable(it) && it !in placed && it !in seen }
@@ -306,6 +309,7 @@ fun HomeScreen(
                     "routines" -> RoutinesTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Routines) }
                     "meals" -> MealsTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Meals) }
                     "steward" -> SimpleTile(Access.name("steward"), "Ask, add or change anything", h, big, icon = FamIcons.Spark) { Steward.sheetOpen = true }
+                    "display" -> SimpleTile(Access.name("display"), if (Corkboard.quietOn) "Quiet time is on" else "Quiet time, messages", h, big, icon = tileIcon("display")) { Corkboard.open = true }
                     "homestead" -> {
                         LaunchedEffect(Unit) { Homestead.refresh(prefs) }
                         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
@@ -519,7 +523,7 @@ val PLACEHOLDER_TILES = listOf("nudges", "ride")
 val SOON_TILES = listOf("outings", "garage", "ledger", "pets", "contacts")
 
 /** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
-val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "steward", "profiles", "homestead") + SOON_TILES + PLACEHOLDER_TILES
+val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "steward", "profiles", "homestead", "display") + SOON_TILES + PLACEHOLDER_TILES
 
 private val DRAWER_HEIGHT = 132.dp
 
@@ -538,6 +542,7 @@ fun tileIcon(id: String): ImageVector = when (id) {
     "nudges" -> Icons.Filled.Favorite
     "ride" -> Icons.Filled.Place
     "steward" -> FamIcons.Spark
+    "display" -> Icons.Filled.Tv
     "outings" -> Icons.AutoMirrored.Filled.DirectionsWalk
     "garage" -> Icons.Filled.DirectionsCar
     "ledger" -> Icons.Filled.AccountBalanceWallet
