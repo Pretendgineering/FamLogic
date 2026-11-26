@@ -1238,7 +1238,7 @@ $("#pin-clear").addEventListener("click", async () => {
 // ---- Access & Control: what each person can use (parents and admins)
 const TILE_NAMES = { map: ["Thereabouts", "Map"], chat: ["Chitchat", "Chat"], sos: ["SOS", "SOS"], checkin: ["Check in", "Check in"],
   calendar: ["Datebook", "Calendar"], todos: ["Docket", "Lists"], chores: ["Upkeep", "Chores"], meals: ["Pantry", "Meals"],
-  routines: ["Rhythms", "Routines"], nudges: ["Nudges", "Nudges"], ride: ["Where's My Ride", "Where's my ride"], steward: ["Steward", "AI"] };
+  routines: ["Rhythms", "Routines"], nudges: ["Nudges", "Nudges"], ride: ["Pickup", "Pickup"], steward: ["Steward", "AI"] };
 const tileName = (t) => t.startsWith("convo.") ? "Chat shortcut" : (TILE_NAMES[t] || [t, t])[plainNames ? 1 : 0];
 const LEVEL_NAMES = { off: "Off", view: "View only", add: "Can add", full: "Full" };
 const SIZE_NAMES = { "1x1": "1 column", "2x1": "2 columns", "3x1": "3 columns (full on phones)", "1x2": "1 column, tall", "2x2": "2 columns, tall", "3x2": "3 columns, tall" };
