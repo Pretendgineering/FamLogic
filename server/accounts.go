@@ -44,7 +44,7 @@ const maxDevices = 6
 type Device struct {
 	ID       string `json:"id"`
 	Hash     string `json:"hash,omitempty"`
-	Kind     string `json:"kind,omitempty"` // phone, tablet or display (what the app reports)
+	Kind     string `json:"kind,omitempty"` // phone, tablet, display or tv (what the app reports)
 	App      string `json:"app,omitempty"`
 	Created  int64  `json:"created"`
 	LastSeen int64  `json:"lastSeen,omitempty"`
@@ -127,7 +127,7 @@ func (s *Store) SetDeviceStatus(memberID, deviceID, kind, app string) {
 	}
 	for i := range m.Devices {
 		if m.Devices[i].ID == deviceID {
-			if kind == "phone" || kind == "tablet" || kind == "display" {
+			if kind == "phone" || kind == "tablet" || kind == "display" || kind == "tv" {
 				m.Devices[i].Kind = kind
 			}
 			if len(app) <= 20 {

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="tv_name">FamLogic</string>
+    <string name="tv_remote_label">FamLogic TV remote</string>
+    <string name="tv_remote_description">Lets FamLogic open instead of the TV\'s own home screen, start when the TV turns on, and give remote buttons new jobs. It only sees which app comes to the front and which buttons you press, never what\'s on the screen.</string>
 </resources>

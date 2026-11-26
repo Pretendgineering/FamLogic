@@ -1,6 +1,33 @@
 package io.github.pretendgineering.famlogic
 
 import android.content.ActivityNotFoundException
+import android.view.KeyEvent
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.media.MediaPlayer
+import android.net.Uri
+import android.provider.Settings
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.core.content.ContextCompat
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -36,6 +63,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -46,7 +74,6 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -79,6 +106,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -113,16 +142,49 @@ class TvActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeState.load(this)
+        takeOpen(intent)
         setContent { FamLogicTheme { TvApp() } }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        takeOpen(intent)
+    }
+
+    /** The remote helper (or Home) asking for the board, or for Steward. */
+    private fun takeOpen(i: Intent?) { i?.getStringExtra("open")?.let { TvNav.request(it) } }
 }
 
 @Composable
 private fun TvApp() {
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
+    val config = remember { TvConfig(context) }
     var joined by remember { mutableStateOf(prefs.joined) }
-    if (!joined) TvSetup(prefs) { joined = true } else TvBoard(prefs)
+    CompositionLocalProvider(LocalTvEdges provides config.edges) {
+        TvScale(config.edges) { if (!joined) TvSetup(prefs) { joined = true } else TvBoard(prefs, config) }
+    }
+}
+
+// ---- fitting the TV: everything is drawn on a 960 × 540 board, stretched to fill the screen
+
+/** How far in from the screen's edges to draw (percent), for TVs that cut the edges off. */
+private val LocalTvEdges = compositionLocalOf { 0 }
+
+/**
+ * Draws [content] as if the screen were 960 × 540 dp, stretched (or shrunk) to fill it
+ * whatever the TV's resolution or display-size setting, and [edges] percent in from each side.
+ */
+@Composable
+private fun TvScale(edges: Int, content: @Composable () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+        Box(Modifier.fillMaxSize().padding(horizontal = maxWidth * (edges / 100f), vertical = maxHeight * (edges / 100f))) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val scale = minOf(constraints.maxWidth / 960f, constraints.maxHeight / 540f)
+                CompositionLocalProvider(LocalDensity provides Density(scale, 1f)) { content() }
+            }
+        }
+    }
 }
 
 // ---- setup: the server's address and a display code (made in the web console: Devices → Pair a family display)
@@ -178,14 +240,42 @@ private class TvConfig(context: Context) {
     /** The buttons down the right side. */
     var side by mutableStateOf(sp.getString("side", null)?.split(",")?.filter { it.isNotBlank() } ?: DEFAULT_SIDE)
         private set
+    /** How far in from the screen's edges to draw (0 to 10 percent). */
+    var edges by mutableIntStateOf(sp.getInt("edges", 0).coerceIn(0, 10))
+        private set
+
+    fun changeEdges(n: Int) { edges = n.coerceIn(0, 10); sp.edit().putInt("edges", edges).apply() }
+    private fun save(list: List<String>) { apps = list; sp.edit().putString("apps", list.joinToString(",")).apply() }
+    private fun shown() = (apps ?: emptyList()).take(slots).toMutableList().also { while (it.size < slots) it += "" }
+
+    /** Puts an app on the first empty tile, or a new tile; false if all 6 are taken. */
+    fun addApp(pkg: String): Boolean {
+        val list = shown()
+        val free = list.indexOfFirst { it.isEmpty() }
+        when {
+            free >= 0 -> list[free] = pkg
+            slots < 6 -> { changeSlots(slots + 1); list += pkg }
+            else -> return false
+        }
+        save(list)
+        return true
+    }
+    fun removeApp(pkg: String) = save((apps ?: emptyList()).filter { it != pkg })
+    /** Moves the tile at [i] one place left (-1) or right (+1). */
+    fun move(i: Int, by: Int) {
+        val list = shown()
+        val j = i + by
+        if (i !in list.indices || j !in list.indices) return
+        list[i] = list[j].also { list[j] = list[i] }
+        save(list)
+    }
 
     fun changeSlots(n: Int) { slots = n.coerceIn(1, 6); sp.edit().putInt("slots", slots).apply() }
     fun setApp(i: Int, pkg: String) {
         val list = (apps ?: emptyList()).toMutableList()
         while (list.size <= i) list += ""
         list[i] = pkg
-        apps = list
-        sp.edit().putString("apps", list.joinToString(",")).apply()
+        save(list)
     }
     fun toggleSide(id: String) {
         side = if (id in side) side - id else SIDE_BUTTONS.map { it.first }.filter { it in side || it == id }
@@ -246,17 +336,17 @@ private val NIGHT_TEXT = Color(0xFFECEAF4)
 private data class Look(val bg: Color, val card: Color, val ink: Color, val soft: Color, val accent: Color)
 
 @Composable
-private fun TvBoard(prefs: Prefs) {
+private fun TvBoard(prefs: Prefs, config: TvConfig) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val api = remember { Api(prefs.serverUrl, prefs.token) }
-    val config = remember { TvConfig(context) }
     var board by remember { mutableStateOf<JSONObject?>(null) }
     var problem by remember { mutableStateOf("") }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var dismissed by remember { mutableStateOf(setOf<String>()) }
-    var view by remember { mutableStateOf<String?>(null) } // map, feed, steward, calendar, meals, customize
-    var pickSlot by remember { mutableStateOf<Int?>(null) }
+    // What's open over the board. Kept in a holder the board itself never reads, so opening
+    // a view doesn't redraw the board underneath it.
+    val nav = remember { BoardNav() }
     suspend fun load() {
         runCatching { api.call("GET", "/api/display/board") }
             .onSuccess { board = it; problem = "" }
@@ -265,17 +355,41 @@ private fun TvBoard(prefs: Prefs) {
     LaunchedEffect(Unit) {
         // What the server can do (its voices, for Steward's answers).
         runCatching { api.members(0) }.onSuccess { prefs.serverFeatures = it.features }
+        // So the console knows this is a TV (and names it "Living room", not someone's phone).
+        runCatching { api.sendStatus(BuildConfig.VERSION_NAME, emptyList(), "tv") }
         while (true) { load(); delay(20_000) }
+    }
+    // Home (with the remote helper) closes whatever is open; a remapped button can ask Steward.
+    LaunchedEffect(TvNav.seq) {
+        when (TvNav.open) {
+            "home" -> { nav.view = null; nav.menuFor = null; nav.pickFor = null }
+            "steward" -> nav.view = "steward"
+        }
+        TvNav.open = null
     }
     LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(15_000) } }
 
-    val installed = remember { installedApps(context) }
+    // The TV's apps, kept up to date as apps are installed and removed.
+    // (Read off the main thread: loading every app's banner takes a moment.)
+    var installed by remember { mutableStateOf(emptyList<TvApp>()) }
+    var appsChanged by remember { mutableIntStateOf(0) }
+    LaunchedEffect(appsChanged) { installed = withContext(Dispatchers.IO) { installedApps(context) } }
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) { appsChanged++ }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED); addAction(Intent.ACTION_PACKAGE_REMOVED); addAction(Intent.ACTION_PACKAGE_CHANGED); addDataScheme("package")
+        }
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        onDispose { context.unregisterReceiver(receiver) }
+    }
     // The first time, the launcher starts with Jellyfin, Spotify and SmartTube if the TV has them.
-    LaunchedEffect(Unit) {
-        if (config.apps == null) SUGGESTED_APPS.filter { p -> installed.any { it.pkg == p } }.take(config.slots).forEachIndexed { i, p -> config.setApp(i, p) }
+    LaunchedEffect(installed) {
+        if (config.apps == null && installed.isNotEmpty()) SUGGESTED_APPS.filter { p -> installed.any { it.pkg == p } }.take(config.slots).forEachIndexed { i, p -> config.setApp(i, p) }
     }
     // Tell the server which apps are on the launcher, so the console can give each a picture.
-    LaunchedEffect(config.apps, config.slots) {
+    LaunchedEffect(config.apps, config.slots, installed) {
         val chosen = (config.apps ?: emptyList()).take(config.slots).mapNotNull { p -> installed.find { it.pkg == p } }
         if (chosen.isNotEmpty()) runCatching {
             api.call("PUT", "/api/display/apps", JSONObject().put("apps", JSONArray(chosen.map { JSONObject().put("pkg", it.pkg).put("label", it.label) })))
@@ -284,10 +398,15 @@ private fun TvBoard(prefs: Prefs) {
 
     val (rise, set) = sunToday(board)
     val dark = darkness(now, rise, set)
-    val bg by animateColorAsState(lerp(DAY_BG, NIGHT_BG, dark), tween(4000), label = "bg")
-    val card by animateColorAsState(lerp(DAY_CARD, NIGHT_CARD, dark), tween(4000), label = "card")
-    val ink by animateColorAsState(lerp(DAY_TEXT, NIGHT_TEXT, dark), tween(4000), label = "ink")
-    val look = Look(bg, card, ink, ink.copy(alpha = .65f), MaterialTheme.colorScheme.primary)
+    // The sun moves slowly, so the colours change in small steps every 15 seconds (no animation:
+    // redrawing the whole board every frame would be wasted work for the TV).
+    val bg = lerp(DAY_BG, NIGHT_BG, dark)
+    val card = lerp(DAY_CARD, NIGHT_CARD, dark)
+    // The text switches between dark and light rather than fading through grey, so it always reads.
+    val ink by animateColorAsState(if (dark < .5f) DAY_TEXT else NIGHT_TEXT, tween(4000), label = "ink")
+    // The accent: a deep purple on the light daytime board, a soft lavender at night.
+    val accent by animateColorAsState(if (dark < .5f) Color(0xFF5B4596) else Color(0xFFB8A9E8), tween(4000), label = "accent")
+    val look = Look(bg, card, ink, ink.copy(alpha = .65f), accent)
     val b = board
     val modules = b?.optJSONArray("modules")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
     // The family's people (not displays), by id.
@@ -322,28 +441,21 @@ private fun TvBoard(prefs: Prefs) {
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                Launcher(api, config, installed, b?.optJSONArray("apps"), look) { pickSlot = it }
+                Launcher(api, config, installed, b?.optJSONArray("apps"), look, onEmpty = { nav.pickFor = it; nav.view = "apps" }, onMenu = { nav.menuFor = it })
             }
             Spacer(Modifier.width(20.dp))
-            // Buttons down the right side, and Customize at the bottom.
+            // Buttons down the right side, then the app drawer and Settings.
             Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
                 SIDE_BUTTONS.filter { (id) -> id in config.side && available(id, modules, b) }.forEach { (id, label, icon) ->
-                    SideButton(label, icon, look) { view = id }
+                    SideButton(label, icon, look) { nav.view = id }
                 }
                 Spacer(Modifier.height(4.dp))
-                SideButton("Customize", Icons.Filled.Tune, look) { view = "customize" }
+                SideButton("Apps", Icons.Filled.Apps, look) { nav.pickFor = null; nav.view = "apps" }
+                SideButton("Settings", Icons.Filled.Settings, look) { nav.view = "settings" }
             }
         }
 
-        when (view) {
-            "map" -> MapView(prefs, api, look) { view = null }
-            "feed" -> ListView("Today", look, { view = null }) { FeedLines(board?.optJSONObject("feed"), look, all = true) }
-            "calendar" -> ListView("Coming up", look, { view = null }) { board?.optJSONObject("events")?.let { EventLines(it, look) } }
-            "meals" -> ListView("Meals", look, { view = null }) { board?.optJSONObject("meals")?.let { MealLines(it, look) } }
-            "steward" -> StewardView(prefs, api, look) { view = null; scope.launch { load() } }
-            "customize" -> CustomizeDialog(config, installed, modules, board) { view = null }
-        }
-        pickSlot?.let { slot -> AppPicker(installed, config.apps?.getOrNull(slot).orEmpty(), onPick = { config.setApp(slot, it); pickSlot = null }) { pickSlot = null } }
+        BoardViews(nav, prefs, api, config, installed, modules, board, look) { scope.launch { load() } }
 
         // Quiet time: the whole screen, calm, until it ends.
         val quiet = board?.optJSONObject("quiet")
@@ -354,12 +466,33 @@ private fun TvBoard(prefs: Prefs) {
         // A message from a parent's phone: big, until someone presses OK.
         val msgs = board?.optJSONArray("messages") ?: JSONArray()
         val msg = (0 until msgs.length()).map { msgs.getJSONObject(it) }.firstOrNull { it.optString("id") !in dismissed }
-        if (msg != null && quiet?.optBoolean("on") != true) MessageCard(msg) {
+        if (msg != null && quiet?.optBoolean("on") != true) MessageCard(prefs, msg) {
             val id = msg.optString("id")
             dismissed = dismissed + id
             scope.launch { runCatching { api.call("DELETE", "/api/display/messages/$id") } }
         }
     }
+}
+
+/** The views that open over the board (map, lists, Steward, the app drawer, Settings, an app's menu). */
+private class BoardNav {
+    var view by mutableStateOf<String?>(null) // map, feed, steward, calendar, meals, apps, settings
+    var pickFor by mutableStateOf<Int?>(null) // choosing an app for this empty tile
+    var menuFor by mutableStateOf<String?>(null) // an app's long-press menu
+}
+
+@Composable
+private fun BoardViews(nav: BoardNav, prefs: Prefs, api: Api, config: TvConfig, installed: List<TvApp>, modules: Set<String>, board: JSONObject?, look: Look, reload: () -> Unit) {
+    when (nav.view) {
+        "map" -> MapView(prefs, api, look) { nav.view = null }
+        "feed" -> ListView("Today", look, { nav.view = null }) { FeedLines(board?.optJSONObject("feed"), look, all = true) }
+        "calendar" -> ListView("Coming up", look, { nav.view = null }) { board?.optJSONObject("events")?.let { EventLines(it, look) } }
+        "meals" -> ListView("Meals", look, { nav.view = null }) { board?.optJSONObject("meals")?.let { MealLines(it, look) } }
+        "steward" -> StewardView(prefs, api, look) { nav.view = null; reload() }
+        "apps" -> AppDrawer(installed, look, nav.pickFor, onPick = { pkg -> nav.pickFor?.let { config.setApp(it, pkg) }; nav.pickFor = null; nav.view = null }, onMenu = { nav.menuFor = it }) { nav.pickFor = null; nav.view = null }
+        "settings" -> SettingsView(config, installed, modules, board, look) { nav.view = null }
+    }
+    nav.menuFor?.let { pkg -> installed.find { it.pkg == pkg }?.let { app -> AppMenu(app, config) { nav.menuFor = null } } ?: run { nav.menuFor = null } }
 }
 
 /** Whether a side button can work here: its module is on (and Steward is set up for the TV). */
@@ -443,9 +576,10 @@ private fun RoutineLines(r: JSONObject, later: JSONArray?, names: Map<String, St
                 mark = if (done) "✓" else "○", markColor = if (done) look.accent else look.soft)
         }
     }
-    if (next.isNotEmpty()) {
-        Heading("Later today", look)
-        next.forEach { n ->
+    // "Later today" and its first entry go together, so the heading is never left on its own.
+    next.forEachIndexed { i, n ->
+        Column {
+            if (i == 0) Heading("Later today", look)
             Line(n.optString("title"), listOf(clock(n.optString("at")), whoText(strs(n.optJSONArray("who")), names)).filter { it.isNotEmpty() }.joinToString(" · "), look)
         }
     }
@@ -555,9 +689,19 @@ private fun SideButton(label: String, icon: ImageVector, look: Look, onClick: ()
 /** A full-screen window over the board, so the remote stays on its buttons. */
 @Composable
 private fun Overlay(onBack: () -> Unit, content: @Composable () -> Unit) {
+    val edges = LocalTvEdges.current
     Dialog(onDismissRequest = onBack, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnClickOutside = false)) {
-        content()
+        // The window inherits the board's scale; only the margin for the TV's edges is added here.
+        Box(Modifier.fillMaxSize().edgeInset(edges)) { content() }
     }
+}
+
+/** Draws [percent] percent in from each edge (for TVs that cut the edges off). */
+private fun Modifier.edgeInset(percent: Int) = layout { m, c ->
+    val dx = (c.maxWidth * percent / 100f).toInt()
+    val dy = (c.maxHeight * percent / 100f).toInt()
+    val p = m.measure(c.offset(-2 * dx, -2 * dy))
+    layout(c.maxWidth, c.maxHeight) { p.place(dx, dy) }
 }
 
 /** Focus a button once it's on screen (the first try can come before it's attached). */
@@ -692,67 +836,209 @@ private fun StewardView(prefs: Prefs, api: Api, look: Look, onBack: () -> Unit) 
     if (state == "answered") FocusWhenReady(focus, heard)
 }
 
-// ---- customize: the launcher's tiles and the side buttons
+// ---- settings: the screen, the launcher, the side buttons, and the remote helper
 
 @Composable
-private fun CustomizeDialog(config: TvConfig, installed: List<TvApp>, modules: Set<String>, board: JSONObject?, onDone: () -> Unit) {
-    var picking by remember { mutableStateOf<Int?>(null) }
-    AlertDialog(
-        onDismissRequest = onDone,
-        title = { Text("Customize") },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                item { Text("Tiles on the launcher", style = MaterialTheme.typography.titleMedium) }
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(enabled = config.slots > 1, onClick = { config.changeSlots(config.slots - 1) }) { Text("Fewer") }
-                        Text("${config.slots}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        OutlinedButton(enabled = config.slots < 6, onClick = { config.changeSlots(config.slots + 1) }) { Text("More") }
-                    }
-                }
-                items((0 until config.slots).toList()) { i ->
-                    val pkg = config.apps?.getOrNull(i).orEmpty()
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { picking = i }.padding(10.dp)) {
-                        Text("Tile ${i + 1}", Modifier.width(90.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(installed.find { it.pkg == pkg }?.label ?: "Empty")
-                    }
-                }
-                item { Text("Pictures for the tiles are chosen on the console's TV page.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                item { Text("Buttons on the side", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleMedium) }
-                items(SIDE_BUTTONS.filter { (id) -> available(id, modules, board) }, key = { it.first }) { (id, label) ->
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { config.toggleSide(id) }.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, Modifier.weight(1f))
-                        Switch(id in config.side, { config.toggleSide(id) }, colors = accentSwitch())
-                    }
+private fun SettingsView(config: TvConfig, installed: List<TvApp>, modules: Set<String>, board: JSONObject?, look: Look, onBack: () -> Unit) {
+    val context = LocalContext.current
+    var helperOn by remember { mutableStateOf(TvRemoteService.enabled(context)) }
+    LaunchedEffect(Unit) { while (true) { helperOn = TvRemoteService.enabled(context); delay(1500) } }
+    var override by remember { mutableStateOf(TvRemoteSettings.override(context)) }
+    var boot by remember { mutableStateOf(TvRemoteSettings.boot(context)) }
+    var keys by remember { mutableStateOf(TvRemoteSettings.keys(context)) }
+    var learning by remember { mutableStateOf(false) }
+    var learned by remember { mutableStateOf<Int?>(null) }
+    DisposableEffect(Unit) { onDispose { TvNav.capture = null } }
+    fun open(i: Intent, otherwise: String) {
+        try { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: ActivityNotFoundException) { Toast.makeText(context, otherwise, Toast.LENGTH_LONG).show() }
+    }
+    ViewFrame("Settings", look, onBack) {
+        LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            item { Heading("The screen", look) }
+            item {
+                SettingRow("Fit to the screen", "If the TV cuts off the edges, draw further in: ${config.edges}%.", look) {
+                    Stepper(config.edges > 0, config.edges < 10, { config.changeEdges(config.edges - 1) }, { config.changeEdges(config.edges + 1) })
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDone) { Text("Done") } },
-    )
-    picking?.let { i -> AppPicker(installed, config.apps?.getOrNull(i).orEmpty(), onPick = { config.setApp(i, it); picking = null }) { picking = null } }
+            item {
+                SettingRow("Tiles on the launcher", "${config.slots} along the bottom.", look) {
+                    Stepper(config.slots > 1, config.slots < 6, { config.changeSlots(config.slots - 1) }, { config.changeSlots(config.slots + 1) })
+                }
+            }
+            item { Heading("Buttons on the side", look) }
+            items(SIDE_BUTTONS.filter { (id) -> available(id, modules, board) }, key = { it.first }) { (id, label) ->
+                SwitchRow(label, "", id in config.side, true, look) { config.toggleSide(id) }
+            }
+            item { Heading("Home and remote", look) }
+            item {
+                SettingRow("Remote helper", if (helperOn) "On." else "Off. In the TV's Accessibility settings, switch on FamLogic TV remote.", look, Icons.Filled.Accessibility) {
+                    OutlinedButton(onClick = { open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), "This TV has no Accessibility settings") }) { Text("Accessibility settings", color = look.ink) }
+                }
+            }
+            item {
+                SwitchRow("Override current launcher", "Opens FamLogic instead of the TV's own home screen, and on Home. Useful if you can't change or uninstall the stock one.",
+                    override, helperOn, look, Icons.Filled.Accessibility) { override = !override; TvRemoteSettings.setOverride(context, override) }
+            }
+            item {
+                SwitchRow("Start when the TV turns on", "Opens FamLogic after the TV starts up.", boot, helperOn, look, Icons.Filled.Accessibility) {
+                    boot = !boot; TvRemoteSettings.setBoot(context, boot)
+                }
+            }
+            item {
+                SettingRow("Make FamLogic the home app", "On TVs that let you choose a home app (Google TV doesn't: use the override above).", look) {
+                    OutlinedButton(onClick = { open(Intent(Settings.ACTION_HOME_SETTINGS), "This TV doesn't let you choose: use Override current launcher") }) { Text("Choose", color = look.ink) }
+                }
+            }
+            item { Heading("Remote buttons", look) }
+            items(keys.entries.toList(), key = { "k" + it.key }) { (code, action) ->
+                SettingRow(TvRemoteSettings.keyName(code), actionName(action, installed), look) {
+                    OutlinedButton(onClick = { keys = keys - code; TvRemoteSettings.setKeys(context, keys) }) { Text("Remove", color = look.ink) }
+                }
+            }
+            item {
+                if (learning) SettingRow("Press the remote button to use", "Any button but the arrows, OK and Back.", look) {
+                    OutlinedButton(onClick = { learning = false; TvNav.capture = null }) { Text("Cancel", color = look.ink) }
+                } else SettingRow("Give a button a new job", if (helperOn) "Open an app, FamLogic or Steward with a button on the remote." else "Needs the remote helper.", look) {
+                    OutlinedButton(enabled = helperOn, onClick = { learning = true; TvNav.capture = { code -> learning = false; learned = code } }) { Text("Add a button", color = look.ink) }
+                }
+            }
+        }
+    }
+    learned?.let { code ->
+        ActionPicker(TvRemoteSettings.keyName(code), installed, onPick = { a -> keys = keys + (code to a); TvRemoteSettings.setKeys(context, keys); learned = null }) { learned = null }
+    }
+}
+
+private fun actionName(action: String, installed: List<TvApp>) = when {
+    action == "home" -> "Opens FamLogic"
+    action == "steward" -> "Asks Steward"
+    else -> "Opens " + (installed.find { it.pkg == action.removePrefix("app:") }?.label ?: action.removePrefix("app:"))
 }
 
 @Composable
-private fun AppPicker(installed: List<TvApp>, current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+private fun SettingRow(title: String, sub: String, look: Look, icon: ImageVector? = null, action: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(look.card).padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) Icon(icon, null, tint = look.accent, modifier = Modifier.padding(end = 12.dp).size(22.dp))
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, color = look.ink, fontSize = 18.sp)
+            if (sub.isNotEmpty()) Text(sub, color = look.soft, fontSize = 14.sp)
+        }
+        action()
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, sub: String, on: Boolean, enabled: Boolean, look: Look, icon: ImageVector? = null, onToggle: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (focused) look.accent.copy(alpha = .18f) else look.card)
+            .border(if (focused) 3.dp else 0.dp, if (focused) look.accent else Color.Transparent, RoundedCornerShape(18.dp))
+            .onFocusChanged { focused = it.isFocused }.clickable(enabled = enabled, onClick = onToggle).padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) Icon(icon, null, tint = look.accent, modifier = Modifier.padding(end = 12.dp).size(22.dp))
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, color = if (enabled) look.ink else look.soft, fontSize = 18.sp)
+            if (sub.isNotEmpty()) Text(sub, color = look.soft, fontSize = 14.sp)
+        }
+        Switch(on, null, enabled = enabled, colors = accentSwitch())
+    }
+}
+
+@Composable
+private fun Stepper(canLess: Boolean, canMore: Boolean, less: () -> Unit, more: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(enabled = canLess, onClick = less) { Text("Less") }
+        OutlinedButton(enabled = canMore, onClick = more) { Text("More") }
+    }
+}
+
+/** What a remapped button does: FamLogic, Steward, or an app. */
+@Composable
+private fun ActionPicker(key: String, installed: List<TvApp>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("App for this tile") },
+        title = { Text(key) },
         text = {
             LazyColumn {
-                item {
-                    Row(Modifier.fillMaxWidth().clickable { onPick("") }.padding(10.dp)) {
-                        Text(if (current.isEmpty()) "✓" else " ", Modifier.width(28.dp), fontSize = 20.sp); Text("Empty", fontSize = 20.sp)
-                    }
-                }
+                item { TextButton(onClick = { onPick("home") }, Modifier.fillMaxWidth()) { Text("Open FamLogic", Modifier.fillMaxWidth(), fontSize = 18.sp) } }
+                item { TextButton(onClick = { onPick("steward") }, Modifier.fillMaxWidth()) { Text("Ask Steward", Modifier.fillMaxWidth(), fontSize = 18.sp) } }
                 items(installed, key = { it.pkg }) { app ->
-                    Row(Modifier.fillMaxWidth().clickable { onPick(app.pkg) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (app.pkg == current) "✓" else " ", Modifier.width(28.dp), fontSize = 20.sp)
-                        Text(app.label, fontSize = 20.sp)
-                    }
+                    TextButton(onClick = { onPick("app:" + app.pkg) }, Modifier.fillMaxWidth()) { Text("Open ${app.label}", Modifier.fillMaxWidth(), fontSize = 18.sp) }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+// ---- the app drawer: every app on the TV
+
+@Composable
+private fun AppDrawer(installed: List<TvApp>, look: Look, pickFor: Int?, onPick: (String) -> Unit, onMenu: (String) -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
+    ViewFrame(if (pickFor != null) "Choose an app for tile ${pickFor + 1}" else "Apps", look, onBack) {
+        LazyVerticalGrid(GridCells.Fixed(5), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            items(installed, key = { it.pkg }) { app ->
+                DrawerTile(app, look, onClick = { if (pickFor != null) onPick(app.pkg) else launch(context, app.pkg) }, onLongClick = { onMenu(app.pkg) })
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DrawerTile(app: TvApp, look: Look, onClick: () -> Unit, onLongClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val banner = app.banner
+    val icon = app.icon
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        Modifier.clip(shape).background(if (focused) look.accent.copy(alpha = .18f) else Color.Transparent)
+            .border(if (focused) 3.dp else 0.dp, if (focused) look.accent else Color.Transparent, shape)
+            .onFocusChanged { focused = it.isFocused }.tvClickable(onClick, onLongClick).padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(look.card), contentAlignment = Alignment.Center) {
+            when {
+                banner != null -> Image(banner, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                icon != null -> Image(icon, null, Modifier.fillMaxSize().padding(10.dp), contentScale = ContentScale.Fit)
+            }
+        }
+        Text(app.label, Modifier.padding(top = 4.dp), color = look.ink, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Hold OK on an app (in the drawer or on the launcher): open, add or remove, move, app info, uninstall. */
+@Composable
+private fun AppMenu(app: TvApp, config: TvConfig, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val shown = (config.apps ?: emptyList()).take(config.slots)
+    val i = shown.indexOf(app.pkg)
+    fun start(intent: Intent) { runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+    val options = buildList<Pair<String, () -> Unit>> {
+        add("Open" to { launch(context, app.pkg) })
+        if (i >= 0) {
+            add("Remove from the launcher" to { config.removeApp(app.pkg) })
+            if (i > 0) add("Move left" to { config.move(i, -1) })
+            if (i < config.slots - 1) add("Move right" to { config.move(i, 1) })
+        } else add("Add to the launcher" to {
+            if (!config.addApp(app.pkg)) Toast.makeText(context, "The launcher is full: remove a tile first", Toast.LENGTH_LONG).show()
+        })
+        add("App info" to { start(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${app.pkg}"))) })
+        add("Uninstall" to { start(Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.pkg}"))) })
+    }
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(app.label) },
+        text = {
+            Column {
+                options.forEach { (label, act) ->
+                    TextButton(onClick = { act(); onDone() }, Modifier.fillMaxWidth()) { Text(label, Modifier.fillMaxWidth(), fontSize = 18.sp) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Close") } },
     )
 }
 
@@ -778,21 +1064,40 @@ private fun QuietScreen(q: JSONObject, onEnd: () -> Unit) {
 }
 
 @Composable
-private fun MessageCard(m: JSONObject, onOk: () -> Unit) {
+private fun MessageCard(prefs: Prefs, m: JSONObject, onOk: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
-    Overlay(onBack = onOk) {
-        Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
-            Column(
-                Modifier.widthIn(max = 900.dp).clip(RoundedCornerShape(32.dp)).background(Color(0xFFFFFBF2)).padding(48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                Text("From ${m.optString("from")}", color = Color(0xFF6F5AA8), fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-                Text(m.optString("text"), color = Color(0xFF2A2638), fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 52.sp, lineHeight = 60.sp)
-                Button(onClick = onOk, modifier = Modifier.focusRequester(focus)) { Text("OK", fontSize = 22.sp) }
+    val id = m.optString("id")
+    // It rises into view with a soft ping, rather than just appearing.
+    val shown = remember(id) { MutableTransitionState(false).apply { targetState = true } }
+    LaunchedEffect(id) {
+        runCatching { MediaPlayer.create(context, R.raw.ping)?.apply { setOnCompletionListener { it.release() }; start() } }
+    }
+    Overlay(onBack = { Voice.stop(); onOk() }) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            AnimatedVisibility(shown, Modifier.fillMaxSize(), enter = fadeIn(tween(400))) {
+                Box(Modifier.fillMaxSize().background(Color(0x99000000)))
+            }
+            AnimatedVisibility(shown, enter = slideInVertically(tween(600, easing = FastOutSlowInEasing)) { it / 2 } + fadeIn(tween(450))) {
+                Column(
+                    Modifier.widthIn(max = 820.dp).clip(RoundedCornerShape(32.dp)).background(Color(0xFFFFFBF2)).padding(44.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    Text("From ${m.optString("from")}", color = Color(0xFF6F5AA8), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text(m.optString("text"), color = Color(0xFF2A2638), fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 46.sp, lineHeight = 54.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Button(onClick = { Voice.stop(); onOk() }, modifier = Modifier.focusRequester(focus)) { Text("OK", fontSize = 20.sp) }
+                        OutlinedButton(onClick = { scope.launch { Voice.speak(context, prefs, m.optString("text")) } }) {
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = Color(0xFF6F5AA8)); Spacer(Modifier.width(8.dp))
+                            Text("Read aloud", color = Color(0xFF2A2638), fontSize = 20.sp)
+                        }
+                    }
+                }
             }
         }
     }
-    FocusWhenReady(focus, m.optString("id"))
+    FocusWhenReady(focus, id)
 }
 
 // ---- the launcher: the TV's apps, as big pictures
@@ -800,7 +1105,8 @@ private fun MessageCard(m: JSONObject, onOk: () -> Unit) {
 /** Apps to start with, if the TV has them: Jellyfin, Spotify and SmartTube. */
 private val SUGGESTED_APPS = listOf("org.jellyfin.androidtv", "com.spotify.tv.android", "com.teamsmart.videomanager.tv", "com.liskovsoft.smarttubetv.beta", "com.liskovsoft.smarttubetv")
 
-private data class TvApp(val pkg: String, val label: String, val banner: android.graphics.drawable.Drawable?, val icon: android.graphics.drawable.Drawable?)
+/** An app on the TV, with its banner (or, without one, its icon) ready to draw. */
+private data class TvApp(val pkg: String, val label: String, val banner: ImageBitmap?, val icon: ImageBitmap?)
 
 private fun installedApps(context: Context): List<TvApp> {
     val pm = context.packageManager
@@ -809,7 +1115,9 @@ private fun installedApps(context: Context): List<TvApp> {
         for (ri in pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(cat), 0)) {
             val pkg = ri.activityInfo.packageName
             if (pkg == context.packageName || pkg in seen) continue
-            seen[pkg] = TvApp(pkg, ri.loadLabel(pm).toString(), runCatching { pm.getApplicationBanner(pkg) }.getOrNull(), runCatching { pm.getApplicationIcon(pkg) }.getOrNull())
+            val banner = runCatching { pm.getApplicationBanner(pkg)?.toBitmap(512, 288)?.asImageBitmap() }.getOrNull()
+            val icon = if (banner != null) null else runCatching { pm.getApplicationIcon(pkg).toBitmap(192, 192).asImageBitmap() }.getOrNull()
+            seen[pkg] = TvApp(pkg, ri.loadLabel(pm).toString(), banner, icon)
         }
     }
     return seen.values.sortedBy { it.label.lowercase() }
@@ -822,7 +1130,7 @@ private fun launch(context: Context, pkg: String) {
 }
 
 @Composable
-private fun Launcher(api: Api, config: TvConfig, installed: List<TvApp>, serverApps: JSONArray?, look: Look, onPick: (Int) -> Unit) {
+private fun Launcher(api: Api, config: TvConfig, installed: List<TvApp>, serverApps: JSONArray?, look: Look, onEmpty: (Int) -> Unit, onMenu: (String) -> Unit) {
     val context = LocalContext.current
     val pictures = objs(serverApps).associate { it.optString("pkg") to it.optLong("image") }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -833,7 +1141,7 @@ private fun Launcher(api: Api, config: TvConfig, installed: List<TvApp>, serverA
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
             for (i in 0 until n) {
                 val app = config.apps?.getOrNull(i)?.let { p -> installed.find { it.pkg == p } }
-                AppTile(api, app, pictures[app?.pkg] ?: 0L, w, look, onClick = { if (app != null) launch(context, app.pkg) else onPick(i) }, onLongClick = { onPick(i) })
+                AppTile(api, app, pictures[app?.pkg] ?: 0L, w, look, onClick = { if (app != null) launch(context, app.pkg) else onEmpty(i) }, onLongClick = { if (app != null) onMenu(app.pkg) else onEmpty(i) })
             }
         }
     }
@@ -846,13 +1154,13 @@ private fun AppTile(api: Api, app: TvApp?, picture: Long, width: Dp, look: Look,
     var focused by remember { mutableStateOf(false) }
     var custom by remember(app?.pkg, picture) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(app?.pkg, picture) { if (app != null && picture != 0L) custom = loadPicture(context, api, app.pkg, picture) }
-    val banner = remember(app) { app?.banner?.let { runCatching { it.toBitmap(640, 360).asImageBitmap() }.getOrNull() } }
-    val icon = remember(app) { if (app?.banner == null) app?.icon?.let { runCatching { it.toBitmap(256, 256).asImageBitmap() }.getOrNull() } else null }
+    val banner = app?.banner
+    val icon = app?.icon
     val shape = RoundedCornerShape(18.dp)
     Box(
         Modifier.width(width).height(width * 9 / 16).clip(shape).background(look.card)
             .border(if (focused) 4.dp else 0.dp, if (focused) look.accent else Color.Transparent, shape)
-            .onFocusChanged { focused = it.isFocused }.combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .onFocusChanged { focused = it.isFocused }.tvClickable(onClick, onLongClick),
         contentAlignment = Alignment.Center,
     ) {
         when {
@@ -863,6 +1171,28 @@ private fun AppTile(api: Api, app: TvApp?, picture: Long, width: Dp, look: Look,
             else -> Text(app.label, color = look.ink, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(8.dp))
         }
     }
+}
+
+/**
+ * Pressing OK opens; holding OK (the remote repeats the key) opens the menu instead. Handled
+ * here from the key itself, so it works the same on every remote; touch and mice still work.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.tvClickable(onClick: () -> Unit, onLongClick: () -> Unit): Modifier = composed {
+    var held by remember { mutableStateOf(false) }
+    onPreviewKeyEvent { e ->
+        val k = e.nativeKeyEvent
+        if (k.keyCode != KeyEvent.KEYCODE_DPAD_CENTER && k.keyCode != KeyEvent.KEYCODE_ENTER && k.keyCode != KeyEvent.KEYCODE_NUMPAD_ENTER) return@onPreviewKeyEvent false
+        when (k.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (k.repeatCount == 0) held = false
+                else if (!held) { held = true; onLongClick() }
+                true
+            }
+            KeyEvent.ACTION_UP -> { if (!held) onClick(); held = false; true }
+            else -> false
+        }
+    }.combinedClickable(onClick = onClick, onLongClick = onLongClick)
 }
 
 /** A picture uploaded on the console for an app's tile, kept on the TV until it changes. */

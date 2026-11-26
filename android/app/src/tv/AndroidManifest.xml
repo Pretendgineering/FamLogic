@@ -5,8 +5,19 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!-- To show and open the TV's other apps (Jellyfin, Spotify, SmartTube...). -->
+    <!-- Uninstalling an app from the app drawer (the TV asks to confirm). -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+
+    <!-- To show and open the TV's other apps (Jellyfin, Spotify, SmartTube...), find the
+         TV's own home screen (to override it), and its speech recogniser (for Steward). -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
@@ -36,5 +47,23 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- (The same as the main manifest's; repeated so lint sees its type alongside this file's services.) -->
+        <service
+            android:name=".LocationService"
+            android:exported="false"
+            android:foregroundServiceType="location|remoteMessaging" />
+
+        <!-- The remote helper (see TvRemote.kt), switched on by the user in Accessibility settings. -->
+        <service
+            android:name=".TvRemoteService"
+            android:exported="true"
+            android:label="@string/tv_remote_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/tv_remote_service" />
+        </service>
     </application>
 </manifest>

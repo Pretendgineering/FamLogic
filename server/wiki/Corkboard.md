@@ -9,15 +9,20 @@ when the sun rises and sets).
 
 Down the right side are buttons for the **Map** (where everyone is), the **Feed** (today so far),
 **Steward** (ask by talking into the remote), **Datebook** (what's coming up) and **Pantry**
-(meals). Choose which ones in **Customize**, at the bottom of that row.
+(meals), then **Apps** (every app on the TV) and **Settings**. Choose which buttons show in
+**Settings**.
+
+The whole screen stretches to fit the TV, whatever its resolution or display size. If your TV
+still cuts off the edges, turn up **Settings → Fit to the screen**.
 
 From a phone, parents and grandparents can:
 
 - **Start quiet time** (nap time) for 30 minutes, an hour, two hours or until they end it. The TV
   shows a calm, dark quiet-time screen. It ends by itself, from a phone, or with **End quiet
   time** on the TV's remote.
-- **Send a message** to the TV ("Inside voices please, the baby's asleep"). It shows big on the
-  screen, with who sent it, until someone presses OK.
+- **Send a message** to the TV ("Inside voices please, the baby's asleep"). It rises onto the
+  screen with a soft chime and stays, with who sent it, until someone presses OK. **Read aloud**
+  reads it out.
 
 Both are on the **TV** tile in the app (add it from the tile drawer) and on the **TV** page in
 the web console.
@@ -31,14 +36,17 @@ the web console.
 4. Open FamLogic on the TV, type your server's address and that code, and choose Connect.
 
 The TV signs in as a family display: it shows the family's day but never shares a location and
-can't post.
+can't post. On the console's Devices page it's listed by its own name ("Living room TV").
 
 ## The TV's apps
 
-The launcher along the bottom shows from 1 to 6 tiles (choose how many in **Customize**). Each
+The launcher along the bottom shows from 1 to 6 tiles (choose how many in **Settings**). Each
 tile is one of the TV's apps, shown as one big picture. It starts with Jellyfin, Spotify and
-SmartTube if they're installed. To change a tile, choose it in **Customize**, or press and hold
-OK on it; an empty tile (+) asks which app to put there.
+SmartTube if they're installed; an empty tile (+) asks which app to put there.
+
+**Apps** (on the right) shows every app on the TV. Press OK to open one. **Press and hold OK** on
+an app, there or on the launcher, for more: add it to the launcher or remove it, move it left or
+right, its App info, or Uninstall.
 
 **Your own pictures:** a parent can give any tile its own picture on the **TV** page of the web
 console (Pictures for the TV's apps). A wide picture works best, 16:9 like 1280 × 720.
@@ -49,17 +57,32 @@ If Steward is set up, the **Steward** button listens through the remote's microp
 on screen and out loud. On the TV, Steward acts as the TV (a family display), so it can only do
 what the TV is allowed to; ask on your phone for anything more.
 
-## Making it the TV's home screen
+## Making it the TV's home screen, and the remote's buttons
 
-On Android TV boxes (an Nvidia Shield, for example), press Home and choose FamLogic as the home
-app.
+On Android TV boxes that let you choose a home app (an Nvidia Shield, for example), use
+**Settings → Make FamLogic the home app**.
 
-Google TV devices (Chromecast with Google TV, onn) don't let another app replace the home
-screen in their settings. Two ways round it:
+Google TV (Chromecast with Google TV, onn) doesn't let another app replace its home screen.
+FamLogic gets round that the way other launchers do, with an accessibility helper:
 
-- **Simplest:** install a button-remapping app (such as Button Mapper) and set the remote's Home
-  button to open FamLogic. Google TV stays as it was, a long press still reaches it.
-- **Advanced (reversible):** with adb from a computer, switch off the Google TV home screen:
-  `adb shell pm disable-user --user 0 com.google.android.apps.tv.launcherx`. FamLogic then
-  becomes the home screen. To undo it:
-  `adb shell pm enable com.google.android.apps.tv.launcherx`.
+1. In FamLogic on the TV, open **Settings → Remote helper → Accessibility settings**.
+2. Choose **FamLogic TV remote** and switch it on. (It only sees which app comes to the front and
+   which buttons you press, never what's on the screen.)
+3. Back in FamLogic's Settings, switch on:
+   - **Override current launcher:** when the TV's own home screen opens (pressing Home, or
+     after leaving an app), FamLogic opens instead. Google TV stays installed underneath.
+   - **Start when the TV turns on**, if you like.
+4. **Remote buttons:** choose **Add a button**, press a button on the remote (the Netflix or
+   YouTube button, say), then pick what it should do: open an app, open FamLogic, or ask Steward.
+   The arrows, OK and Back can't be changed, so the remote always works.
+
+If the switch in Accessibility settings is greyed out ("restricted setting"), open the TV's
+**Settings → Apps → FamLogic**, choose **Allow restricted settings** from its menu, and try
+again. If your TV has no such option, it can be switched on from a computer with adb:
+`adb shell settings put secure enabled_accessibility_services io.github.pretendgineering.famlogic.tv/io.github.pretendgineering.famlogic.TvRemoteService`.
+
+Google TV updates have sometimes stopped launcher overrides working. If FamLogic stops opening
+on Home, switch the helper off and on again in Accessibility settings. As a last resort (with
+adb, reversible), switch off the Google TV home screen entirely:
+`adb shell pm disable-user --user 0 com.google.android.apps.tv.launcherx`; to undo it:
+`adb shell pm enable com.google.android.apps.tv.launcherx`.

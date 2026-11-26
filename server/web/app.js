@@ -1457,7 +1457,9 @@ $("#family-invite").addEventListener("click", () => $("#invite-btn").click());
 
 function renderDevices() {
   const list = $("#device-list");
-  const kindName = (k) => ({ tablet: "Tablet", display: "Family display" }[k] || "Phone");
+  const kindName = (k) => ({ tablet: "Tablet", display: "Family display", tv: "TV" }[k] || "Phone");
+  // A family display is a thing, not a person: "Living room TV", not "Living room TV's phone".
+  const deviceTitle = (m, d) => m.access === "display" ? m.name : `${m.name}'s ${kindName(d.kind)}`;
   const rows = [];
   for (const m of lastMembers) {
     const devs = m.devices || [];
@@ -1468,13 +1470,13 @@ function renderDevices() {
     devs.forEach((d, i) => {
       const out = el("button", { type: "button", class: "secondary" }, "Sign out");
       out.addEventListener("click", async () => {
-        if (!confirm(`Sign out ${m.name}'s ${kindName(d.kind).toLowerCase()}? They can sign in again with their password (or a new join code).`)) return;
+        if (!confirm(m.access === "display" ? `Sign out ${m.name}? Pair it again with a new display code.` : `Sign out ${m.name}'s ${kindName(d.kind).toLowerCase()}? They can sign in again with their password (or a new join code).`)) return;
         try { await api("DELETE", `/api/admin/members/${m.id}/devices/${d.id}`); await refresh(); } catch (err) { alert(err.message); }
       });
       rows.push(el("li", {}, i === 0 ? avatarOf(m) : el("div", { class: "avatar-space" }),
         el("div", { class: "grow" },
-          el("div", { class: "title" }, `${m.name}'s ${kindName(d.kind)}`),
-          el("div", { class: "sub" }, [d.app ? "app " + d.app : null, d.lastSeen ? "last seen " + ago(d.lastSeen) : "not seen yet", "signed in " + new Date(d.created).toLocaleDateString()].filter(Boolean).join(" · ")),
+          el("div", { class: "title" }, deviceTitle(m, d)),
+          el("div", { class: "sub" }, [m.access === "display" ? (d.kind === "tv" ? "TV" : "Family display") : null, d.app ? "app " + d.app : null, d.lastSeen ? "last seen " + ago(d.lastSeen) : "not seen yet", "signed in " + new Date(d.created).toLocaleDateString()].filter(Boolean).join(" · ")),
           i === 0 && (m.app || m.lastContact) ? health(m) : null),
         out));
     });

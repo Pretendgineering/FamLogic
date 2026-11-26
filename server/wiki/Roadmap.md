@@ -175,6 +175,12 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.45.0: The TV as a launcher
+- **Apps:** every app on the TV in one drawer; press and hold OK on an app to add it to the launcher, move it, see its App info or uninstall it.
+- **Home and the remote:** an optional accessibility helper lets FamLogic take over from Google TV's own home screen, start when the TV turns on, and give remote buttons new jobs.
+- **Fits every TV:** the screen stretches to fit any resolution or display size, with a setting for TVs that cut off the edges.
+- **Messages** rise in with a soft chime, and can be read aloud; a wide FamLogic banner for the TV's app row; displays are named by their own name in the console.
+
 ### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
 - **Health & activity (Outings, grown from walks and runs):** family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like. Then:
