@@ -170,6 +170,11 @@ In this order (each is finished before the next starts):
 - **Messages to the TV:** type or say one ("Inside voices please, the baby's asleep") and it shows big on the TV until someone presses OK.
 - Can be the TV's home screen (see the Corkboard guide).
 
+### ✅ 0.44.0: The TV as one dashboard
+- **One screen, no scrolling:** a greeting for the time of day, and the family's Routines (on now and later today), Upkeep and Docket side by side.
+- **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
+- **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
+
 ### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
 - **Health & activity (Outings, grown from walks and runs):** family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like. Then:

@@ -2734,7 +2734,7 @@ async function renderCorkboard(box, force = false) {
   let b;
   try { b = await api("GET", "/api/display/board"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   if (box.dataset.module !== "display") return;
-  const sig = JSON.stringify([b.quiet, b.messages]);
+  const sig = JSON.stringify([b.quiet, b.messages, b.apps]);
   if (!force && sig === corkDrawn && box.childElementCount) return;
   corkDrawn = sig;
   const act = async (method, path, body) => { try { await api(method, path, body); renderCorkboard(box, true); } catch (err) { alert(err.message); } };
@@ -2761,6 +2761,29 @@ async function renderCorkboard(box, force = false) {
   }
   if (b.messages && b.messages.length) parts.push(el("ul", { class: "list" }, ...b.messages.map((m) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, m.text),
     el("div", { class: "sub" }, `${m.from} · ${new Date(m.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · showing until someone presses OK`))))));
+  if (b.canControl && b.apps && b.apps.length) {
+    parts.push(el("h2", {}, "Pictures for the TV's apps"),
+      el("p", { class: "muted small" }, "Each app on a TV's launcher shows its own banner. Upload a picture to use instead (it fills the tile, 16:9, like 1280 × 720)."));
+    parts.push(el("ul", { class: "list" }, ...b.apps.map((a) => {
+      const path = `/api/display/apps/${encodeURIComponent(a.pkg)}/image`;
+      const file = el("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif", hidden: "" });
+      file.addEventListener("change", async () => {
+        const f = file.files[0];
+        if (!f) return;
+        try {
+          const res = await fetch(path, { method: "PUT", body: f, credentials: "same-origin" });
+          if (!res.ok) { let msg = res.statusText; try { msg = (await res.json()).error || msg; } catch (_) {} throw new Error(msg); }
+          renderCorkboard(box, true);
+        } catch (err) { alert(err.message); }
+      });
+      const up = el("button", { type: "button", class: "secondary" }, a.image ? "Change" : "Upload picture");
+      up.addEventListener("click", () => file.click());
+      const rm = a.image ? el("button", { type: "button", class: "secondary" }, "Remove") : null;
+      if (rm) rm.addEventListener("click", () => act("DELETE", path));
+      const pic = a.image ? el("img", { class: "tv-pic", src: `${path}?v=${a.image}`, alt: "" }) : el("div", { class: "tv-pic" }, "App's own");
+      return el("li", {}, pic, el("div", { class: "grow" }, el("div", { class: "title" }, a.label), el("div", { class: "sub" }, a.pkg)), file, up, rm);
+    })));
+  }
   parts.push(el("h2", {}, "Setting up a TV"), el("p", { class: "muted small" }, "Install famlogic-tv.apk on the TV (with Obtainium or a file manager). On the Devices page, choose Pair a family display, then type the server address and the code on the TV. To make FamLogic the TV's home screen on Google TV, see the guide in the wiki (Corkboard)."));
   box.replaceChildren(...parts.filter(Boolean));
 }

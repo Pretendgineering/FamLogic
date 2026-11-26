@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -28,6 +31,47 @@ func TestDisplay(t *testing.T) {
 	_, b = e.status("GET", "/api/display/board", f.kid, nil)
 	if b["quiet"].(map[string]any)["on"] != false {
 		t.Fatal("quiet should be over")
+	}
+}
+
+func TestDisplayAppPictures(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	if st, _ := e.status("PUT", "/api/display/apps", f.kid, map[string]any{"apps": []map[string]string{{"pkg": "org.jellyfin.androidtv", "label": "Jellyfin"}}}); st != 403 {
+		t.Fatalf("children don't list apps: %d", st)
+	}
+	if st, _ := e.status("PUT", "/api/display/apps", f.mom, map[string]any{"apps": []map[string]string{{"pkg": "org.jellyfin.androidtv", "label": "Jellyfin"}, {"pkg": "../etc", "label": "x"}}}); st != 200 {
+		t.Fatalf("apps: %d", st)
+	}
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...)
+	put := func(token string, body []byte) int {
+		req, _ := http.NewRequest("PUT", e.srv.URL+"/api/display/apps/org.jellyfin.androidtv/image", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if put(f.kid, png) != 403 || put(f.mom, []byte("not a picture")) != 400 || put(f.mom, png) != 200 {
+		t.Fatal("picture upload rules")
+	}
+	req, _ := http.NewRequest("GET", e.srv.URL+"/api/display/apps/org.jellyfin.androidtv/image", nil)
+	req.Header.Set("Authorization", "Bearer "+f.kid)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !bytes.Equal(got, png) {
+		t.Fatalf("picture back: %d", resp.StatusCode)
+	}
+	_, b := e.status("GET", "/api/display/board", f.kid, nil)
+	apps := b["apps"].([]any)
+	if len(apps) != 1 || apps[0].(map[string]any)["image"] == nil {
+		t.Fatalf("apps: %v", apps)
 	}
 }
 

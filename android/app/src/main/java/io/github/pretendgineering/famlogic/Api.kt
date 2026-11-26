@@ -356,6 +356,13 @@ class Api(private val baseUrl: String, private val token: String = "") {
     }
 
     /** Reading aloud on the family's server: text → WAV audio. */
+    /** A file's bytes, such as a picture. */
+    suspend fun bytes(path: String): ByteArray {
+        val (code, b) = raw("GET", path, null, null)
+        if (code >= 400) throw ApiException(code, "couldn't load it")
+        return b
+    }
+
     suspend fun speak(text: String, voice: String = "", slow: Boolean = false): ByteArray {
         val (code, bytes) = raw("POST", "/api/voice/speak", JSONObject().put("text", text).put("voice", voice).put("slow", slow).toString().toByteArray(), "application/json")
         if (code >= 400) throw ApiException(code, "Couldn't read that aloud ($code)")

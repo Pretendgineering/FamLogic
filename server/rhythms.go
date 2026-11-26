@@ -117,7 +117,7 @@ func (s *Server) currentRoutines(routines []List, members []Member, now time.Tim
 	}{}
 	best := map[string]int{}
 	for _, m := range members {
-		if m.role() == RoleDependent {
+		if m.role() == RoleDependent || m.Display {
 			continue
 		}
 		best[m.ID] = -1

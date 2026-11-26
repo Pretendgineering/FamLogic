@@ -8,8 +8,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +27,15 @@ type DisplayState struct {
 	QuietUntil int64            `json:"quietUntil,omitempty"` // unix ms; 0 with QuietSince set = until someone ends it
 	QuietBy    string           `json:"quietBy,omitempty"`
 	Messages   []DisplayMessage `json:"messages,omitempty"` // newest last, the last 20
+	Apps       []DisplayApp     `json:"apps,omitempty"`     // the apps on the TVs' launchers, for pictures from the console
+}
+
+// DisplayApp is an app on a TV's launcher. Image is when a picture was uploaded
+// for it (unix ms; 0 = none, the TV uses the app's own banner).
+type DisplayApp struct {
+	Pkg   string `json:"pkg"`
+	Label string `json:"label"`
+	Image int64  `json:"image,omitempty"`
 }
 
 // DisplayMessage is a message pushed to the family's displays.
@@ -42,6 +56,7 @@ func (s *Store) Display() DisplayState {
 	}
 	d := *s.d.Display
 	d.Messages = append([]DisplayMessage{}, d.Messages...)
+	d.Apps = append([]DisplayApp{}, d.Apps...)
 	return d
 }
 
@@ -133,6 +148,9 @@ func (s *Server) handleDisplayBoard(w http.ResponseWriter, r *http.Request, me *
 	board := map[string]any{
 		"family": s.familyName(), "now": now.UnixMilli(), "sun": sun, "quiet": quiet, "messages": msgs,
 		"canControl": mayControlDisplays(me),
+		"steward":    s.mayTalkToSteward(me),
+		"modules":    enabledIDs(on),
+		"apps":       st.Apps,
 		"members":    s.callAs(me, s.handleMembers, "GET", "/api/members?since="+strconv.FormatInt(now.UnixMilli()*2, 10), nil, nil),
 		"feed":       s.callAs(me, s.handleFeed, "GET", fmt.Sprintf("/api/feed?from=%d&to=%d", midnight.UnixMilli(), now.UnixMilli()+60000), nil, nil),
 	}
@@ -141,6 +159,10 @@ func (s *Server) handleDisplayBoard(w http.ResponseWriter, r *http.Request, me *
 	}
 	if on["routines"] {
 		board["routines"] = s.callAs(me, s.handleRoutines, "GET", "/api/routines", nil, nil)
+		board["routinesLater"] = s.routinesLater(now)
+	}
+	if on["todos"] {
+		board["lists"] = s.callAs(me, s.handleLists, "GET", "/api/lists", nil, nil)
 	}
 	if on["meals"] {
 		board["meals"] = s.callAs(me, s.handleMeals, "GET", "/api/meals", nil, nil)
@@ -226,4 +248,154 @@ func (s *Server) handleDisplayMessageDone(w http.ResponseWriter, r *http.Request
 		d.Messages = out
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func enabledIDs(on map[string]bool) []string {
+	out := []string{}
+	for _, m := range allModules {
+		if on[m.ID] {
+			out = append(out, m.ID)
+		}
+	}
+	return out
+}
+
+// routinesLater: the routines still to come today, in order, each with who it's for
+// (empty: everyone), for the TV's "Later" line.
+func (s *Server) routinesLater(now time.Time) []map[string]any {
+	if s.routines == nil {
+		return nil
+	}
+	members := s.store.Members()
+	all := s.routines.all(members)
+	titles := map[string]string{}
+	for _, l := range all {
+		titles[l.ID] = l.Title
+	}
+	day := weekdayKeys[now.Weekday()]
+	mins := now.Hour()*60 + now.Minute()
+	out := []map[string]any{}
+	seen := map[string]int{}
+	slots := s.routineSlots(all, members)
+	slices.SortStableFunc(slots, func(a, b routineSlot) int { return a.at - b.at })
+	for _, sl := range slots {
+		if sl.at <= mins || (len(sl.days) > 0 && !containsStr(sl.days, day)) || titles[sl.routineID] == "" {
+			continue
+		}
+		key := fmt.Sprintf("%s@%d", sl.routineID, sl.at)
+		if i, ok := seen[key]; ok {
+			who := out[i]["who"].([]string)
+			for _, w := range sl.who {
+				if !containsStr(who, w) {
+					who = append(who, w)
+				}
+			}
+			out[i]["who"] = who
+			continue
+		}
+		seen[key] = len(out)
+		out = append(out, map[string]any{"id": sl.routineID, "title": titles[sl.routineID], "at": fmt.Sprintf("%02d:%02d", sl.at/60, sl.at%60), "who": append([]string{}, sl.who...)})
+	}
+	return out
+}
+
+// ---- the TVs' launcher apps, and pictures for them from the console
+
+var pkgRe = regexp.MustCompile(`^[A-Za-z0-9_.]{1,120}$`)
+
+func (s *Server) displayImagePath(pkg string) string {
+	return filepath.Join(filepath.Dir(s.store.path), "display", pkg+".img")
+}
+
+// PUT /api/display/apps {apps: [{pkg, label}]}: a TV says which apps are on its
+// launcher, so the console can offer a picture for each. Apps are only added.
+func (s *Server) handleDisplayApps(w http.ResponseWriter, r *http.Request, me *Member) {
+	if !me.Display && !mayControlDisplays(me) {
+		writeError(w, http.StatusForbidden, "not allowed")
+		return
+	}
+	var body struct {
+		Apps []DisplayApp `json:"apps"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	_ = s.store.updateDisplay(func(d *DisplayState) {
+		for _, a := range body.Apps {
+			a.Label = strings.TrimSpace(a.Label)
+			if !pkgRe.MatchString(a.Pkg) || a.Label == "" || utf8.RuneCountInString(a.Label) > 60 {
+				continue
+			}
+			i := slices.IndexFunc(d.Apps, func(x DisplayApp) bool { return x.Pkg == a.Pkg })
+			if i >= 0 {
+				d.Apps[i].Label = a.Label
+			} else if len(d.Apps) < 60 {
+				d.Apps = append(d.Apps, DisplayApp{Pkg: a.Pkg, Label: a.Label})
+			}
+		}
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"apps": s.store.Display().Apps})
+}
+
+// PUT /api/display/apps/{pkg}/image (the picture's bytes): parents give an app's
+// tile its own picture. DELETE puts the app's own banner back.
+func (s *Server) handleDisplayAppImage(w http.ResponseWriter, r *http.Request, me *Member) {
+	pkg := r.PathValue("pkg")
+	if !mayControlDisplays(me) {
+		writeError(w, http.StatusForbidden, "parents choose the TV's pictures")
+		return
+	}
+	if !pkgRe.MatchString(pkg) || !slices.ContainsFunc(s.store.Display().Apps, func(a DisplayApp) bool { return a.Pkg == pkg }) {
+		writeError(w, http.StatusNotFound, "that app isn't on a TV")
+		return
+	}
+	path := s.displayImagePath(pkg)
+	var stamp int64
+	if r.Method == http.MethodDelete {
+		_ = os.Remove(path)
+	} else {
+		data, err := io.ReadAll(io.LimitReader(r.Body, 3<<20+1))
+		if err != nil || len(data) == 0 || len(data) > 3<<20 {
+			writeError(w, http.StatusBadRequest, "a picture of 3 MB at most")
+			return
+		}
+		if t := http.DetectContentType(data); t != "image/png" && t != "image/jpeg" && t != "image/webp" && t != "image/gif" {
+			writeError(w, http.StatusBadRequest, "a PNG, JPEG, WebP or GIF picture")
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			writeError(w, http.StatusInternalServerError, "couldn't save it")
+			return
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			writeError(w, http.StatusInternalServerError, "couldn't save it")
+			return
+		}
+		stamp = time.Now().UnixMilli()
+	}
+	_ = s.store.updateDisplay(func(d *DisplayState) {
+		for i := range d.Apps {
+			if d.Apps[i].Pkg == pkg {
+				d.Apps[i].Image = stamp
+			}
+		}
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"apps": s.store.Display().Apps})
+}
+
+// GET /api/display/apps/{pkg}/image: the picture for an app's tile.
+func (s *Server) handleDisplayAppImageGet(w http.ResponseWriter, r *http.Request, me *Member) {
+	pkg := r.PathValue("pkg")
+	if !pkgRe.MatchString(pkg) {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := os.ReadFile(s.displayImagePath(pkg))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", http.DetectContentType(data))
+	w.Header().Set("Cache-Control", "private, max-age=60")
+	_, _ = w.Write(data)
 }

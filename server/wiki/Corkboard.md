@@ -1,9 +1,15 @@
 # Corkboard: FamLogic on the TV
 
-Corkboard turns a TV (or a tablet on the wall) into the family's board: what's happened today,
-what's coming up, the routines on now, meals and chores, who's where, and shortcuts to the TV's
-own apps. The screen follows the sun at home: light in the morning, slowly darker towards the
-evening, dark at night (it uses the fence called Home to know when the sun rises and sets).
+Corkboard turns a TV (or a tablet on the wall) into the family's board. One screen, nothing to
+scroll: a greeting for the time of day, the clock, and the day's **Routines** (the ones on now,
+with their checklists, and what's later today), **Upkeep** (chores due) and the **Docket**
+(to-dos, and how much is on lists like Shopping). The screen follows the sun at home: light in the
+morning, slowly darker towards the evening, dark at night (it uses the fence called Home to know
+when the sun rises and sets).
+
+Down the right side are buttons for the **Map** (where everyone is), the **Feed** (today so far),
+**Steward** (ask by talking into the remote), **Datebook** (what's coming up) and **Pantry**
+(meals). Choose which ones in **Customize**, at the bottom of that row.
 
 From a phone, parents and grandparents can:
 
@@ -29,8 +35,19 @@ can't post.
 
 ## The TV's apps
 
-The bottom row has shortcuts to the TV's apps. It starts with Jellyfin, Spotify and SmartTube
-if they're installed; choose **Apps** to add or remove others.
+The launcher along the bottom shows from 1 to 6 tiles (choose how many in **Customize**). Each
+tile is one of the TV's apps, shown as one big picture. It starts with Jellyfin, Spotify and
+SmartTube if they're installed. To change a tile, choose it in **Customize**, or press and hold
+OK on it; an empty tile (+) asks which app to put there.
+
+**Your own pictures:** a parent can give any tile its own picture on the **TV** page of the web
+console (Pictures for the TV's apps). A wide picture works best, 16:9 like 1280 × 720.
+
+## Steward on the TV
+
+If Steward is set up, the **Steward** button listens through the remote's microphone and answers
+on screen and out loud. On the TV, Steward acts as the TV (a family display), so it can only do
+what the TV is allowed to; ask on your phone for anything more.
 
 ## Making it the TV's home screen
 

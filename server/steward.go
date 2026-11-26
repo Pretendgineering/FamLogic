@@ -60,7 +60,8 @@ func (s *Server) stewardReady() bool {
 }
 
 func (s *Server) mayTalkToSteward(me *Member) bool {
-	return s.stewardReady() && me.role() != RoleDependent && (isAdult(me) || s.store.Steward().Everyone)
+	// The family's TV can ask too (with the remote's microphone), with a display's permissions.
+	return s.stewardReady() && me.role() != RoleDependent && (isAdult(me) || me.Display || s.store.Steward().Everyone)
 }
 
 // ---- conversation history
