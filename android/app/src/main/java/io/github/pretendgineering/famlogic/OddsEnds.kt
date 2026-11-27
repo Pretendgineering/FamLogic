@@ -332,7 +332,8 @@ fun ListsTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onOp
             }
         } else {
             Spacer(Modifier.weight(1f))
-            Text(if (open.isEmpty()) "All done" else "${open.size} to get", style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge)
+            // "3 to do" for a to-do list, "3 left" for a list like Shopping.
+            Text(if (open.isEmpty()) "All done" else if (l?.kind == "todos") "${open.size} to do" else "${open.size} left", style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge)
         }
     }
 }

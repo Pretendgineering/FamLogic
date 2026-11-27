@@ -53,7 +53,8 @@ console (Pictures for the TV's apps). A wide picture works best, 16:9 like 1280 
 
 ## Steward on the TV
 
-If Steward is set up, the **Steward** button listens through the remote's microphone and answers
+If Steward is set up, the round microphone button at the bottom right (always there), or the
+**Steward** button on the side, listens through the remote's microphone and answers
 on screen and out loud. On the TV, Steward acts as the TV (a family display), so it can only do
 what the TV is allowed to; ask on your phone for anything more.
 

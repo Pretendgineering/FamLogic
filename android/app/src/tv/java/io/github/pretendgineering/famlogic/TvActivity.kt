@@ -1,6 +1,17 @@
 package io.github.pretendgineering.famlogic
 
 import android.content.ActivityNotFoundException
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import android.view.KeyEvent
 import androidx.compose.ui.composed
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -333,7 +344,11 @@ private val NIGHT_CARD = Color(0xFF242233)
 private val NIGHT_TEXT = Color(0xFFECEAF4)
 
 /** The board's colours right now. */
-private data class Look(val bg: Color, val card: Color, val ink: Color, val soft: Color, val accent: Color)
+private data class Look(val bg: Color, val card: Color, val ink: Color, val soft: Color, val accent: Color, val onAccent: Color = Color.White)
+
+/** The message card's look (cream, whatever the time of day) and quiet time's (dark). */
+private val CREAM_LOOK = Look(Color(0xFFFFFBF2), Color(0xFFF1EBDD), Color(0xFF2A2638), Color(0xFF2A2638).copy(alpha = .65f), Color(0xFF5B4596))
+private val QUIET_LOOK = Look(Color(0xFF0E0D16), Color(0xFF1C1A29), Color(0xFFE6E1F5), Color(0xFF9A93B5), Color(0xFFB8A9E8), Color(0xFF1E1A2E))
 
 @Composable
 private fun TvBoard(prefs: Prefs, config: TvConfig) {
@@ -406,7 +421,7 @@ private fun TvBoard(prefs: Prefs, config: TvConfig) {
     val ink by animateColorAsState(if (dark < .5f) DAY_TEXT else NIGHT_TEXT, tween(4000), label = "ink")
     // The accent: a deep purple on the light daytime board, a soft lavender at night.
     val accent by animateColorAsState(if (dark < .5f) Color(0xFF5B4596) else Color(0xFFB8A9E8), tween(4000), label = "accent")
-    val look = Look(bg, card, ink, ink.copy(alpha = .65f), accent)
+    val look = Look(bg, card, ink, ink.copy(alpha = .65f), accent, if (dark < .5f) Color.White else Color(0xFF1E1A2E))
     val b = board
     val modules = b?.optJSONArray("modules")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
     // The family's people (not displays), by id.
@@ -444,14 +459,21 @@ private fun TvBoard(prefs: Prefs, config: TvConfig) {
                 Launcher(api, config, installed, b?.optJSONArray("apps"), look, onEmpty = { nav.pickFor = it; nav.view = "apps" }, onMenu = { nav.menuFor = it })
             }
             Spacer(Modifier.width(20.dp))
-            // Buttons down the right side, then the app drawer and Settings.
-            Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
-                SIDE_BUTTONS.filter { (id) -> id in config.side && available(id, modules, b) }.forEach { (id, label, icon) ->
-                    SideButton(label, icon, look) { nav.view = id }
+            // Buttons down the right side, then the app drawer and Settings; Steward always
+            // has its own round button at the bottom right.
+            Column(Modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)) {
+                    SIDE_BUTTONS.filter { (id) -> id in config.side && available(id, modules, b) }.forEach { (id, label, icon) ->
+                        SideButton(label, icon, look) { nav.view = id }
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    SideButton("Apps", Icons.Filled.Apps, look) { nav.pickFor = null; nav.view = "apps" }
+                    SideButton("Settings", Icons.Filled.Settings, look) { nav.view = "settings" }
                 }
-                Spacer(Modifier.height(4.dp))
-                SideButton("Apps", Icons.Filled.Apps, look) { nav.pickFor = null; nav.view = "apps" }
-                SideButton("Settings", Icons.Filled.Settings, look) { nav.view = "settings" }
+                if (b?.optBoolean("steward") == true) {
+                    Spacer(Modifier.height(10.dp))
+                    StewardOrb(look) { nav.view = "steward" }
+                }
             }
         }
 
@@ -492,7 +514,7 @@ private fun BoardViews(nav: BoardNav, prefs: Prefs, api: Api, config: TvConfig, 
         "apps" -> AppDrawer(installed, look, nav.pickFor, onPick = { pkg -> nav.pickFor?.let { config.setApp(it, pkg) }; nav.pickFor = null; nav.view = null }, onMenu = { nav.menuFor = it }) { nav.pickFor = null; nav.view = null }
         "settings" -> SettingsView(config, installed, modules, board, look) { nav.view = null }
     }
-    nav.menuFor?.let { pkg -> installed.find { it.pkg == pkg }?.let { app -> AppMenu(app, config) { nav.menuFor = null } } ?: run { nav.menuFor = null } }
+    nav.menuFor?.let { pkg -> installed.find { it.pkg == pkg }?.let { app -> AppMenu(app, config, look) { nav.menuFor = null } } ?: run { nav.menuFor = null } }
 }
 
 /** Whether a side button can work here: its module is on (and Steward is set up for the TV). */
@@ -617,7 +639,7 @@ private fun DocketLines(l: JSONObject, names: Map<String, String>, look: Look) {
         }
         Line(i.optString("text"), listOfNotNull(title, names[i.optString("who")], due).joinToString(" · "), look, mark = "○", markColor = look.soft)
     }
-    others.forEach { (title, left) -> Line(title, "$left to get", look, mark = "≡", markColor = look.soft) }
+    others.forEach { (title, left) -> Line(title, "$left left", look, mark = "≡", markColor = look.soft) }
 }
 
 @Composable
@@ -673,14 +695,94 @@ private fun MealLines(m: JSONObject, look: Look) {
 @Composable
 private fun SideButton(label: String, icon: ImageVector, look: Look, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
+    val tint = if (focused) look.onAccent else look.ink
     Column(
-        Modifier.width(68.dp).clip(RoundedCornerShape(18.dp)).background(if (focused) look.accent.copy(alpha = .18f) else look.card)
-            .border(if (focused) 3.dp else 0.dp, if (focused) look.accent else Color.Transparent, RoundedCornerShape(18.dp))
-            .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick).padding(vertical = 7.dp),
+        Modifier.width(68.dp).tvFocus(look, look.card, 18.dp, fill = true) { focused = it }.clickable(onClick = onClick).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, null, tint = if (focused) look.accent else look.ink, modifier = Modifier.size(24.dp))
-        Text(label, color = look.soft, fontSize = 11.sp, maxLines = 1)
+        Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
+        Text(label, color = if (focused) look.onAccent else look.soft, fontSize = 11.sp, maxLines = 1)
+    }
+}
+
+/** Steward's own button, always at the bottom right: round, in the accent colour. */
+@Composable
+private fun StewardOrb(look: Look, onClick: () -> Unit) {
+    Box(
+        Modifier.size(64.dp).tvFocus(look, look.accent, 32.dp, grow = 1.12f, ring = look.ink).clickable(onClickLabel = "Ask Steward", onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.Mic, "Ask Steward", tint = look.onAccent, modifier = Modifier.size(30.dp))
+    }
+}
+
+/**
+ * How the remote's selection shows: the focused thing eases up a little in size and gets an
+ * accent ring and tint (or, with [fill], fills with the accent). Drawn and scaled in the draw
+ * phase, so moving the selection animates smoothly without redrawing the board.
+ */
+private fun Modifier.tvFocus(look: Look, base: Color, radius: Dp, grow: Float = 1.06f, fill: Boolean = false, ring: Color = look.accent, onFocus: (Boolean) -> Unit = {}): Modifier = composed {
+    var focused by remember { mutableStateOf(false) }
+    val t by animateFloatAsState(if (focused) 1f else 0f, tween(200, easing = FastOutSlowInEasing), label = "focus")
+    this
+        .onFocusChanged { if (focused != it.isFocused) { focused = it.isFocused; onFocus(it.isFocused) } }
+        .graphicsLayer { val k = 1f + (grow - 1f) * t; scaleX = k; scaleY = k }
+        .drawWithContent {
+            val r = radius.toPx()
+            drawRoundRect(if (fill) lerp(base, look.accent, t) else lerp(base, look.accent, .2f * t), cornerRadius = CornerRadius(r))
+            drawContent()
+            if (t > 0f) {
+                val w = 4.dp.toPx()
+                drawRoundRect(ring.copy(alpha = t), topLeft = Offset(w / 2, w / 2), size = Size(size.width - w, size.height - w),
+                    cornerRadius = CornerRadius((r - w / 2).coerceAtLeast(0f)), style = Stroke(w))
+            }
+        }
+        // What's inside (and the system's own press and focus overlay) keeps to the same rounded shape.
+        .clip(RoundedCornerShape(radius))
+}
+
+/** A button for the remote: outlined, filling with the accent when selected. */
+@Composable
+private fun TvButton(text: String, look: Look, modifier: Modifier = Modifier, icon: ImageVector? = null, enabled: Boolean = true, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val ink = when { !enabled -> look.soft.copy(alpha = .45f); focused -> look.onAccent; else -> look.ink }
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        modifier.tvFocus(look, look.bg, 24.dp, fill = true) { focused = it }
+            .border(1.5.dp, if (enabled) look.soft.copy(alpha = .5f) else look.soft.copy(alpha = .2f), shape)
+            .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 20.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) { Icon(icon, null, tint = if (focused) look.onAccent else look.accent, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)) }
+        Text(text, color = ink, fontSize = 17.sp, maxLines = 1)
+    }
+}
+
+/** A small menu over everything (an app's options, a button's job): the first choice is selected. */
+@Composable
+private fun TvMenu(title: String, options: List<Pair<String, () -> Unit>>, look: Look, onDismiss: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    Overlay(onDismiss) {
+        Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+            Column(Modifier.widthIn(min = 360.dp, max = 520.dp).clip(RoundedCornerShape(28.dp)).background(look.bg).padding(24.dp)) {
+                Text(title, color = look.ink, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 26.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(12.dp))
+                LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(6.dp)) {
+                    itemsIndexed(options) { i, (label, act) ->
+                        MenuRow(label, look, if (i == 0) Modifier.focusRequester(focus) else Modifier) { act(); onDismiss() }
+                    }
+                }
+            }
+        }
+    }
+    FocusWhenReady(focus, title)
+}
+
+@Composable
+private fun MenuRow(label: String, look: Look, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Box(modifier.fillMaxWidth().tvFocus(look, look.card, 16.dp, grow = 1.03f, fill = true) { focused = it }.clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 12.dp)) {
+        Text(label, color = if (focused) look.onAccent else look.ink, fontSize = 18.sp)
     }
 }
 
@@ -716,19 +818,20 @@ private fun FocusWhenReady(focus: FocusRequester, key: Any) {
 }
 
 @Composable
-private fun ViewFrame(title: String, look: Look, onBack: () -> Unit, content: @Composable () -> Unit) {
+private fun ViewFrame(title: String, look: Look, onBack: () -> Unit, start: FocusRequester? = null, content: @Composable () -> Unit) {
     val focus = remember { FocusRequester() }
     Overlay(onBack) {
         Column(Modifier.fillMaxSize().background(look.bg).padding(horizontal = 48.dp, vertical = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, Modifier.weight(1f), color = look.ink, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 34.sp)
-                OutlinedButton(onClick = onBack, modifier = Modifier.focusRequester(focus)) { Text("Back", color = look.ink, fontSize = 18.sp) }
+                TvButton("Back", look, Modifier.focusRequester(focus), onClick = onBack)
             }
             Spacer(Modifier.height(16.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         }
     }
-    FocusWhenReady(focus, title)
+    // The selection starts on the view's own content when it has some (the first app), else on Back.
+    FocusWhenReady(start ?: focus, title)
 }
 
 /** A long list, moved through with the remote (each entry takes focus, so it scrolls). */
@@ -828,9 +931,7 @@ private fun StewardView(prefs: Prefs, api: Api, look: Look, onBack: () -> Unit) 
                 "nomic" -> Text("This TV has no speech recogniser for Steward to listen with.", color = look.soft, fontSize = 22.sp)
                 else -> Text("Press Ask, then speak into the remote.", color = look.soft, fontSize = 22.sp)
             }
-            if (state != "nomic") Button(onClick = { start() }, modifier = Modifier.focusRequester(focus)) {
-                Icon(Icons.Filled.Mic, null); Spacer(Modifier.width(8.dp)); Text(if (heard.isEmpty()) "Ask" else "Ask again", fontSize = 20.sp)
-            }
+            if (state != "nomic") TvButton(if (heard.isEmpty()) "Ask" else "Ask again", look, Modifier.focusRequester(focus), icon = Icons.Filled.Mic) { start() }
         }
     }
     if (state == "answered") FocusWhenReady(focus, heard)
@@ -857,12 +958,12 @@ private fun SettingsView(config: TvConfig, installed: List<TvApp>, modules: Set<
             item { Heading("The screen", look) }
             item {
                 SettingRow("Fit to the screen", "If the TV cuts off the edges, draw further in: ${config.edges}%.", look) {
-                    Stepper(config.edges > 0, config.edges < 10, { config.changeEdges(config.edges - 1) }, { config.changeEdges(config.edges + 1) })
+                    Stepper(look, config.edges > 0, config.edges < 10, { config.changeEdges(config.edges - 1) }, { config.changeEdges(config.edges + 1) })
                 }
             }
             item {
                 SettingRow("Tiles on the launcher", "${config.slots} along the bottom.", look) {
-                    Stepper(config.slots > 1, config.slots < 6, { config.changeSlots(config.slots - 1) }, { config.changeSlots(config.slots + 1) })
+                    Stepper(look, config.slots > 1, config.slots < 6, { config.changeSlots(config.slots - 1) }, { config.changeSlots(config.slots + 1) })
                 }
             }
             item { Heading("Buttons on the side", look) }
@@ -872,7 +973,7 @@ private fun SettingsView(config: TvConfig, installed: List<TvApp>, modules: Set<
             item { Heading("Home and remote", look) }
             item {
                 SettingRow("Remote helper", if (helperOn) "On." else "Off. In the TV's Accessibility settings, switch on FamLogic TV remote.", look, Icons.Filled.Accessibility) {
-                    OutlinedButton(onClick = { open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), "This TV has no Accessibility settings") }) { Text("Accessibility settings", color = look.ink) }
+                    TvButton("Accessibility settings", look) { open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), "This TV has no Accessibility settings") }
                 }
             }
             item {
@@ -886,26 +987,26 @@ private fun SettingsView(config: TvConfig, installed: List<TvApp>, modules: Set<
             }
             item {
                 SettingRow("Make FamLogic the home app", "On TVs that let you choose a home app (Google TV doesn't: use the override above).", look) {
-                    OutlinedButton(onClick = { open(Intent(Settings.ACTION_HOME_SETTINGS), "This TV doesn't let you choose: use Override current launcher") }) { Text("Choose", color = look.ink) }
+                    TvButton("Choose", look) { open(Intent(Settings.ACTION_HOME_SETTINGS), "This TV doesn't let you choose: use Override current launcher") }
                 }
             }
             item { Heading("Remote buttons", look) }
             items(keys.entries.toList(), key = { "k" + it.key }) { (code, action) ->
                 SettingRow(TvRemoteSettings.keyName(code), actionName(action, installed), look) {
-                    OutlinedButton(onClick = { keys = keys - code; TvRemoteSettings.setKeys(context, keys) }) { Text("Remove", color = look.ink) }
+                    TvButton("Remove", look) { keys = keys - code; TvRemoteSettings.setKeys(context, keys) }
                 }
             }
             item {
                 if (learning) SettingRow("Press the remote button to use", "Any button but the arrows, OK and Back.", look) {
-                    OutlinedButton(onClick = { learning = false; TvNav.capture = null }) { Text("Cancel", color = look.ink) }
+                    TvButton("Cancel", look) { learning = false; TvNav.capture = null }
                 } else SettingRow("Give a button a new job", if (helperOn) "Open an app, FamLogic or Steward with a button on the remote." else "Needs the remote helper.", look) {
-                    OutlinedButton(enabled = helperOn, onClick = { learning = true; TvNav.capture = { code -> learning = false; learned = code } }) { Text("Add a button", color = look.ink) }
+                    TvButton("Add a button", look, enabled = helperOn) { learning = true; TvNav.capture = { code -> learning = false; learned = code } }
                 }
             }
         }
     }
     learned?.let { code ->
-        ActionPicker(TvRemoteSettings.keyName(code), installed, onPick = { a -> keys = keys + (code to a); TvRemoteSettings.setKeys(context, keys); learned = null }) { learned = null }
+        ActionPicker(TvRemoteSettings.keyName(code), installed, look, onPick = { a -> keys = keys + (code to a); TvRemoteSettings.setKeys(context, keys); learned = null }) { learned = null }
     }
 }
 
@@ -929,11 +1030,8 @@ private fun SettingRow(title: String, sub: String, look: Look, icon: ImageVector
 
 @Composable
 private fun SwitchRow(title: String, sub: String, on: Boolean, enabled: Boolean, look: Look, icon: ImageVector? = null, onToggle: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (focused) look.accent.copy(alpha = .18f) else look.card)
-            .border(if (focused) 3.dp else 0.dp, if (focused) look.accent else Color.Transparent, RoundedCornerShape(18.dp))
-            .onFocusChanged { focused = it.isFocused }.clickable(enabled = enabled, onClick = onToggle).padding(horizontal = 18.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().tvFocus(look, look.card, 18.dp, grow = 1.02f).clickable(enabled = enabled, onClick = onToggle).padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) Icon(icon, null, tint = look.accent, modifier = Modifier.padding(end = 12.dp).size(22.dp))
@@ -946,30 +1044,19 @@ private fun SwitchRow(title: String, sub: String, on: Boolean, enabled: Boolean,
 }
 
 @Composable
-private fun Stepper(canLess: Boolean, canMore: Boolean, less: () -> Unit, more: () -> Unit) {
+private fun Stepper(look: Look, canLess: Boolean, canMore: Boolean, less: () -> Unit, more: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(enabled = canLess, onClick = less) { Text("Less") }
-        OutlinedButton(enabled = canMore, onClick = more) { Text("More") }
+        TvButton("Less", look, enabled = canLess, onClick = less)
+        TvButton("More", look, enabled = canMore, onClick = more)
     }
 }
 
 /** What a remapped button does: FamLogic, Steward, or an app. */
 @Composable
-private fun ActionPicker(key: String, installed: List<TvApp>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(key) },
-        text = {
-            LazyColumn {
-                item { TextButton(onClick = { onPick("home") }, Modifier.fillMaxWidth()) { Text("Open FamLogic", Modifier.fillMaxWidth(), fontSize = 18.sp) } }
-                item { TextButton(onClick = { onPick("steward") }, Modifier.fillMaxWidth()) { Text("Ask Steward", Modifier.fillMaxWidth(), fontSize = 18.sp) } }
-                items(installed, key = { it.pkg }) { app ->
-                    TextButton(onClick = { onPick("app:" + app.pkg) }, Modifier.fillMaxWidth()) { Text("Open ${app.label}", Modifier.fillMaxWidth(), fontSize = 18.sp) }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+private fun ActionPicker(key: String, installed: List<TvApp>, look: Look, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val options = listOf<Pair<String, () -> Unit>>("Open FamLogic" to { onPick("home") }, "Ask Steward" to { onPick("steward") }) +
+        installed.map { app -> "Open ${app.label}" to { onPick("app:" + app.pkg) } }
+    TvMenu(key, options, look, onDismiss)
 }
 
 // ---- the app drawer: every app on the TV
@@ -977,10 +1064,11 @@ private fun ActionPicker(key: String, installed: List<TvApp>, onPick: (String) -
 @Composable
 private fun AppDrawer(installed: List<TvApp>, look: Look, pickFor: Int?, onPick: (String) -> Unit, onMenu: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
-    ViewFrame(if (pickFor != null) "Choose an app for tile ${pickFor + 1}" else "Apps", look, onBack) {
-        LazyVerticalGrid(GridCells.Fixed(5), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            items(installed, key = { it.pkg }) { app ->
-                DrawerTile(app, look, onClick = { if (pickFor != null) onPick(app.pkg) else launch(context, app.pkg) }, onLongClick = { onMenu(app.pkg) })
+    val first = remember { FocusRequester() }
+    ViewFrame(if (pickFor != null) "Choose an app for tile ${pickFor + 1}" else "Apps", look, onBack, start = if (installed.isNotEmpty()) first else null) {
+        LazyVerticalGrid(GridCells.Fixed(5), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(8.dp)) {
+            itemsIndexed(installed, key = { _, a -> a.pkg }) { i, app ->
+                DrawerTile(app, look, if (i == 0) Modifier.focusRequester(first) else Modifier, onClick = { if (pickFor != null) onPick(app.pkg) else launch(context, app.pkg) }, onLongClick = { onMenu(app.pkg) })
             }
         }
     }
@@ -988,15 +1076,11 @@ private fun AppDrawer(installed: List<TvApp>, look: Look, pickFor: Int?, onPick:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DrawerTile(app: TvApp, look: Look, onClick: () -> Unit, onLongClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
+private fun DrawerTile(app: TvApp, look: Look, modifier: Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
     val banner = app.banner
     val icon = app.icon
-    val shape = RoundedCornerShape(16.dp)
     Column(
-        Modifier.clip(shape).background(if (focused) look.accent.copy(alpha = .18f) else Color.Transparent)
-            .border(if (focused) 3.dp else 0.dp, if (focused) look.accent else Color.Transparent, shape)
-            .onFocusChanged { focused = it.isFocused }.tvClickable(onClick, onLongClick).padding(6.dp),
+        modifier.tvFocus(look, Color.Transparent, 16.dp, grow = 1.08f).tvClickable(onClick, onLongClick).padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(look.card), contentAlignment = Alignment.Center) {
@@ -1011,7 +1095,7 @@ private fun DrawerTile(app: TvApp, look: Look, onClick: () -> Unit, onLongClick:
 
 /** Hold OK on an app (in the drawer or on the launcher): open, add or remove, move, app info, uninstall. */
 @Composable
-private fun AppMenu(app: TvApp, config: TvConfig, onDone: () -> Unit) {
+private fun AppMenu(app: TvApp, config: TvConfig, look: Look, onDone: () -> Unit) {
     val context = LocalContext.current
     val shown = (config.apps ?: emptyList()).take(config.slots)
     val i = shown.indexOf(app.pkg)
@@ -1028,18 +1112,7 @@ private fun AppMenu(app: TvApp, config: TvConfig, onDone: () -> Unit) {
         add("App info" to { start(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${app.pkg}"))) })
         add("Uninstall" to { start(Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.pkg}"))) })
     }
-    AlertDialog(
-        onDismissRequest = onDone,
-        title = { Text(app.label) },
-        text = {
-            Column {
-                options.forEach { (label, act) ->
-                    TextButton(onClick = { act(); onDone() }, Modifier.fillMaxWidth()) { Text(label, Modifier.fillMaxWidth(), fontSize = 18.sp) }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDone) { Text("Close") } },
-    )
+    TvMenu(app.label, options, look, onDone)
 }
 
 // ---- quiet time and messages
@@ -1056,7 +1129,7 @@ private fun QuietScreen(q: JSONObject, onEnd: () -> Unit) {
                 Text(listOfNotNull(if (until > 0) "until ${time(until)}" else null, q.optString("by").takeIf { it.isNotEmpty() }?.let { "from $it" }).joinToString(", ").replaceFirstChar { it.uppercase() },
                     color = Color(0xFF9A93B5), fontSize = 26.sp)
                 Spacer(Modifier.height(20.dp))
-                TextButton(onClick = onEnd, modifier = Modifier.focusRequester(focus)) { Text("End quiet time", color = Color(0xFF9A93B5), fontSize = 20.sp) }
+                TvButton("End quiet time", QUIET_LOOK, Modifier.focusRequester(focus), onClick = onEnd)
             }
         }
     }
@@ -1087,11 +1160,8 @@ private fun MessageCard(prefs: Prefs, m: JSONObject, onOk: () -> Unit) {
                     Text("From ${m.optString("from")}", color = Color(0xFF6F5AA8), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                     Text(m.optString("text"), color = Color(0xFF2A2638), fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 46.sp, lineHeight = 54.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Button(onClick = { Voice.stop(); onOk() }, modifier = Modifier.focusRequester(focus)) { Text("OK", fontSize = 20.sp) }
-                        OutlinedButton(onClick = { scope.launch { Voice.speak(context, prefs, m.optString("text")) } }) {
-                            Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = Color(0xFF6F5AA8)); Spacer(Modifier.width(8.dp))
-                            Text("Read aloud", color = Color(0xFF2A2638), fontSize = 20.sp)
-                        }
+                        TvButton("OK", CREAM_LOOK, Modifier.focusRequester(focus)) { Voice.stop(); onOk() }
+                        TvButton("Read aloud", CREAM_LOOK, icon = Icons.AutoMirrored.Filled.VolumeUp) { scope.launch { Voice.speak(context, prefs, m.optString("text")) } }
                     }
                 }
             }
@@ -1151,16 +1221,13 @@ private fun Launcher(api: Api, config: TvConfig, installed: List<TvApp>, serverA
 @Composable
 private fun AppTile(api: Api, app: TvApp?, picture: Long, width: Dp, look: Look, onClick: () -> Unit, onLongClick: () -> Unit) {
     val context = LocalContext.current
-    var focused by remember { mutableStateOf(false) }
     var custom by remember(app?.pkg, picture) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(app?.pkg, picture) { if (app != null && picture != 0L) custom = loadPicture(context, api, app.pkg, picture) }
     val banner = app?.banner
     val icon = app?.icon
     val shape = RoundedCornerShape(18.dp)
     Box(
-        Modifier.width(width).height(width * 9 / 16).clip(shape).background(look.card)
-            .border(if (focused) 4.dp else 0.dp, if (focused) look.accent else Color.Transparent, shape)
-            .onFocusChanged { focused = it.isFocused }.tvClickable(onClick, onLongClick),
+        Modifier.width(width).height(width * 9 / 16).tvFocus(look, look.card, 18.dp, grow = 1.08f).clip(shape).tvClickable(onClick, onLongClick),
         contentAlignment = Alignment.Center,
     ) {
         when {

@@ -869,7 +869,9 @@ private fun ConversationView(
                 TalkButton(
                     prefs, if (Access.younger || big) 84.dp else 64.dp,
                     bar = true,
-                    label = if (Access.younger) "Hold to talk" else "Hold to say it",
+                    // Younger children's message goes straight out; everyone else's is typed into the box first.
+                    label = "Hold to talk",
+                    letGo = if (Access.younger) "send" else "type it",
                     modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp),
                     onText = { said ->
                         when {

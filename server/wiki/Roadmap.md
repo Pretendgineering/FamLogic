@@ -175,6 +175,10 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.45.1: Clearer on the TV
+- Steward has its own round button at the bottom right; the selection eases from button to button and is easy to see everywhere (it fills with the accent); the app drawer starts on the first app.
+- The Docket tile says "3 to do" or "3 left" instead of "3 to get"; the talk bar says "Hold to talk", and "let go to type it" where it types rather than sends.
+
 ### ✅ 0.45.0: The TV as a launcher
 - **Apps:** every app on the TV in one drawer; press and hold OK on an app to add it to the launcher, move it, see its App info or uninstall it.
 - **Home and the remote:** an optional accessibility helper lets FamLogic take over from Google TV's own home screen, start when the TV turns on, and give remote buttons new jobs.

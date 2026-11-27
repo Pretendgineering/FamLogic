@@ -72,6 +72,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun TalkButton(
     prefs: Prefs, size: Dp, onText: (String) -> Unit, modifier: Modifier = Modifier, bar: Boolean = false, label: String = "Hold to talk",
+    /** What letting go does, for the bar's "Listening… let go to …": send it, or type it into the box. */
+    letGo: String = "send",
     /** A plain microphone (grown-ups); otherwise the talking smiley (children). */
     mic: Boolean = !Access.isChild,
 ) {
@@ -138,7 +140,7 @@ fun TalkButton(
                     if (thinking) CircularProgressIndicator(Modifier.fillMaxSize(), strokeWidth = 4.dp)
                 }
                 Text(
-                    when { thinking -> "Just a moment…"; listening -> "Listening… let go to send"; else -> label },
+                    when { thinking -> "Just a moment…"; listening -> "Listening… let go to $letGo"; else -> label },
                     Modifier.padding(start = 14.dp),
                     style = if (size >= 72.dp) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
