@@ -1,5 +1,6 @@
 package io.github.pretendgineering.famlogic
 
+import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.os.SystemClock
 import androidx.compose.animation.Crossfade
@@ -191,6 +192,8 @@ class TvActivity : ComponentActivity() {
      * Every button press: the TV isn't idle. While the screen saver is up, the first press
      * only wakes it; holding OK asks Steward straight away.
      */
+    // (Overriding Activity.dispatchKeyEvent is ordinary API; lint flags ComponentActivity's copy as restricted.)
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         TvSaver.touch()
         if (TvSaver.on) {
