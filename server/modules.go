@@ -33,11 +33,11 @@ var allModules = []ModuleInfo{
 	{"agents", "Steward", "AI & API", "Your family's AI helper, and API keys for your own agent.", true, false},
 	// Coming soon: they can be switched on now (a placeholder, and Steward can keep
 	// their notes in the vault already) and fill in as each is built.
-	{"outings", "Outings", "Health & activity", "Walks, runs and rides, steps, meals and macros, and health data from phones and watches.", false, false},
-	{"garage", "Garage", "Cars", "Fuel, mileage and maintenance for each car, with reminders.", false, false},
+	{"outings", "Vitals", "Health & activity", "Walks, runs and rides, steps, meals and macros, and health data from phones and watches.", false, false},
+	{"garage", "Driveway", "Vehicles", "Fuel, mileage and maintenance for each vehicle, with reminders.", false, false},
 	{"ledger", "Ledger", "Budget", "Bills, spending, groceries and paying off debt.", false, false},
 	{"pets", "Menagerie", "Pets", "Feeding, walks, medicines and vet visits.", false, false},
-	{"profiles", "Who's Who", "Profiles", "Allergies, medicines, sleep, likes and emergency contacts; a page for sitters.", true, false},
+	{"profiles", "Dossier", "Profiles", "Allergies, medicines, sleep, likes and emergency contacts; a page for sitters.", true, false},
 	{"meetings", "Huddle", "Meetings", "Family meetings: a short agenda to click through together on the TV, handing out jobs (or asking for volunteers) and keeping notes.", true, false},
 	{"homestead", "Homestead", "Home care", "What your home has, and the upkeep it needs: bin days, filters, alarms, gutters, as chores and on the calendar.", true, false},
 	{"contacts", "Rolodex", "Contacts", "The family's address book, synced with phones (CardDAV).", false, false},

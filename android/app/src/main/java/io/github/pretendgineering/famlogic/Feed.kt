@@ -48,6 +48,8 @@ import java.util.Date
  */
 @Composable
 fun HomePager(prefs: Prefs, onOpen: (AppEvent) -> Unit = {}, home: @Composable () -> Unit) {
+    // Children have the feed only if a parent switched it on for them (console → Access).
+    if (!Access.can("feed")) { home(); return }
     val pager = rememberPagerState(initialPage = 1, pageCount = { 2 })
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // Back from the feed goes to Home.

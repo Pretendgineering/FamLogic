@@ -121,8 +121,13 @@ fun OsmMap(
     /** A fence being placed or changed on the map (drawn with handles), and its changes. */
     fenceDraft: FenceDraft? = null,
     onFenceDraft: (FenceDraft, done: Boolean) -> Unit = { _, _ -> },
+    /** Round the map's own corners (a home tile): the map view draws itself, so Compose's clip alone can miss it. */
+    corner: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp(0f),
+    /** False when something sits under the map (the tile's bar): only the top corners are rounded. */
+    roundBottom: Boolean = true,
 ) {
     val context = LocalContext.current
+    val cornerPx = with(androidx.compose.ui.platform.LocalDensity.current) { corner.toPx() }
     val state = remember { MapState() }
     val dark = LocalDarkTheme.current
     state.onLongPress = onLongPress
@@ -183,6 +188,15 @@ fun OsmMap(
 
     // clipToBounds: osmdroid paints tiles past its edges, which would cover the banners above it.
     AndroidView(factory = { mapView }, modifier = modifier.clipToBounds()) { map ->
+        if (cornerPx > 0f && !map.clipToOutline) {
+            map.outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(view: android.view.View, outline: android.graphics.Outline) =
+                    outline.setRoundRect(0, 0, view.width, view.height + if (roundBottom) 0 else cornerPx.toInt(), cornerPx)
+            }
+            map.clipToOutline = true
+            // The tile grows and shrinks (arranging, tiles across): keep the rounded edge with it.
+            map.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> v.invalidateOutline() }
+        }
         val tileUrl = tiles.url
         if (state.tileUrl != tileUrl) {
             val source = TemplateTileSource(tileUrl, tiles.attribution, tiles.maxZoom)

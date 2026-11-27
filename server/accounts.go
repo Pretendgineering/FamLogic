@@ -111,6 +111,9 @@ func (s *Store) SignOutDevice(memberID, deviceID string) error {
 		if d.ID == deviceID {
 			m.retireHashLocked(d.Hash)
 			m.Devices = append(m.Devices[:i], m.Devices[i+1:]...)
+			if m.Display && len(m.Devices) == 0 {
+				s.removeMemberLocked(m.ID) // a display is only its pairing: signed out, it's gone
+			}
 			return s.saveLocked()
 		}
 	}

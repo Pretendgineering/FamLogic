@@ -61,7 +61,7 @@ var kidModules = []kidModule{
 	{"chores", "Upkeep", "Chores", LevelView, LevelFull}, // younger children see and tick off their own chores
 	{"routines", "Rhythms", "Routines", LevelView, LevelFull},
 	{"meals", "Pantry", "Meals", LevelView, LevelFull},
-	{"profiles", "Who's Who", "Profiles", LevelView, LevelFull},   // children edit only their own (older ones)
+	{"profiles", "Dossier", "Profiles", LevelView, LevelFull},   // children edit only their own (older ones)
 	{"homestead", "Homestead", "Home care", LevelView, LevelView}, // parents set up the home
 	{"meetings", "Huddle", "Meetings", LevelView, LevelView},      // parents write the meetings
 }
@@ -87,6 +87,7 @@ var kidFeatures = []kidSwitch{
 	{"chat_delete", "Delete their own messages", "chat", false, false},
 	{"chat_mute", "Mute chats", "chat", false, false},
 	{"voice", "Talk instead of typing, and hear messages read aloud", "chat", true, true},
+	{"feed", "The family feed, to the left of Home", "", false, true},
 }
 
 // Home screen tiles. Module tiles show once the module is available and on.
@@ -97,7 +98,7 @@ var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "
 	"outings", "garage", "ledger", "pets", "profiles", "homestead", "contacts"}
 
 // "2x1@0": 2 columns, 1 row, in the first column.
-var gridSize = regexp.MustCompile(`^[1-3]x[1-3]@[0-2]$`) // 3 tall: the map only (the app keeps others to 2)
+var gridSize = regexp.MustCompile(`^[1-5]x[1-3](@[0-4])?$`) // up to 5 across; 3 tall: the map only (the app keeps others to 2)
 
 var convoTile = regexp.MustCompile(`^convo\.[A-Za-z0-9_-]{1,64}$`)
 

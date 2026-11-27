@@ -242,6 +242,7 @@ func OpenStore(path string) (*Store, error) {
 	for _, m := range s.d.Members {
 		m.migrateDevicesLocked() // one token each, from before several devices
 	}
+	s.tidyDisplaysLocked()
 	if s.d.Secret == "" {
 		s.d.Secret = randomString(32)
 	}
@@ -358,6 +359,18 @@ func (s *Store) Join(code, name, username, passwordHash string) (*Member, string
 		m.Circles = []string{c}
 	}
 	applyInviteAccess(m, inv)
+	// A display's name is what tells it apart, as for people: pairing "Living Room" again
+	// (a reset TV, a reinstall) takes over the old listing, with its settings, and signs
+	// out the old pairing, rather than listing the TV twice.
+	if m.Display {
+		if old := s.displayNamedLocked(m.Name); old != nil {
+			old.signOutAllLocked()
+			old.Devices = m.Devices
+			delete(s.d.Invites, code)
+			cp := *old
+			return &cp, token, s.saveLocked()
+		}
+	}
 	if !m.canUsePassword() { // younger children: no account, just this device
 		m.Username, m.PasswordHash, m.LastSignIn = "", "", 0
 	}
@@ -468,6 +481,12 @@ func (s *Store) UpdateMember(id string, p MemberPatch) (*Member, error) {
 		return nil, ErrNotFound
 	}
 	if p.Name != nil {
+		if m.Display { // another display already called this is an old listing of the same TV
+			if old := s.displayNamedLocked(*p.Name); old != nil && old.ID != id {
+				old.signOutAllLocked()
+				s.removeMemberLocked(old.ID)
+			}
+		}
 		m.Name = *p.Name
 	}
 	if p.Color != nil {
@@ -509,6 +528,11 @@ func (s *Store) DeleteMember(id string) error {
 	if _, ok := s.d.Members[id]; !ok {
 		return ErrNotFound
 	}
+	s.removeMemberLocked(id)
+	return s.saveLocked()
+}
+
+func (s *Store) removeMemberLocked(id string) {
 	delete(s.d.Members, id)
 	delete(s.d.Trails, id)
 	for code, inv := range s.d.Invites {
@@ -516,7 +540,48 @@ func (s *Store) DeleteMember(id string) error {
 			delete(s.d.Invites, code) // their reset links die with them
 		}
 	}
-	return s.saveLocked()
+}
+
+// displayNamedLocked finds the family display with this name (any case), if there is one.
+func (s *Store) displayNamedLocked(name string) *Member {
+	for _, m := range s.d.Members {
+		if m.Display && strings.EqualFold(strings.TrimSpace(m.Name), strings.TrimSpace(name)) {
+			return m
+		}
+	}
+	return nil
+}
+
+// tidyDisplaysLocked removes displays nothing is signed in to (a display is only its
+// pairing), and, where two share a name, keeps the one used last.
+func (s *Store) tidyDisplaysLocked() {
+	seen := map[string]*Member{}
+	for id, m := range s.d.Members {
+		if !m.Display {
+			continue
+		}
+		if len(m.Devices) == 0 {
+			s.removeMemberLocked(id)
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(m.Name))
+		if other, ok := seen[key]; ok {
+			if displayLastUsed(other) >= displayLastUsed(m) {
+				s.removeMemberLocked(m.ID)
+				continue
+			}
+			s.removeMemberLocked(other.ID)
+		}
+		seen[key] = m
+	}
+}
+
+func displayLastUsed(m *Member) int64 {
+	var t int64
+	for _, d := range m.Devices {
+		t = max(t, d.LastSeen, d.Created)
+	}
+	return t
 }
 
 func randomString(nBytes int) string {

@@ -57,13 +57,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Who's Who: everyone's profile (birthday, allergies, medicines, sleep, likes,
+ * Dossier: everyone's profile (birthday, allergies, medicines, sleep, likes,
  * sizes, doctor, emergency contacts), kept in their People note. Everyone sees
  * them; parents change anyone's, older children and grandparents their own.
  * Share or print one as a page for a babysitter.
  */
 object Profiles {
-    /** The Who's Who screen is open (from its home tile). */
+    /** The Dossier screen is open (from its home tile). */
     var open by mutableStateOf(false)
 }
 
@@ -115,7 +115,7 @@ private fun printProfile(context: Context, p: Profile, d: ProfilesData) {
     web.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
 }
 
-/** Who's Who, full screen (opened from its home tile). */
+/** Dossier, full screen (opened from its home tile). */
 @Composable
 fun ProfilesDialog(prefs: Prefs) {
     Dialog(onDismissRequest = { Profiles.open = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {

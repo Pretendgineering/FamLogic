@@ -311,7 +311,7 @@ fun ListsTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onOp
     val l = OddsEnds.data?.lists?.firstOrNull()
     val open = l?.items?.filter { !it.done }.orEmpty()
     Column(Modifier.fillMaxWidth().height(height).clickable(onClickLabel = "Open ${Access.name("todos")}", onClick = onOpen).padding(14.dp)) {
-        TileHead(wide, big, l?.title ?: Access.name("todos"), icon = { Icon(tileIcon("todos"), contentDescription = null, tint = Accent2, modifier = Modifier.size(if (big) 32.dp else 26.dp)) })
+        TileHead(wide, big, l?.title ?: Access.name("todos"), icon = { ModuleIcon("todos", if (big) 32.dp else 26.dp) })
         if (l == null) {
             Spacer(Modifier.weight(1f)); Text("No lists yet", color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column
         }

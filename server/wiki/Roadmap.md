@@ -161,7 +161,7 @@ In this order (each is finished before the next starts):
 ### ✅ 0.42.0: Homestead
 - **Homestead** is a simple profile of your home: tick what it has (furnace, smoke alarms, fridge filter, gutters, a lawn, a septic tank and more) and which days the bins and recycling go out. FamLogic keeps the matching upkeep as ordinary chores in Upkeep (for anyone) and puts bin days on the calendar. Untick something and its chores retire; each chore's history is the log.
 - Steward can set up the home and tick off its jobs ("I changed the furnace filter").
-- Garage (cars) and Menagerie (pets) will work the same way: a profile and a log for each, feeding chores, the calendar and, later, the budget.
+- Driveway (vehicles) and Menagerie (pets) will work the same way: a profile and a log for each, feeding chores, the calendar and, later, the budget.
 
 ### ✅ 0.43.0: Corkboard, the TV app
 - **A FamLogic app for Google TV** (its own download, famlogic-tv.apk): the family's day on the big screen. Today's feed, what's coming up, routines on now, meals, chores and who's where, moved through with the remote, plus shortcuts to your TV apps (Jellyfin, Spotify, SmartTube or any you pick).
@@ -174,6 +174,13 @@ In this order (each is finished before the next starts):
 - **One screen, no scrolling:** a greeting for the time of day, and the family's Routines (on now and later today), Upkeep and Docket side by side.
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
+
+### ✅ 0.49.0: Kids' polish, new names, and a Home of up to 5 across
+- **For younger children:** picture icons everywhere (Datebook, Docket, Rhythms and Pantry have theirs now); no settings at all, just a colour button with each theme as a bar in its own colour (a parent still gets in the secret way); the family feed beside Home only if a parent switches it on (console → Access); bigger faces in Chitchat, and on tablets the camera sits beside the talk bar, matching it.
+- **New names:** Who's Who is now **Dossier**, Outings is **Vitals**, and Garage is **Driveway** (plain label: Vehicles). The themes And Chill and Suspicious Orange are now **Spider-Man** and **Safety Cone**.
+- **Home, 2 to 5 tiles across** (Look and Feel → Home Screen). Narrow tiles show just their icon, as shortcuts. One-button tiles (SOS, Check in, Pickup, Nudges, the TV, Dossier, Homestead, chat shortcuts) stay at most one row tall and two wide. **Nudges** (pick the nudge, then who) and **Pickup** (pick who) work now. Tile names stay on one line, and the map has rounded corners like every other tile.
+- **The TV tile** asks which display first when there's more than one; quiet time and messages can go to one display or all of them.
+- **Displays are known by name:** pairing a display with a name that's already listed takes over that listing (the old pairing is signed out), and a display that's signed out is gone from the list.
 
 ### ✅ 0.48.0: The TV's screen saver
 - **Screen saver:** after the TV sits idle, a family clock (drifting, with what's next and who's home), the family photo album (drag photos or a folder onto the console), a photo link (an Immich shared album, a photo feed, a webcam), calm themes (gradient, starry sky, the season), or a mix. Any button wakes it; hold OK to ask Steward.
@@ -202,15 +209,15 @@ In this order (each is finished before the next starts):
 ### 💡 Further out
 - **Cameras (RTSP):** the family's cameras (doorbell, nursery, driveway) on the TV and in the app; a camera's view popping up on the TV when the doorbell rings.
 
-### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
+### 💡 Future modules (switch-on placeholders since 0.39.0: Vitals, Driveway, Ledger, Menagerie, Dossier, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
-- **Health & activity (Outings, grown from walks and runs):** family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like. Then:
+- **Health & activity (Vitals, grown from walks and runs):** family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like. Then:
   - **Steps** from the phone and the Pebble, shown anywhere someone wants them (Home, a tile, the watch, the family display), or nowhere.
   - **Meals and macros:** log what you ate by talking to Steward, by picking a Pantry recipe (its nutrition worked out once from the ingredients), or from a grocery receipt; calories, protein, carbs, fat and any goals you set. Ties into groceries (what's in the house), the meal plan and the budget.
   - **Health data:** from Android's Health Connect and the Pebble's health service: sleep, heart rate, weight, water, medication taken, mood, cycle, or anything else a person wants to track, as dated notes they own.
   - **Scheduling:** workouts, walks and meal times on the calendar and in routines.
   - Every part, and every metric, is switched on or off per person; nothing is tracked unless someone chose it. Graphs and trends over any period; everything exportable.
-- **Cars (Garage):** each car as a note. Fuel log by talking to Steward ("I just filled up the Sienna, 15 gallons, 56 dollars" → a fuel entry with miles, cost and price per gallon), with graphs and averages over time (mpg, cost per mile, monthly spend); oil changes and maintenance as reminders on the calendar by date or mileage; registration and insurance renewals. Later: OBD-II (a Bluetooth adapter through the phone) for mileage and fault codes.
+- **Vehicles (Driveway):** each vehicle as a note. Fuel log by talking to Steward ("I just filled up the Sienna, 15 gallons, 56 dollars" → a fuel entry with miles, cost and price per gallon), with graphs and averages over time (mpg, cost per mile, monthly spend); oil changes and maintenance as reminders on the calendar by date or mileage; registration and insurance renewals. Later: OBD-II (a Bluetooth adapter through the phone) for mileage and fault codes.
 - **Budget:** fixed recurring expenses, flexible variable spending, and debt payoff (snowball, avalanche, custom) with payoff calculators and interest; Steward can help build a budget from what you tell it. Imports transactions from SimpleFIN, or a bank statement uploaded by hand (CSV/PDF, OCR when needed), then sorted into categories. Ties into groceries, cars and bills. Needs a lot of honing.
 - **Bills on the calendar:** each bill's due day and amount shows in its own lane of the Datebook, so you see what's going out (and coming in) and when.
 - **Grocery spending:** what you bought and what it cost, by rambling to Steward or (better) a photo of the receipt read by OCR. Feeds the budget, a rough food inventory, price tracking over time, and meal planning.

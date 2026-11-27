@@ -273,7 +273,7 @@ days: [mon, tue, wed, thu, fri]
 Which routine is current, and from when, on the given `days`. In `who`, `#name` means
 a group or tag.
 
-### Coming soon: Outings, Garage, Ledger, Pets, Contacts (Who's Who and Homestead are built)
+### Coming soon: Vitals, Driveway, Ledger, Pets, Contacts (Dossier and Homestead are built)
 These modules aren't built yet, but a family can switch them on and keep their notes now
 (by hand, or by telling Steward). FamLogic will read these notes when each module arrives,
 so use the folders and fields below. Logs are dated lines in the body, newest last.
@@ -288,7 +288,7 @@ Budget/      Bills.md (type: bills; one line per bill: "- Electric: $120, day 15
              Debts.md (type: debts; "- Car loan: $8,400 at 6.9%, $310 a month"), Spending/2026-11.md (type: spending; dated lines)
 Pets/        one note per pet: Biscuit.md                    type: pet     (species, born, vet: "[[Dr Lee]]")
              body: "## Feeding", "## Walks", "## Medicines", "## Vet" (dated lines for visits and shots)
-People/      profiles (Who's Who) are sections in each person's note, below the title: "## Birthday",
+People/      profiles (Dossier) are sections in each person's note, below the title: "## Birthday",
              "## Allergies", "## Medicines", "## Sleep", "## Likes", "## Dislikes", "## Sizes", "## Doctor",
              "## Emergency contacts", "## Notes" (one item per line)
 Home/        Home.md (type: home): the home's profile (tenure: own|rent, features: [hvac, smoke, ...],

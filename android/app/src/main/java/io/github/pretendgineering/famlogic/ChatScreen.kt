@@ -120,6 +120,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -386,8 +387,8 @@ private fun ConversationList(
 private fun ConversationRow(c: ChatConversation, people: List<Member>, me: String, selected: Boolean = false, closable: Boolean = false, onClick: () -> Unit) {
     val other = if (c.kind == "direct") people.find { it.id in c.members && it.id != me } else null
     // Children who can't read yet find chats by faces: bigger pictures, and a group shows who's in it.
-    val big = Access.big
-    val size = if (big) 68 else 44
+    val big = Access.big || Access.isChild
+    val size = if (Access.younger) 84 else if (big) 68 else 44
     Row(
         Modifier.fillMaxWidth()
             .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
@@ -865,14 +866,40 @@ private fun ConversationView(
             // Children and tablets: a wide talk bar above the message box. Younger children's
             // goes straight out (and is read back); everyone else's types into the box.
             val talkBar = canTalk && (Access.isChild || LocalConfiguration.current.screenWidthDp >= 600)
-            if (talkBar) {
+            val photos = canPost && Access.can("chat_photos")
+            // Taking or choosing a photo: the menu, opened from the camera button.
+            val photoButton: @Composable (Modifier, Dp) -> Unit = { mod, icon ->
+                Box(mod) {
+                    Box(Modifier.matchParentSize().clickable(enabled = !sending, onClickLabel = "Send a photo") { photoMenu = true }, contentAlignment = Alignment.Center) {
+                        if (Access.pictures) Pictures.Camera(icon)
+                        else Icon(Icons.Filled.PhotoCamera, contentDescription = "Send a photo", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(icon))
+                    }
+                    DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Take a photo") },
+                            leadingIcon = { Icon(Icons.Filled.CameraAlt, null) },
+                            onClick = { photoMenu = false; startCamera() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Choose from gallery") },
+                            leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) },
+                            onClick = {
+                                photoMenu = false
+                                pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                        )
+                    }
+                }
+            }
+            if (talkBar) Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val barH = if (Access.younger || big) 84.dp else 64.dp
                 TalkButton(
-                    prefs, if (Access.younger || big) 84.dp else 64.dp,
+                    prefs, barH,
                     bar = true,
                     // Younger children's message goes straight out; everyone else's is typed into the box first.
                     label = "Hold to talk",
                     letGo = if (Access.younger) "send" else "type it",
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp),
+                    modifier = Modifier.weight(1f),
                     onText = { said ->
                         when {
                             said.isEmpty() -> Voice.oops(context)
@@ -884,6 +911,17 @@ private fun ConversationView(
                         }
                     },
                 )
+                // The camera matches the talk bar beside it: the same rounded look, a little taller.
+                if (photos) {
+                    val camH = barH + 8.dp
+                    val shape = RoundedCornerShape(camH / 2)
+                    photoButton(
+                        Modifier.padding(start = 10.dp).size(camH).clip(shape)
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = .5f), shape),
+                        camH * .5f,
+                    )
+                }
             }
             if (canPost) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -893,27 +931,8 @@ private fun ConversationView(
                             else text = (text.trimEnd() + " " + said).trim().take(4000)
                         })
                     }
-                    if (Access.can("chat_photos")) Box {
-                        IconButton(onClick = { photoMenu = true }, enabled = !sending, modifier = if (big) Modifier.size(64.dp) else Modifier) {
-                            if (Access.pictures) Pictures.Camera(if (big) 44.dp else 32.dp)
-                            else Icon(Icons.Filled.PhotoCamera, contentDescription = "Send a photo", modifier = if (big) Modifier.size(36.dp) else Modifier)
-                        }
-                        DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Take a photo") },
-                                leadingIcon = { Icon(Icons.Filled.CameraAlt, null) },
-                                onClick = { photoMenu = false; startCamera() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Choose from gallery") },
-                                leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) },
-                                onClick = {
-                                    photoMenu = false
-                                    pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                },
-                            )
-                        }
-                    }
+                    // With the talk bar, the camera sits beside it instead.
+                    if (photos && !talkBar) photoButton(Modifier.size(if (big) 64.dp else 48.dp).clip(CircleShape), if (big) 40.dp else 26.dp)
                     OutlinedTextField(
                         value = text,
                         onValueChange = {
@@ -926,7 +945,8 @@ private fun ConversationView(
                         maxLines = 5,
                         shape = RoundedCornerShape(24.dp),
                     )
-                    if (text.isBlank() && staged.isEmpty() && recording == null && Access.can("voice")) {
+                    // A voice message, when nothing's typed; not with the talk bar there already.
+                    if (text.isBlank() && staged.isEmpty() && recording == null && Access.can("voice") && !talkBar) {
                         // Nothing typed: a voice message instead.
                         IconButton(onClick = {
                             if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -1073,7 +1093,7 @@ private fun Bubble(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
     if (!mine) {
         // Their picture (emoji or initial, in their colour) so you can tell who wrote it without reading.
-        val face = if (Access.big) 52 else 36
+        val face = if (Access.big || Access.younger) 52 else 36
         Box(Modifier.padding(end = 8.dp, bottom = 18.dp).size(face.dp)) {
             if (showAvatar) Avatar(sender?.name ?: "?", sender?.emoji.orEmpty(), sender?.color ?: "#888888", face)
         }

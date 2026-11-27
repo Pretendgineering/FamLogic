@@ -40,8 +40,8 @@ enum class Palette(val id: String, val title: String, val description: String) {
     Ocean("ocean", "Boring Blue", "Cool, calm, perfectly sensible blues."),
     Paper("paper", "Lofi Cabin", "Cream, wood and a deep red: beats to relax to."),
     Noir("noir", "Logic Noir", "Black, white and greys. Only what needs colour keeps it."),
-    Orange("orange", "Suspicious Orange", "Dark grey and a very familiar orange. You know the one."),
-    Chill("chill", "And Chill", "Near-black and a streaming-service red."),
+    Orange("orange", "Safety Cone", "Dark grey and a bright traffic-cone orange."),
+    Chill("chill", "Spider-Man", "Near-black and a web-slinging red."),
     NightShift("nightshift", "Night Shift", "Warm amber on deep brown, easy on the eyes at 2 am."),
     Gamer("gamer", "Gamer Mode", "Black with magenta and cyan: RGB keyboard energy."),
     Couch("couch", "Grandma's Couch", "Dusty rose and olive on cream, like a floral sofa."),
@@ -50,6 +50,9 @@ enum class Palette(val id: String, val title: String, val description: String) {
 
     /** Its main colour, for the picker. */
     val swatch: Long get() = tokens(this, false).accent
+
+    /** The text colour that reads on [swatch]. */
+    val swatchInk: Long get() = tokens(this, false).onAccent
 
     /** Its look in three colours (dark background, main and second colour), for the picker. */
     val swatches: Triple<Long, Long, Long> get() = tokens(this, true).let { Triple(it.background, it.accent, it.secondary) }

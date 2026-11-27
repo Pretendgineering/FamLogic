@@ -5,8 +5,8 @@ module follows the same shape, so everything is aware of everything else and sta
 
 ## The shape
 
-1. **Profiles: the things the family looks after.** People (Who's Who), the home (Homestead),
-   cars (Garage), pets (Menagerie). Each is a note in the vault with its details in front matter
+1. **Profiles: the things the family looks after.** People (Dossier), the home (Homestead),
+   vehicles (Driveway), pets (Menagerie). Each is a note in the vault with its details in front matter
    and plain sections.
 2. **Logs: what happened to them.** Dated entries: a chore's done history, a fuel fill-up, a vet
    visit, a receipt. Prefer an existing log over a new one: Homestead's log *is* its chores'
@@ -17,7 +17,7 @@ module follows the same shape, so everything is aware of everything else and sta
    mileage-style rules, when a log is added), and are **idempotent**: saving again makes nothing
    new; unticking retires what the rule made.
 4. **One input, everywhere it belongs.** A receipt (by voice or photo) becomes a Ledger
-   transaction *and* a Garage fuel entry or Pantry stock; a vet visit is a Menagerie log entry,
+   transaction *and* a Driveway fuel entry or Pantry stock; a vet visit is a Menagerie log entry,
    the next shot in Datebook and a bill in Ledger. Steward does the sorting; the server's rules
    do the rest.
 
@@ -46,7 +46,7 @@ Chores and calendar events support both today (`Chore.For/Source`, `CalEvent.Sou
 
 ## Built so far
 
-- Who's Who (people's profiles; 0.40).
+- Dossier (people's profiles; 0.40).
 - Homestead (the home's profile → Upkeep chores and Datebook bin days; 0.42). The template for
-  Garage and Menagerie.
+  Driveway and Menagerie.
 - Huddle (family meetings as notes; jobs handed out in the meeting go onto the Docket; 0.47).

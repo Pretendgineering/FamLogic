@@ -26,6 +26,7 @@ type DisplayState struct {
 	QuietSince int64            `json:"quietSince,omitempty"` // unix ms; 0 = not quiet
 	QuietUntil int64            `json:"quietUntil,omitempty"` // unix ms; 0 with QuietSince set = until someone ends it
 	QuietBy    string           `json:"quietBy,omitempty"`
+	QuietFor   string           `json:"quietFor,omitempty"` // one display's id; "" = every display
 	Messages   []DisplayMessage `json:"messages,omitempty"` // newest last, the last 20
 	Apps       []DisplayApp     `json:"apps,omitempty"`     // the apps on the TVs' launchers, for pictures from the console
 	Photos     []DisplayPhoto   `json:"photos,omitempty"`   // the screen saver's album
@@ -46,6 +47,7 @@ type DisplayMessage struct {
 	From string `json:"from"` // the sender's name
 	Text string `json:"text"`
 	Time int64  `json:"time"`
+	To   string `json:"to,omitempty"` // one display's id; "" = every display
 }
 
 const messageShowFor = 30 * time.Minute
@@ -133,7 +135,7 @@ func (s *Server) handleDisplayBoard(w http.ResponseWriter, r *http.Request, me *
 	st := s.store.Display()
 	var msgs []DisplayMessage
 	for i := len(st.Messages) - 1; i >= 0; i-- {
-		if now.Sub(time.UnixMilli(st.Messages[i].Time)) < messageShowFor {
+		if mm := st.Messages[i]; now.Sub(time.UnixMilli(mm.Time)) < messageShowFor && (!me.Display || mm.To == "" || mm.To == me.ID) {
 			msgs = append(msgs, st.Messages[i])
 		}
 	}
@@ -143,9 +145,10 @@ func (s *Server) handleDisplayBoard(w http.ResponseWriter, r *http.Request, me *
 			sun["sunrise"], sun["sunset"] = rise.UnixMilli(), set.UnixMilli()
 		}
 	}
-	quiet := map[string]any{"on": st.quietNow(now)}
-	if st.quietNow(now) {
-		quiet["until"], quiet["by"], quiet["since"] = st.QuietUntil, st.QuietBy, st.QuietSince
+	quietOn := st.quietNow(now) && (!me.Display || st.QuietFor == "" || st.QuietFor == me.ID)
+	quiet := map[string]any{"on": quietOn}
+	if quietOn {
+		quiet["until"], quiet["by"], quiet["since"], quiet["for"] = st.QuietUntil, st.QuietBy, st.QuietSince, st.QuietFor
 	}
 	on := s.store.Modules().Enabled
 	board := map[string]any{
@@ -156,6 +159,7 @@ func (s *Server) handleDisplayBoard(w http.ResponseWriter, r *http.Request, me *
 		"apps":       st.Apps,
 		"photos":     st.Photos,
 		"stream":     st.Stream != "",
+		"displays":   s.store.displayList(),
 		"members":    s.callAs(me, s.handleMembers, "GET", "/api/members?since="+strconv.FormatInt(now.UnixMilli()*2, 10), nil, nil),
 		"feed":       s.callAs(me, s.handleFeed, "GET", fmt.Sprintf("/api/feed?from=%d&to=%d", midnight.UnixMilli(), now.UnixMilli()+60000), nil, nil),
 	}
@@ -185,7 +189,8 @@ func (s *Server) handleQuietStart(w http.ResponseWriter, r *http.Request, me *Me
 		return
 	}
 	var body struct {
-		Minutes int `json:"minutes"`
+		Minutes int    `json:"minutes"`
+		To      string `json:"to"` // one display; "" = all
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -194,9 +199,13 @@ func (s *Server) handleQuietStart(w http.ResponseWriter, r *http.Request, me *Me
 		writeError(w, http.StatusBadRequest, "quiet time is up to 12 hours")
 		return
 	}
+	if !s.store.isDisplay(body.To) {
+		writeError(w, http.StatusBadRequest, "no such display")
+		return
+	}
 	now := time.Now()
 	_ = s.store.updateDisplay(func(d *DisplayState) {
-		d.QuietSince, d.QuietBy, d.QuietUntil = now.UnixMilli(), me.Name, 0
+		d.QuietSince, d.QuietBy, d.QuietUntil, d.QuietFor = now.UnixMilli(), me.Name, 0, body.To
 		if body.Minutes > 0 {
 			d.QuietUntil = now.Add(time.Duration(body.Minutes) * time.Minute).UnixMilli()
 		}
@@ -210,7 +219,7 @@ func (s *Server) handleQuietEnd(w http.ResponseWriter, r *http.Request, me *Memb
 		writeError(w, http.StatusForbidden, "parents end quiet time")
 		return
 	}
-	_ = s.store.updateDisplay(func(d *DisplayState) { d.QuietSince, d.QuietUntil, d.QuietBy = 0, 0, "" })
+	_ = s.store.updateDisplay(func(d *DisplayState) { d.QuietSince, d.QuietUntil, d.QuietBy, d.QuietFor = 0, 0, "", "" })
 	writeJSON(w, http.StatusOK, s.store.Display())
 }
 
@@ -222,6 +231,7 @@ func (s *Server) handleDisplayMessage(w http.ResponseWriter, r *http.Request, me
 	}
 	var body struct {
 		Text string `json:"text"`
+		To   string `json:"to"` // one display; "" = all
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -231,7 +241,11 @@ func (s *Server) handleDisplayMessage(w http.ResponseWriter, r *http.Request, me
 		writeError(w, http.StatusBadRequest, "a short message (200 characters at most)")
 		return
 	}
-	m := DisplayMessage{ID: "m" + randomHex(5), From: me.Name, Text: text, Time: time.Now().UnixMilli()}
+	if !s.store.isDisplay(body.To) {
+		writeError(w, http.StatusBadRequest, "no such display")
+		return
+	}
+	m := DisplayMessage{ID: "m" + randomHex(5), From: me.Name, Text: text, Time: time.Now().UnixMilli(), To: body.To}
 	_ = s.store.updateDisplay(func(d *DisplayState) { d.Messages = append(d.Messages, m) })
 	writeJSON(w, http.StatusOK, m)
 }
@@ -404,4 +418,29 @@ func (s *Server) handleDisplayAppImageGet(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", http.DetectContentType(data))
 	w.Header().Set("Cache-Control", "private, max-age=60")
 	_, _ = w.Write(data)
+}
+
+// displayList: the family's displays (id and name), for choosing one.
+func (s *Store) displayList() []map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []map[string]string{}
+	for _, m := range s.d.Members {
+		if m.Display {
+			out = append(out, map[string]string{"id": m.ID, "name": m.Name})
+		}
+	}
+	slices.SortFunc(out, func(a, b map[string]string) int { return strings.Compare(a["name"], b["name"]) })
+	return out
+}
+
+// isDisplay: id is "" (every display) or one of the family's displays.
+func (s *Store) isDisplay(id string) bool {
+	if id == "" {
+		return true
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	m, ok := s.d.Members[id]
+	return ok && m.Display
 }

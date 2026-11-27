@@ -35,7 +35,7 @@ From a phone, parents and grandparents can:
   reads it out.
 
 Both are on the **TV** tile in the app (add it from the tile drawer) and on the **TV** page in
-the web console.
+the web console. With more than one display, the tile asks which one first (or all of them).
 
 ## Setting up a TV
 
@@ -46,7 +46,9 @@ the web console.
 4. Open FamLogic on the TV, type your server's address and that code, and choose Connect.
 
 The TV signs in as a family display: it shows the family's day but never shares a location and
-can't post. On the console's Devices page it's listed by its own name ("Living room TV").
+can't post. On the console's Devices page it's listed by its own name ("Living room TV"). The name is
+what tells displays apart: pair a TV again with the same name (after a reset, say) and it takes
+over its old listing and settings. Signing a display out removes it from the list.
 
 ## The TV's apps
 

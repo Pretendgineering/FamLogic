@@ -102,7 +102,8 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
 }
 
 /** What children see in Settings: making the app their own, and their sign-in. */
-private val CHILD_PAGES = setOf(SettingsPage.You, SettingsPage.Look, SettingsPage.About)
+// Children never see About (versions, "Leave this server"); a parent gets there through the secret way in.
+private val CHILD_PAGES = setOf(SettingsPage.You, SettingsPage.Look)
 
 /**
  * Settings: a short menu of pages (Sharing, Groups, Fences, Alerts, Trail,
@@ -140,7 +141,7 @@ fun SettingsScreen(
     onDimMapChange: (Boolean) -> Unit = {},
     tripDays: Int? = null,
     onTripDaysChange: (Int) -> Unit = {},
-    /** A child's own settings: only You, Look and Feel, and About. */
+    /** A child's own settings: only You, and Look and Feel. */
     limited: Boolean = false,
     /** Opens the home screen in arranging mode, with the drawer of tiles. */
     onOpenHomeEditor: () -> Unit = {},
@@ -298,16 +299,17 @@ private fun HomeScreenCard(onOpenHomeEditor: () -> Unit) {
         OutlinedButton(onClick = onOpenHomeEditor, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("Arrange home screen") }
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Tiles across", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-            listOf(3 to "3", 2 to "2").forEach { (n, label) ->
+            listOf(2, 3, 4, 5).forEach { n ->
+                val label = n.toString()
                 FilterChip(
-                    selected = (if (HomeLayout.columns == 2) 2 else 3) == n,
+                    selected = HomeLayout.columns(0) == n,
                     onClick = { Prefs(context).homeColumns = n; HomeLayout.columns = n },
                     label = { Text(label) },
                     modifier = Modifier.padding(start = 6.dp),
                 )
             }
         }
-        Hint("Don't need something? Put its tile back in the drawer while arranging.")
+        Hint("With 4 or 5 across, narrow tiles show just their icon, as shortcuts. Don't need something? Put its tile back in the drawer while arranging.")
     }
 }
 

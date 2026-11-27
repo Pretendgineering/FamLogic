@@ -4,7 +4,7 @@
 const $ = (sel) => document.querySelector(sel);
 
 // ---- appearance: this browser's palette and light/dark (the same palettes as the app) ----
-const THEMES = [["dracula", "Default"], ["hannah", "Hannah's Theme"], ["forest", "Hobbit Door"], ["ocean", "Boring Blue"], ["paper", "Lofi Cabin"], ["noir", "Logic Noir"], ["orange", "Suspicious Orange"], ["chill", "And Chill"], ["nightshift", "Night Shift"], ["gamer", "Gamer Mode"], ["couch", "Grandma's Couch"], ["contrast", "High contrast"]];
+const THEMES = [["dracula", "Default"], ["hannah", "Hannah's Theme"], ["forest", "Hobbit Door"], ["ocean", "Boring Blue"], ["paper", "Lofi Cabin"], ["noir", "Logic Noir"], ["orange", "Safety Cone"], ["chill", "Spider-Man"], ["nightshift", "Night Shift"], ["gamer", "Gamer Mode"], ["couch", "Grandma's Couch"], ["contrast", "High contrast"]];
 // The modules' own names (Thereabouts, Chitchat…) or plain ones (Map, Chat…), per browser.
 let plainNames = false;
 try { plainNames = localStorage.getItem("plainNames") === "1"; } catch (_) {}
@@ -1110,7 +1110,7 @@ async function renderHome() {
     out.push(panel("#/homestead", "house", displayName(moduleInfo("homestead")),
       rows(soon.map((c) => li(c.title, (c.due && c.due <= new Date().toISOString().slice(0, 10) ? "Due now" : "Next " + c.due) + " · " + EVERY_TEXT(c.every))), "Set up your home to see its upkeep here.")));
   }
-  // Who's Who: allergies at a glance, and whose birthday is next.
+  // Dossier: allergies at a glance, and whose birthday is next.
   if (profiles) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const nextBday = (v) => { const d = new Date(v + "T12:00"); if (isNaN(d)) return null; const n = new Date(today.getFullYear(), d.getMonth(), d.getDate()); if (n < today) n.setFullYear(n.getFullYear() + 1); return n; };
@@ -1248,7 +1248,7 @@ const TILE_NAMES = { map: ["Thereabouts", "Map"], chat: ["Chitchat", "Chat"], so
   routines: ["Rhythms", "Routines"], nudges: ["Nudges", "Nudges"], ride: ["Pickup", "Pickup"], steward: ["Steward", "AI"] };
 const tileName = (t) => t.startsWith("convo.") ? "Chat shortcut" : (TILE_NAMES[t] || [t, t])[plainNames ? 1 : 0];
 const LEVEL_NAMES = { off: "Off", view: "View only", add: "Can add", full: "Full" };
-const SIZE_NAMES = { "1x1": "1 column", "2x1": "2 columns", "3x1": "3 columns (full on phones)", "1x2": "1 column, tall", "2x2": "2 columns, tall", "3x2": "3 columns, tall" };
+const SIZE_NAMES = { "1x1": "1 column", "2x1": "2 columns", "3x1": "3 columns", "1x2": "1 column, tall", "2x2": "2 columns, tall", "3x2": "3 columns, tall" };
 // Older sizes, shown as their new names.
 const OLD_SIZES = { half: "1x1", wide: "3x1", big: "3x2" };
 const accessOpen = new Set();   // whose panels are open
@@ -1357,6 +1357,16 @@ function drawAccess(m, body) {
           return el("label", {}, box, f.name);
         })) : null));
     }
+    // Switches that belong to no one module (the feed beside Home).
+    const general = d.features.filter((f) => !f.module);
+    if (general.length) parts.push(el("div", { class: "acc-mod" },
+      el("div", { class: "name" }, "Home"),
+      el("div", { class: "acc-feats" }, ...general.map((f) => {
+        const box = el("input", { type: "checkbox" });
+        box.checked = !!s.features[f.id];
+        box.addEventListener("change", () => saveAccess(m, body, { features: { [f.id]: box.checked } }));
+        return el("label", {}, box, f.name);
+      }))));
     parts.push(el("p", { class: "acc-note" }, "View only: they can look but not change anything (say, recipes they're learning). Can add: they add their own things but can't change or delete other people's."));
   } else {
     parts.push(el("h3", {}, "What they can use", el("span", { class: "acc-saved" })),
@@ -1384,7 +1394,7 @@ function drawAccess(m, body) {
     el("p", { class: "acc-note" }, "When someone has their messages read aloud, they hear this voice."), voice);
   // Home screen: drag to order, tick to show, choose a size
   parts.push(el("h3", {}, "Home screen"),
-    el("p", { class: "acc-note" }, "Drag ☰ to reorder, tick what to show and pick a size (in columns: phones show 2 or 3 across). Nothing ticked: the app's default."),
+    el("p", { class: "acc-note" }, "Drag ☰ to reorder, tick what to show and pick a size (in columns: phones show 2 to 5 across, as each person chooses). Nothing ticked: the app's default."),
     homeEditor(d, (home) => saveAccess(m, body, { home })));
   // Their device
   parts.push(el("h3", {}, "Their device"), el("div", { class: "row" },
@@ -2789,7 +2799,7 @@ async function talkStop() {
   }
 }
 
-// Who's Who: everyone's profile (in their People note), editable by who may, and a
+// Dossier: everyone's profile (in their People note), editable by who may, and a
 // printable page per person for babysitters and grandparents.
 let profilesDrawn = "", profileOpen = "";
 async function renderProfiles(box, force = false) {
@@ -2984,17 +2994,29 @@ function screensaverPanel(box, b) {
     linkForm];
 }
 
+let corkTarget = "";
 async function renderCorkboard(box, force = false) {
   if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
   let b;
   try { b = await api("GET", "/api/display/board"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   if (box.dataset.module !== "display") return;
-  const sig = JSON.stringify([b.quiet, b.messages, b.apps, b.photos, b.stream]);
+  const sig = JSON.stringify([b.quiet, b.messages, b.apps, b.photos, b.stream, b.displays]);
   if (!force && sig === corkDrawn && box.childElementCount) return;
   corkDrawn = sig;
   const act = async (method, path, body) => { try { await api(method, path, body); renderCorkboard(box, true); } catch (err) { alert(err.message); } };
-  const parts = [el("h2", {}, "Quiet time")];
-  if (b.quiet.on) {
+  const parts = [];
+  // With more than one display: which one quiet time and messages go to ("" = all of them).
+  const displays = b.displays || [];
+  let to = corkTarget;
+  if (displays.length > 1 && b.canControl) {
+    if (!displays.some((d) => d.id === to)) to = corkTarget = "";
+    const pick = el("select", {}, el("option", { value: "" }, "All displays"), ...displays.map((d) => el("option", { value: d.id }, d.name)));
+    pick.value = to;
+    pick.addEventListener("change", () => { corkTarget = pick.value; renderCorkboard(box, true); });
+    parts.push(el("label", { class: "cork-target" }, "Display", pick));
+  }
+  parts.push(el("h2", {}, "Quiet time"));
+  if (b.quiet.on && (!b.quiet.for || !to || b.quiet.for === to)) {
     const end = el("button", { type: "button", class: "tonal" }, "End quiet time");
     end.addEventListener("click", () => act("DELETE", "/api/display/quiet"));
     parts.push(el("p", {}, b.quiet.until ? `On until ${new Date(b.quiet.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "On until someone ends it", b.quiet.by ? `, started by ${b.quiet.by}.` : "."), b.canControl ? end : null);
@@ -3002,7 +3024,7 @@ async function renderCorkboard(box, force = false) {
     parts.push(el("p", { class: "muted small" }, "The TV and family displays show a calm quiet-time screen (nap time)."));
     if (b.canControl) parts.push(el("div", { class: "row" }, ...[[30, "30 min"], [60, "1 hour"], [120, "2 hours"], [0, "Until I end it"]].map(([m, t]) => {
       const btn = el("button", { type: "button", class: "secondary" }, t);
-      btn.addEventListener("click", () => act("POST", "/api/display/quiet", { minutes: m }));
+      btn.addEventListener("click", () => act("POST", "/api/display/quiet", { minutes: m, to }));
       return btn;
     })));
   }
@@ -3011,7 +3033,7 @@ async function renderCorkboard(box, force = false) {
     const text = el("input", { maxlength: "200", placeholder: "e.g. Inside voices please, the baby's asleep" });
     const send = el("button", { type: "submit" }, "Send to the TV");
     const form = el("form", { class: "upkeep-add" }, el("label", {}, "Message", text), el("div", { class: "row" }, send));
-    form.addEventListener("submit", (ev) => { ev.preventDefault(); if (text.value.trim()) act("POST", "/api/display/messages", { text: text.value.trim() }); });
+    form.addEventListener("submit", (ev) => { ev.preventDefault(); if (text.value.trim()) act("POST", "/api/display/messages", { text: text.value.trim(), to }); });
     parts.push(form);
   }
   if (b.messages && b.messages.length) parts.push(el("ul", { class: "list" }, ...b.messages.map((m) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, m.text),

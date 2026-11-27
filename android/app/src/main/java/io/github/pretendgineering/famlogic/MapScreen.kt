@@ -611,7 +611,7 @@ fun MapScreen(
             TopAppBar(
                 title = { SecretTitle(familyName.ifEmpty { "FamLogic" }, gate) },
                 actions = {
-                    if (!Access.hideSettings) IconButton(onClick = gate.cog) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                    if (Access.hideSettings) KidColourButton(prefs) else IconButton(onClick = gate.cog) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
                 },
             )
         },
@@ -1098,7 +1098,7 @@ private fun SosBanner(text: String, action: String?, secondAction: String? = nul
  * across), so it can't go off by accident in a pocket. Letting go early cancels.
  */
 @Composable
-internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier, tall: Boolean = false, tile: Boolean = false) {
+internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifier, tall: Boolean = false, tile: Boolean = false, iconOnly: Boolean = false) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val progress = remember { Animatable(0f) }
@@ -1149,21 +1149,25 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
         val style = (if (tall || tile) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium).merge(SosType)
         // The label is red on the pale bar and white where the fill has reached.
         @Composable fun Label() {
-            Text(label, style = style, color = red, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-            Text(
-                label, style = style, color = Color.White, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().drawWithContent {
+            // One line, shrinking to fit a narrow tile.
+            val fit = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp)
+            androidx.compose.foundation.text.BasicText(label, Modifier.fillMaxWidth(), style = style.copy(color = red, textAlign = TextAlign.Center), maxLines = 1, autoSize = fit)
+            androidx.compose.foundation.text.BasicText(
+                label,
+                Modifier.fillMaxWidth().drawWithContent {
                     clipRect(right = size.width * progress.value) { this@drawWithContent.drawContent() }
                 },
+                style = style.copy(color = Color.White, textAlign = TextAlign.Center), maxLines = 1, autoSize = fit,
             )
         }
         if (tile) {
             // A home screen tile: the whole tile is the button, with the picture in the middle.
             Column(Modifier.fillMaxSize().padding(vertical = 10.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                val s = if (tall) 64.dp else 48.dp
+                // A narrow tile: just the picture (still hold for 3 seconds).
+                val s = if (iconOnly) 32.dp else if (tall) 64.dp else 48.dp
                 if (Access.pictures) Pictures.Sos(s + 12.dp)
                 else Icon(FamIcons.Sos, contentDescription = null, tint = if (progress.value > .5f) Color.White else red, modifier = Modifier.size(s))
-                Box(Modifier.fillMaxWidth().padding(top = 6.dp)) { Label() }
+                if (!iconOnly) Box(Modifier.fillMaxWidth().padding(top = 6.dp)) { Label() }
             }
             return@Box
         }

@@ -1,6 +1,6 @@
 package main
 
-// Who's Who: each person's profile (birthday, allergies, medicines, sleep, likes,
+// Dossier: each person's profile (birthday, allergies, medicines, sleep, likes,
 // sizes, doctor, emergency contacts...), kept in their People note in the vault
 // as plain sections, so it reads well in Obsidian and prints as a page for a
 // babysitter. Everyone in the family can see profiles (it's emergency
@@ -125,7 +125,7 @@ func (s *Server) profilesSetup(w http.ResponseWriter, me *Member) bool {
 		return false
 	}
 	if !s.store.Modules().Enabled["profiles"] || me.level("profiles") == LevelOff {
-		writeError(w, http.StatusForbidden, "Who's Who isn't switched on for you")
+		writeError(w, http.StatusForbidden, "Dossier isn't switched on for you")
 		return false
 	}
 	return true

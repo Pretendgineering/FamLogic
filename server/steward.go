@@ -337,7 +337,7 @@ var stewardTools = []stewardTool{
 			id := argStr(a, "recipe_id")
 			return s.callAs(me, s.handleShopRecipe, "POST", "/api/recipes/"+url.PathEscape(id)+"/shop", map[string]string{"id": id}, nil)
 		}},
-	{"list_profiles", "Everyone's profile (Who's Who): birthday, allergies, medicines, sleep, likes, dislikes, sizes, doctor, emergency contacts, notes.", obj(map[string]any{}),
+	{"list_profiles", "Everyone's profile (Dossier): birthday, allergies, medicines, sleep, likes, dislikes, sizes, doctor, emergency contacts, notes.", obj(map[string]any{}),
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handleProfiles, "GET", "/api/profiles", nil, nil)
 		}},

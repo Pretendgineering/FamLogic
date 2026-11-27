@@ -219,10 +219,10 @@ fun TabIcon(t: Tab, on: Boolean, size: androidx.compose.ui.unit.Dp) {
             Tab.Map -> Pictures.Map(s)
             Tab.Chat -> Pictures.Talk(s)
             Tab.Chores -> Pictures.Upkeep(s)
-            Tab.Lists -> Icon(tileIcon("todos"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
-            Tab.Calendar -> Icon(tileIcon("calendar"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
-            Tab.Routines -> Icon(tileIcon("routines"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
-            Tab.Meals -> Icon(tileIcon("meals"), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
+            Tab.Lists -> Pictures.Docket(s)
+            Tab.Calendar -> Pictures.Calendar(s)
+            Tab.Routines -> Pictures.Rhythms(s)
+            Tab.Meals -> Pictures.Pantry(s)
         }
         return
     }

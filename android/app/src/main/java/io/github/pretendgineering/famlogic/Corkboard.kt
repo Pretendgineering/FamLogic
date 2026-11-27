@@ -38,11 +38,17 @@ object Corkboard {
     var open by mutableStateOf(false)
     var quietOn by mutableStateOf(false)
     var quietUntil by mutableStateOf(0L)
+    /** Which display quiet time is on ("" = all of them). */
+    var quietFor by mutableStateOf("")
+    /** The family's displays: id to name. */
+    var displays by mutableStateOf<List<Pair<String, String>>>(emptyList())
     suspend fun refresh(prefs: Prefs) {
         runCatching { Api(prefs.serverUrl, prefs.token).call("GET", "/api/display/board") }.onSuccess {
             val q = it.optJSONObject("quiet")
             quietOn = q?.optBoolean("on") == true
             quietUntil = q?.optLong("until") ?: 0L
+            quietFor = q?.optString("for").orEmpty()
+            displays = it.optJSONArray("displays")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { d -> d.optString("id") to d.optString("name") } } } ?: emptyList()
         }
     }
     fun mayControl(prefs: Prefs) = prefs.role == "parent" || prefs.role == "grandparent"
@@ -54,20 +60,29 @@ fun CorkboardDialog(prefs: Prefs) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
+    // With more than one display, first choose which ("" = all of them).
+    var target by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { Corkboard.refresh(prefs) }
+    val choose = Corkboard.displays.size > 1 && target == null
+    val to = target.orEmpty()
+    val name = Corkboard.displays.find { it.first == to }?.second ?: if (Corkboard.displays.size > 1) "All displays" else "The TV"
     val api = { Api(prefs.serverUrl, prefs.token) }
     fun quiet(minutes: Int?) = scope.launch {
-        runCatching { if (minutes == null) api().call("DELETE", "/api/display/quiet") else api().call("POST", "/api/display/quiet", JSONObject().put("minutes", minutes)) }
+        runCatching { if (minutes == null) api().call("DELETE", "/api/display/quiet") else api().call("POST", "/api/display/quiet", JSONObject().put("minutes", minutes).put("to", to)) }
             .onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
         Corkboard.refresh(prefs)
     }
     AlertDialog(
         onDismissRequest = { Corkboard.open = false },
-        title = { Text("The TV") },
+        title = { Text(if (choose) "Which display?" else name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (choose) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                (listOf("" to "All displays") + Corkboard.displays).forEach { (id, n) ->
+                    OutlinedButton(onClick = { target = id }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Text(n) }
+                }
+            } else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Quiet time", style = MaterialTheme.typography.titleMedium)
-                if (Corkboard.quietOn) {
+                if (Corkboard.quietOn && (Corkboard.quietFor.isEmpty() || Corkboard.quietFor == to)) {
                     Text(if (Corkboard.quietUntil > 0) "On until ${java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(Corkboard.quietUntil))}" else "On until someone ends it",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FilledTonalButton(onClick = { quiet(null) }) { Text("End quiet time") }
@@ -86,14 +101,15 @@ fun CorkboardDialog(prefs: Prefs) {
                     TextButton(enabled = text.isNotBlank(), onClick = {
                         val t = text.trim()
                         scope.launch {
-                            runCatching { api().call("POST", "/api/display/messages", JSONObject().put("text", t)) }
-                                .onSuccess { text = ""; Toast.makeText(context, "Sent to the TV", Toast.LENGTH_SHORT).show() }
+                            runCatching { api().call("POST", "/api/display/messages", JSONObject().put("text", t).put("to", to)) }
+                                .onSuccess { text = ""; Toast.makeText(context, "Sent", Toast.LENGTH_SHORT).show() }
                                 .onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
                         }
-                    }) { Text("Send to the TV") }
+                    }) { Text("Send") }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { Corkboard.open = false }) { Text("Done") } },
+        confirmButton = { TextButton(onClick = { Corkboard.open = false }) { Text(if (choose) "Cancel" else "Done") } },
+        dismissButton = if (!choose && Corkboard.displays.size > 1) ({ TextButton(onClick = { target = null }) { Text("Back") } }) else null,
     )
 }

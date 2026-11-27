@@ -157,6 +157,8 @@ fun HomeScreen(
     var attribution by remember { mutableStateOf(prefs.tileAttribution) }
     var sosActive by remember { mutableStateOf(prefs.sosActive) }
     var confirmCheckIn by remember { mutableStateOf(false) }
+    // A one-button tile's pop-up: "nudges" or "ride" ("" = none).
+    var shortcut by remember { mutableStateOf("") }
     var cameraSeq by remember { mutableStateOf(0) }
     val locationOn = Modules.on(features, Modules.THEREABOUTS)
     val chatOn = Modules.has(features, Modules.CHAT)
@@ -190,7 +192,8 @@ fun HomeScreen(
         "checkin" -> locationOn && Access.can("checkin") && "checkin" in features && !Access.isDisplay
         "convo.new" -> false // only while a new chat shortcut waits for its chat
         // Modules still being built: "coming soon" tiles, so a layout can be planned.
-        "nudges", "ride" -> t !in Modules.hidden
+        "nudges" -> Access.can("nudges") && "requests" in features && !Access.isDisplay && t !in Modules.hidden
+        "ride" -> Access.can("requests") && "requests" in features && !Access.isDisplay && t !in Modules.hidden
         "steward" -> Steward.available(prefs) && t !in Modules.hidden
         "profiles" -> Modules.has(features, "profiles") && Access.can("profiles") && prefs.access != "dependent"
         "display" -> Modules.has(features, "display") && Corkboard.mayControl(prefs) && !Access.isDisplay
@@ -242,7 +245,8 @@ fun HomeScreen(
     val mapBeside = landscape && !editing && tiles.any { it.id == "map" }
 
     val gate = rememberSettingsGate(prefs, onOpenSettings)
-    LaunchedEffect(Unit) { if (HomeLayout.columns == 0) HomeLayout.columns = prefs.homeColumns }
+    // Read straight away (not after the first frame), so Home doesn't start at 3 across and glide.
+    if (HomeLayout.columns == 0 && prefs.homeColumns != 0) HomeLayout.columns = prefs.homeColumns
     LaunchedEffect(Unit) { Widgets.refresh(context) } // home-screen widgets catch up when the app opens
     // Tiles across: the person's choice (Look and Feel), or 2 on phones and 3 on tablets.
     val cols = if (landscape && tiles.any { it.id == "map" } && !editing) 2 else HomeLayout.columns(config.screenWidthDp)
@@ -271,7 +275,8 @@ fun HomeScreen(
                         if (!Access.isChild && !Access.isDisplay) {
                             IconButton(onClick = { draft = saved.filter { usable(it.id) } }) { Icon(Icons.Filled.Edit, contentDescription = "Arrange home screen") }
                         }
-                        if (!Access.hideSettings) IconButton(onClick = gate.cog) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                        if (Access.hideSettings) KidColourButton(prefs)
+                        else IconButton(onClick = gate.cog) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
                     }
                 },
             )
@@ -296,13 +301,33 @@ fun HomeScreen(
                 )
             }
             val tile: @Composable (HomeTile, Dp) -> Unit = { t, h ->
-                when (t.id) {
+                val tiny = LocalTileWidth.current < ICON_ONLY_WIDTH && t.id != "map"
+                if (tiny && t.id != "sos") IconTile(t.id, h) {
+                    when (t.id) {
+                        "chat" -> onOpen(Tab.Chat)
+                        "checkin" -> confirmCheckIn = true
+                        "chores" -> onOpen(Tab.Chores)
+                        "todos" -> onOpen(Tab.Lists)
+                        "calendar" -> onOpen(Tab.Calendar)
+                        "routines" -> onOpen(Tab.Routines)
+                        "meals" -> onOpen(Tab.Meals)
+                        "steward" -> Steward.sheetOpen = true
+                        "display" -> Corkboard.open = true
+                        "homestead" -> Homestead.open = true
+                        "meetings" -> Huddle.open = true
+                        "profiles" -> Profiles.open = true
+                        "nudges" -> shortcut = "nudges"
+                        "ride" -> shortcut = "ride"
+                        in SOON_TILES -> if (Steward.available(prefs)) Steward.sheetOpen = true
+                        else -> if (t.id.startsWith("convo.")) onOpenChat(t.id.removePrefix("convo."))
+                    }
+                } else when (t.id) {
                     "map" -> MapTile(prefs, members, tileUrl, tileUrlDark, attribution, cameraSeq, big, h, onClick = { onOpen(Tab.Map) }, compact = t.w(cols) == 1 || t.h() == 1)
                     "chat" -> ChatTile(chats, members, prefs.memberId, big, h, t.w(cols), t.h(), prefs.lastChat, onOpen = { onOpen(Tab.Chat) }, onOpenChat = onOpenChat)
                     // One-button tiles: the tile is the button.
                     "sos" -> HoldForSosBar(
                         onTriggered = { Sos.send(context, scope, end = false); sosActive = true },
-                        modifier = Modifier.fillMaxWidth().height(h), tall = big, tile = true,
+                        modifier = Modifier.fillMaxWidth().height(h), tall = big, tile = true, iconOnly = tiny,
                     )
                     "checkin" -> ButtonTile(if (Access.pictures) "I'm here!" else "Check in", h, big,
                         picture = { Pictures.HereIAm(it) }, icon = Icons.Filled.CheckCircle) { confirmCheckIn = true }
@@ -317,7 +342,7 @@ fun HomeScreen(
                         LaunchedEffect(Unit) { Homestead.refresh(prefs) }
                         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
                         val next = Homestead.data?.jobs?.firstOrNull()
-                        SimpleTile(Access.name("homestead"), next?.let { (if (it.due <= today) "Now: " else "Next: ") + it.title } ?: "Your home's upkeep", h, big, icon = tileIcon("homestead")) { Homestead.open = true }
+                        SimpleTile(Access.name("homestead"), next?.let { (if (it.due <= today) "Now: " else "Next: ") + it.title } ?: "Your home's upkeep", h, big, picture = { Pictures.Home(it) }, icon = tileIcon("homestead")) { Homestead.open = true }
                     }
                     "meetings" -> {
                         LaunchedEffect(Unit) { Huddle.refresh(prefs) }
@@ -326,14 +351,16 @@ fun HomeScreen(
                     }
                     "profiles" -> SimpleTile(Access.name("profiles"), "Allergies, medicines, contacts", h, big, icon = tileIcon("profiles")) { Profiles.open = true }
                     in SOON_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) { if (Steward.available(prefs)) Steward.sheetOpen = true }
-                    in PLACEHOLDER_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) {}
+                    "nudges" -> ButtonTile(Access.name("nudges"), h, big, picture = { Pictures.Nudge(it) }, icon = tileIcon("nudges")) { shortcut = "nudges" }
+                    "ride" -> ButtonTile(if (Access.pictures) "Pick me up" else Access.name("ride"), h, big, picture = { Pictures.Pickup(it) }, icon = tileIcon("ride")) { shortcut = "ride" }
                     "convo.new" -> SimpleTile(Access.name(t.id), "Choosing a chat…", h, big, icon = tileIcon(t.id)) {}
                     else -> if (t.id.startsWith("convo.")) {
                         ConvoTile(chats.find { it.id == t.id.removePrefix("convo.") }, members, prefs.memberId, big, h, onOpenChat)
                     }
                 }
             }
-            val base = (if (big) 176.dp else 148.dp) * (if (cols == 3) .88f else 1f)
+            // More tiles across, shorter rows: they stay roughly square as they narrow.
+            val base = (if (big) 176.dp else 148.dp) * when (cols) { 2 -> 1f; 3 -> .88f; 4 -> .72f; else -> .6f }
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
             // Rows stretch or shrink a little so a whole number of them fills the
             // screen exactly: no "tiny scroll" from a row that's only just too tall.
@@ -341,7 +368,9 @@ fun HomeScreen(
             if (mapBeside) {
                 Row(Modifier.fillMaxSize()) {
                     TileBoard(tiles.filter { it.id != "map" }, unit, cols, null, Modifier.weight(1f), tile)
-                    Box(Modifier.weight(1.15f).fillMaxHeight().padding(top = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                    // The same rounded card as every other tile.
+                    Box(Modifier.weight(1.15f).fillMaxHeight().padding(top = 12.dp, end = 12.dp, bottom = 12.dp)
+                        .shadow(3.dp, RoundedCornerShape(22.dp)).clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow)) {
                         tile(tiles.first { it.id == "map" }, Dp.Unspecified)
                     }
                 }
@@ -394,6 +423,10 @@ fun HomeScreen(
         )
     }
 
+    when (shortcut) {
+        "nudges" -> NudgePopup(prefs, members) { shortcut = "" }
+        "ride" -> PickupPopup(prefs, members) { shortcut = "" }
+    }
     if (confirmCheckIn) {
         AlertDialog(
             onDismissRequest = { confirmCheckIn = false },
@@ -432,7 +465,21 @@ object HomeEditor {
  * width and two rows. (The map shows its title bar only at 2 by 2 or bigger.)
  */
 /** Rows a tile may be tall: the map up to 3, everything else 2. */
-fun maxH(id: String) = if (id == "map") 3 else 2
+fun maxH(id: String) = if (id == "map") 3 else if (isButtonTile(id)) 1 else 2
+
+/**
+ * Tiles that only do one thing (send, open a pop-up, or open their page): a row tall at
+ * most and two columns wide at most, so no button takes half the screen for nothing.
+ */
+fun isButtonTile(id: String) = id in BUTTON_TILES || id.startsWith("convo.")
+val BUTTON_TILES = setOf("sos", "checkin", "ride", "nudges", "display", "steward", "profiles", "pets", "homestead", "garage", "meetings", "outings", "ledger", "contacts")
+fun maxW(id: String, cols: Int) = if (isButtonTile(id)) minOf(2, cols) else cols
+
+/** The width of the tile being drawn (for tiles that turn into just an icon when narrow). */
+val LocalTileWidth = androidx.compose.runtime.staticCompositionLocalOf { Dp.Unspecified }
+
+/** Narrower than this, a tile shows only its icon, as a shortcut. */
+val ICON_ONLY_WIDTH = 96.dp
 
 data class HomeTile(val id: String, val size: String) {
     fun encode() = "$id:$size"
@@ -445,7 +492,7 @@ data class HomeTile(val id: String, val size: String) {
             "half" -> 1
             "wide", "big" -> cols
             else -> dims.substringBefore('x').toIntOrNull() ?: 1
-        }.coerceIn(1, cols)
+        }.coerceIn(1, maxW(id, cols))
         return w
     }
 
@@ -471,7 +518,7 @@ object HomeLayout {
     var columns by mutableStateOf(0) // 0 = not chosen: 3
 
     @Suppress("UNUSED_PARAMETER")
-    fun columns(screenWidthDp: Int) = if (columns == 2) 2 else 3
+    fun columns(screenWidthDp: Int) = if (columns == 0) 3 else columns.coerceIn(2, 5)
 }
 
 /** A tile's place on the grid. */
@@ -737,7 +784,7 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
         val (colPx, gapPx) = columnPx()
         val unitPx = with(density) { unit.toPx() }
         val g = ghost()
-        val w = kotlin.math.round((g.width + gapPx) / (colPx + gapPx)).toInt().coerceIn(1, cols)
+        val w = kotlin.math.round((g.width + gapPx) / (colPx + gapPx)).toInt().coerceIn(1, maxW(id, cols))
         val h = kotlin.math.round((g.height + gapPx) / (unitPx + gapPx)).toInt().coerceIn(1, maxH(id))
         val col = when (resizeEdge) {
             'l' -> (spot.col + spot.w - w).coerceAtLeast(0) // grows to the left: the right edge stays put
@@ -913,7 +960,7 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
                                     .clip(RoundedCornerShape(22.dp))
                                     .background(MaterialTheme.colorScheme.surfaceContainerLow),
                             ) {
-                                tile(t, h)
+                                androidx.compose.runtime.CompositionLocalProvider(LocalTileWidth provides w) { tile(t, h) }
                                 if (edit != null) Box(Modifier.matchParentSize().graphicsLayer { alpha = arranging }) {
                                     EditChrome(t.id, selected == t.id, isDragged || resizing == t.id, edit, tiles, edges, closes)
                                 }
@@ -1037,6 +1084,8 @@ private fun MapTile(
                 tiles = tiles,
                 camera = if (placed.isNotEmpty()) CameraCommand.FitAll(cameraSeq + placed.size) else null,
                 statusOf = { "" },
+                corner = 22.dp,
+                roundBottom = compact,
             )
             // The map is a preview: a tap anywhere opens Thereabouts.
             Box(Modifier.fillMaxSize().clickable(onClickLabel = "Open the map", onClick = onClick))
@@ -1192,6 +1241,21 @@ private fun ConvoTile(c: ChatConversation?, members: List<Member>, me: String, b
     }
 }
 
+/** A narrow tile: just its picture or icon, as a shortcut (its name is read out by TalkBack). */
+@Composable
+private fun IconTile(id: String, height: Dp, onClick: () -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().height(height).clickable(onClickLabel = Access.name(id), onClick = onClick)
+            .semantics { contentDescription = Access.name(id) },
+        contentAlignment = Alignment.Center,
+    ) {
+        val s = (LocalTileWidth.current.takeIf { it != Dp.Unspecified } ?: 64.dp).coerceAtMost(height) * .5f
+        val pic = if (Access.pictures) Pictures.forModule(id) else null
+        if (pic != null) pic(s * 1.2f)
+        else Icon(tileIcon(id), contentDescription = null, tint = Accent2, modifier = Modifier.size(s))
+    }
+}
+
 /** A tile that does one thing: the whole tile is the button, in the theme's colour. */
 @Composable
 private fun ButtonTile(
@@ -1211,7 +1275,12 @@ private fun ButtonTile(
             else Box(Modifier.size(s + 16.dp).clip(CircleShape).background(Accent2.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
                 Icon(icon, contentDescription = null, tint = Accent2, modifier = Modifier.size(s * .62f))
             }
-            Text(title, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // One line, shrinking to fit ("Pick me up" on a narrow tile).
+            val style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            androidx.compose.foundation.text.BasicText(
+                title, Modifier.fillMaxWidth().padding(top = 8.dp), style = style, maxLines = 1,
+                autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+            )
         }
     }
 }
@@ -1226,12 +1295,12 @@ private fun SimpleTile(
         if (Access.pictures && picture != null) picture(s + 8.dp)
         else Icon(icon, contentDescription = null, tint = Accent2.copy(alpha = .75f), modifier = Modifier.size(s))
         Spacer(Modifier.height(10.dp))
-        // Long names ("Who's Who") wrap onto a second line and shrink to fit a small tile.
+        // Titles stay on one line, shrinking to fit a small tile.
         val style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge
         androidx.compose.foundation.text.BasicText(
             title,
             style = style.copy(color = MaterialTheme.colorScheme.onSurface),
-            maxLines = 2,
+            maxLines = 1,
             autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
         )
         Text(sub, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2)
