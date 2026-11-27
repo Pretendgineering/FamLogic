@@ -1,6 +1,27 @@
 package io.github.pretendgineering.famlogic
 
 import android.content.ActivityNotFoundException
+import android.os.SystemClock
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.PaddingValues
@@ -165,6 +186,21 @@ class TvActivity : ComponentActivity() {
 
     /** The remote helper (or Home) asking for the board, or for Steward. */
     private fun takeOpen(i: Intent?) { i?.getStringExtra("open")?.let { TvNav.request(it) } }
+
+    /**
+     * Every button press: the TV isn't idle. While the screen saver is up, the first press
+     * only wakes it; holding OK asks Steward straight away.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        TvSaver.touch()
+        if (TvSaver.on) {
+            val ok = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER
+            if (ok && event.action == KeyEvent.ACTION_DOWN && event.repeatCount >= 1) { TvSaver.on = false; TvNav.request("steward"); return true }
+            if (event.action == KeyEvent.ACTION_UP) TvSaver.on = false
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
 }
 
 @Composable
@@ -215,7 +251,7 @@ private fun TvSetup(prefs: Prefs, onDone: () -> Unit) {
             OutlinedTextField(server, { server = it.trim() }, label = { Text("Server address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(code, { code = it.trim().uppercase() }, label = { Text("Display code") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             if (error.isNotEmpty()) Text(error, color = Color(0xFFFF8A8A), fontSize = 18.sp)
-            Button(enabled = !busy && server.isNotEmpty() && code.isNotEmpty(), onClick = {
+            TvButton(if (busy) "Connecting…" else "Connect", QUIET_LOOK, enabled = !busy && server.isNotEmpty() && code.isNotEmpty(), onClick = {
                 busy = true; error = ""
                 scope.launch {
                     try {
@@ -234,7 +270,7 @@ private fun TvSetup(prefs: Prefs, onDone: () -> Unit) {
                     }
                     busy = false
                 }
-            }) { Text(if (busy) "Connecting…" else "Connect", fontSize = 20.sp) }
+            })
         }
     }
 }
@@ -255,6 +291,28 @@ private class TvConfig(context: Context) {
     /** How far in from the screen's edges to draw (0 to 10 percent). */
     var edges by mutableIntStateOf(sp.getInt("edges", 0).coerceIn(0, 10))
         private set
+
+    /** The screen saver: minutes idle before it starts (0 = never), what it shows, and its theme. */
+    var saverMinutes by mutableIntStateOf(sp.getInt("saverMinutes", 10))
+        private set
+    var saverKind by mutableStateOf(sp.getString("saverKind", "clock") ?: "clock")
+        private set
+    var saverTheme by mutableStateOf(sp.getString("saverTheme", "seasonal") ?: "seasonal")
+        private set
+    /** Family updates (the feed) popping up over the screen saver, and over the home screen. */
+    var popSaver by mutableStateOf(sp.getBoolean("popSaver", true))
+        private set
+    var popHome by mutableStateOf(sp.getBoolean("popHome", false))
+        private set
+
+    fun setSaver(minutes: Int = saverMinutes, kind: String = saverKind, theme: String = saverTheme) {
+        saverMinutes = minutes; saverKind = kind; saverTheme = theme
+        sp.edit().putInt("saverMinutes", minutes).putString("saverKind", kind).putString("saverTheme", theme).apply()
+    }
+    fun setPops(saver: Boolean = popSaver, home: Boolean = popHome) {
+        popSaver = saver; popHome = home
+        sp.edit().putBoolean("popSaver", saver).putBoolean("popHome", home).apply()
+    }
 
     /** Apps hidden from the app drawer (shown again from Settings). */
     var hidden by mutableStateOf(sp.getString("hidden", "").orEmpty().split(",").filter { it.isNotBlank() }.toSet())
@@ -303,14 +361,26 @@ private class TvConfig(context: Context) {
 
 private val DEFAULT_SIDE = listOf("map", "feed", "steward", "calendar")
 
-/** Every button that can go down the right side: id, name, icon. */
-private val SIDE_BUTTONS: List<Triple<String, String, ImageVector>> = listOf(
-    Triple("map", "Map", Icons.Filled.LocationOn),
-    Triple("feed", "Feed", Icons.Filled.DynamicFeed),
-    Triple("steward", "Steward", Icons.Filled.Mic),
-    Triple("calendar", "Datebook", Icons.Filled.DateRange),
-    Triple("meals", "Pantry", Icons.Filled.Restaurant),
-    Triple("meetings", "Meeting", Icons.Filled.Groups),
+/** Every Quick Access Module (the buttons down the right side): id, name, icon. Names follow the
+ *  family's choice of module names (Thereabouts, Datebook…) or plain ones (Map, Calendar…). */
+private val SIDE_BUTTONS: List<Triple<String, String, ImageVector>>
+    get() = listOf(
+        Triple("map", Access.name("map"), Icons.Filled.LocationOn),
+        Triple("feed", "Feed", Icons.Filled.DynamicFeed),
+        Triple("steward", Access.name("steward"), Icons.Filled.Mic),
+        Triple("calendar", Access.name("calendar"), Icons.Filled.DateRange),
+        Triple("meals", Access.name("meals"), Icons.Filled.Restaurant),
+        Triple("meetings", Access.name("meetings"), Icons.Filled.Groups),
+    )
+
+/** What each Quick Access Module opens, for Settings. */
+private val SIDE_BLURBS = mapOf(
+    "map" to "Where everyone is, on a map; choose someone to zoom to them.",
+    "feed" to "Today so far: arrivals, check-ins, chores done.",
+    "steward" to "Ask the family's helper, by talking into the remote.",
+    "calendar" to "What's coming up: the list, 3 days, the week or the month.",
+    "meals" to "This week's meals.",
+    "meetings" to "Family meetings to click through together.",
 )
 
 // ---- the dashboard
@@ -384,6 +454,7 @@ private fun TvBoard(prefs: Prefs, config: TvConfig) {
     }
     // Home (with the remote helper) closes whatever is open; a remapped button can ask Steward.
     LaunchedEffect(TvNav.seq) {
+        if (TvNav.open != null) TvSaver.on = false
         when (TvNav.open) {
             "home" -> { nav.view = null; nav.menuFor = null; nav.pickFor = null }
             "steward" -> nav.view = "steward"
@@ -464,7 +535,7 @@ private fun TvBoard(prefs: Prefs, config: TvConfig) {
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                Launcher(api, config, installed, b?.optJSONArray("apps"), look, onEmpty = { nav.pickFor = it; nav.view = "apps" }, onMenu = { nav.menuFor = it })
+                Launcher(api, config, installed, b?.optJSONArray("apps"), look, onMenu = { nav.menuFor = it })
             }
             Spacer(Modifier.width(20.dp))
             // Buttons down the right side, then the app drawer and Settings; Steward always
@@ -491,6 +562,32 @@ private fun TvBoard(prefs: Prefs, config: TvConfig) {
         }
 
         BoardViews(nav, prefs, api, config, installed, modules, board, look) { scope.launch { load() } }
+
+        // The screen saver, after the remote has sat unused a while (and nothing is open).
+        LaunchedEffect(config.saverMinutes) {
+            while (true) {
+                delay(5_000)
+                val idle = SystemClock.elapsedRealtime() - TvSaver.lastInput
+                if (config.saverMinutes > 0 && !TvSaver.on && nav.view == null && nav.menuFor == null && idle > config.saverMinutes * 60_000L) TvSaver.on = true
+            }
+        }
+        if (TvSaver.on) ScreenSaver(config, board, api, names)
+
+        // Family updates: new feed entries pop up (over the screen saver, or the board, as chosen).
+        val feedNow = objs(board?.optJSONObject("feed")?.optJSONArray("items"))
+        var seenUntil by remember { mutableLongStateOf(-1L) }
+        val pops = remember { mutableStateListOf<JSONObject>() }
+        LaunchedEffect(board) {
+            val latest = feedNow.maxOfOrNull { it.optLong("time") } ?: 0L
+            if (seenUntil < 0) seenUntil = maxOf(latest, System.currentTimeMillis() - 60_000)
+            else {
+                pops += feedNow.filter { it.optLong("time") > seenUntil }.sortedBy { it.optLong("time") }
+                seenUntil = maxOf(seenUntil, latest)
+            }
+        }
+        val popsOn = if (TvSaver.on) config.popSaver else config.popHome
+        LaunchedEffect(popsOn) { if (!popsOn) pops.clear() }
+        if (popsOn) FeedPopup(pops, look, TvSaver.on)
 
         // Quiet time: the whole screen, calm, until it ends.
         val quiet = board?.optJSONObject("quiet")
@@ -547,13 +644,13 @@ private fun BoardViews(nav: BoardNav, prefs: Prefs, api: Api, config: TvConfig, 
                 else -> if (e.optString("memberId").isNotEmpty() && "thereabouts" in modules) { nav.person = e.optString("memberId"); nav.view = "map" }
             }
         }) { nav.view = null }
-        "chores" -> ListView("Upkeep", look, { nav.view = null }) { board?.optJSONObject("chores")?.let { ChoreLines(it, emptyMap(), look) } }
+        "chores" -> ListView(Access.name("chores"), look, { nav.view = null }) { board?.optJSONObject("chores")?.let { ChoreLines(it, emptyMap(), look) } }
         "calendar" -> CalendarView(api, look) { nav.view = null }
-        "meals" -> ListView("Meals", look, { nav.view = null }) { board?.optJSONObject("meals")?.let { MealLines(it, look) } }
+        "meals" -> ListView(Access.name("meals"), look, { nav.view = null }) { board?.optJSONObject("meals")?.let { MealLines(it, look) } }
         "steward" -> StewardView(prefs, api, look) { nav.view = null; reload() }
         "meetings" -> MeetingsView(api, look, objs(board?.optJSONObject("members")?.optJSONArray("members"))
             .filter { it.optString("access") != "display" && it.optString("role") != "dependent" }) { nav.view = null }
-        "apps" -> AppDrawer(installed.filter { it.pkg !in config.hidden }, look, nav.pickFor, onPick = { pkg -> nav.pickFor?.let { config.setApp(it, pkg) }; nav.pickFor = null; nav.view = null }, onMenu = { nav.menuFor = it }) { nav.pickFor = null; nav.view = null }
+        "apps" -> AppDrawer(installed.filter { it.pkg !in config.hidden && it !in launcherApps(config, installed) }, look, nav.pickFor, onPick = { pkg -> nav.pickFor?.let { config.setApp(it, pkg) }; nav.pickFor = null; nav.view = null }, onMenu = { nav.menuFor = it }) { nav.pickFor = null; nav.view = null }
         "settings" -> SettingsView(config, installed, modules, board, look) { nav.view = null }
     }
     nav.menuFor?.let { pkg ->
@@ -579,7 +676,7 @@ private fun MeetingsView(api: Api, look: Look, members: List<JSONObject>, onBack
     open?.let { m -> MeetingTv(api, look, m, people, data?.canRun == true) { open = null; refresh++ }; return }
     val first = remember { FocusRequester() }
     val d = data
-    ViewFrame("Family meetings", look, onBack, start = if (d?.meetings?.isNotEmpty() == true) first else null) {
+    ViewFrame(Access.name("meetings"), look, onBack, start = if (d?.meetings?.isNotEmpty() == true) first else null) {
         when {
             d == null -> Empty("Loading…", look)
             d.meetings.isEmpty() -> Empty("No meetings yet. A parent can make one in the app or the console, or ask Steward.", look)
@@ -692,6 +789,19 @@ private fun TvTextEntry(title: String, look: Look, onDone: (String) -> Unit) {
     FocusWhenReady(speak, title)
 }
 
+/**
+ * Scroll only as far as needed to show what's selected (the TV's own default keeps the
+ * selection at a fixed point, which made the app grid hop up and down moving sideways).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private val CalmScroll = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = when {
+        offset >= 0 && offset + size <= containerSize -> 0f
+        offset < 0 || size > containerSize -> offset
+        else -> offset + size - containerSize
+    }
+}
+
 /** A picture from the TV's files, made a sensible size for a tile (at most 1280 wide, as a JPEG). */
 private fun shrinkPicture(context: Context, uri: Uri): ByteArray {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -768,7 +878,7 @@ private fun CalendarView(api: Api, look: Look, onBack: () -> Unit) {
     }
     val colors = CalColors(look.card, look.ink, look.soft, look.accent, look.onAccent)
     val first = remember { FocusRequester() }
-    ViewFrame("Datebook", look, onBack, start = first) {
+    ViewFrame(Access.name("calendar"), look, onBack, start = first) {
         Column(Modifier.fillMaxSize()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CalMode.entries.forEachIndexed { i, m ->
@@ -1260,6 +1370,7 @@ private fun StewardView(prefs: Prefs, api: Api, look: Look, onBack: () -> Unit) 
 // ---- settings: the screen, the launcher, the side buttons, and the remote helper
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun SettingsView(config: TvConfig, installed: List<TvApp>, modules: Set<String>, board: JSONObject?, look: Look, onBack: () -> Unit) {
     val context = LocalContext.current
     var helperOn by remember { mutableStateOf(TvRemoteService.enabled(context)) }
@@ -1273,28 +1384,27 @@ private fun SettingsView(config: TvConfig, installed: List<TvApp>, modules: Set<
     fun open(i: Intent, otherwise: String) {
         try { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: ActivityNotFoundException) { Toast.makeText(context, otherwise, Toast.LENGTH_LONG).show() }
     }
+    var sheet by remember { mutableStateOf<String?>(null) } // modules, hidden, saver, buttons
     ViewFrame("Settings", look, onBack) {
-        LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            item { Heading("The screen", look) }
+        CompositionLocalProvider(LocalBringIntoViewSpec provides CalmScroll) {
+        LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(6.dp)) {
+            item { Heading("The launcher", look) }
             item {
-                SettingRow("Fit to the screen", "If the TV cuts off the edges, draw further in: ${config.edges}%.", look) {
-                    Stepper(look, config.edges > 0, config.edges < 10, { config.changeEdges(config.edges - 1) }, { config.changeEdges(config.edges + 1) })
-                }
-            }
-            item {
-                SettingRow("Tiles on the launcher", "${config.slots} along the bottom.", look) {
+                SettingRow("Tiles on the launcher", "Up to ${config.slots} along the bottom.", look) {
                     Stepper(look, config.slots > 1, config.slots < 6, { config.changeSlots(config.slots - 1) }, { config.changeSlots(config.slots + 1) })
                 }
             }
-            item { Heading("Buttons on the side", look) }
-            items(SIDE_BUTTONS.filter { (id) -> available(id, modules, board) }, key = { it.first }) { (id, label) ->
-                SwitchRow(label, "", id in config.side, true, look) { config.toggleSide(id) }
+            item { OpenRow("Quick Access Modules", "The buttons down the right side: " + SIDE_BUTTONS.filter { (id) -> id in config.side && available(id, modules, board) }.joinToString(", ") { it.second }.ifEmpty { "none" } + ".", look) { sheet = "modules" } }
+            if (config.hidden.isNotEmpty()) item { OpenRow("Hidden apps", "${config.hidden.size} hidden from Apps.", look) { sheet = "hidden" } }
+            item { Heading("Screen saver", look) }
+            item {
+                OpenRow("Screen saver", if (config.saverMinutes == 0) "Off." else "After ${config.saverMinutes} minutes: ${saverKindName(config.saverKind)}.", look) { sheet = "saver" }
             }
-            if (config.hidden.isNotEmpty()) {
-                item { Heading("Hidden apps", look) }
-                items(installed.filter { it.pkg in config.hidden }, key = { "h" + it.pkg }) { app ->
-                    SettingRow(app.label, "Hidden from Apps.", look) { TvButton("Show", look) { config.unhide(app.pkg) } }
-                }
+            item {
+                SwitchRow("Family updates over the screen saver", "What happens (arrivals, chores done) pops up in a corner for a few seconds.", config.popSaver, true, look) { config.setPops(saver = !config.popSaver) }
+            }
+            item {
+                SwitchRow("Family updates over the home screen", "The same, while the board is showing.", config.popHome, true, look) { config.setPops(home = !config.popHome) }
             }
             item { Heading("Home and remote", look) }
             item {
@@ -1312,21 +1422,55 @@ private fun SettingsView(config: TvConfig, installed: List<TvApp>, modules: Set<
                 }
             }
             item {
+                OpenRow("Remote buttons", if (!helperOn) "Needs the remote helper." else if (keys.isEmpty()) "Give a remote button a new job: an app, FamLogic or Steward." else keys.entries.joinToString(", ") { TvRemoteSettings.keyName(it.key) + ": " + actionName(it.value, installed).lowercase() } + ".",
+                    look, Icons.Filled.Accessibility, enabled = helperOn) { sheet = "buttons" }
+            }
+            item {
                 SettingRow("Make FamLogic the home app", "On TVs that let you choose a home app (Google TV doesn't: use the override above).", look) {
                     TvButton("Choose", look) { open(Intent(Settings.ACTION_HOME_SETTINGS), "This TV doesn't let you choose: use Override current launcher") }
                 }
             }
-            item { Heading("Remote buttons", look) }
-            items(keys.entries.toList(), key = { "k" + it.key }) { (code, action) ->
-                SettingRow(TvRemoteSettings.keyName(code), actionName(action, installed), look) {
-                    TvButton("Remove", look) { keys = keys - code; TvRemoteSettings.setKeys(context, keys) }
+            item { Heading("The screen", look) }
+            item {
+                SettingRow("Fit to the screen", "If the TV cuts off the edges, draw further in: ${config.edges}%.", look) {
+                    Stepper(look, config.edges > 0, config.edges < 10, { config.changeEdges(config.edges - 1) }, { config.changeEdges(config.edges + 1) })
                 }
             }
-            item {
-                if (learning) SettingRow("Press the remote button to use", "Any button but the arrows, OK and Back.", look) {
-                    TvButton("Cancel", look) { learning = false; TvNav.capture = null }
-                } else SettingRow("Give a button a new job", if (helperOn) "Open an app, FamLogic or Steward with a button on the remote." else "Needs the remote helper.", look) {
-                    TvButton("Add a button", look, enabled = helperOn) { learning = true; TvNav.capture = { code -> learning = false; learned = code } }
+        }
+        }
+    }
+    when (sheet) {
+        "modules" -> TvSheet("Quick Access Modules", look, { sheet = null }) { first ->
+            SIDE_BUTTONS.filter { (id) -> available(id, modules, board) }.forEachIndexed { i, (id, label) ->
+                item(key = id) { SwitchRow(label, SIDE_BLURBS[id].orEmpty(), id in config.side, true, look, modifier = if (i == 0) Modifier.focusRequester(first) else Modifier) { config.toggleSide(id) } }
+            }
+        }
+        "hidden" -> TvSheet("Hidden apps", look, { sheet = null }) { first ->
+            val hidden = installed.filter { it.pkg in config.hidden }
+            if (hidden.isEmpty()) item { Text("No hidden apps.", color = look.soft, fontSize = 16.sp) }
+            hidden.forEachIndexed { i, app ->
+                item(key = app.pkg) { MenuRow("Show ${app.label} in Apps", look, if (i == 0) Modifier.focusRequester(first) else Modifier) { config.unhide(app.pkg) } }
+            }
+        }
+        "saver" -> SaverSheet(config, board, look, onTry = { sheet = null; onBack(); TvSaver.on = true }) { sheet = null }
+        "buttons" -> TvSheet("Remote buttons", look, { learning = false; TvNav.capture = null; sheet = null }) { first ->
+            if (learning) {
+                item {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Press the button on the remote you'd like to use", color = look.ink, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 26.sp)
+                        Text("Any button but the arrows, OK and Back.", color = look.soft, fontSize = 16.sp)
+                        TvButton("Cancel", look, Modifier.focusRequester(first)) { learning = false; TvNav.capture = null }
+                    }
+                }
+            } else {
+                item { MenuRow("Add a button", look, Modifier.focusRequester(first)) { learning = true; TvNav.capture = { code -> learning = false; learned = code } } }
+                if (keys.isEmpty()) item { Text("No buttons with a new job yet.", Modifier.padding(8.dp), color = look.soft, fontSize = 15.sp) }
+                keys.entries.toList().forEach { (code, action) ->
+                    item(key = "k$code") {
+                        SettingRow(TvRemoteSettings.keyName(code), actionName(action, installed), look) {
+                            TvButton("Remove", look) { keys = keys - code; TvRemoteSettings.setKeys(context, keys) }
+                        }
+                    }
                 }
             }
         }
@@ -1354,10 +1498,50 @@ private fun SettingRow(title: String, sub: String, look: Look, icon: ImageVector
     }
 }
 
+/** A settings row that opens a popup of its own. */
 @Composable
-private fun SwitchRow(title: String, sub: String, on: Boolean, enabled: Boolean, look: Look, icon: ImageVector? = null, onToggle: () -> Unit) {
+private fun OpenRow(title: String, sub: String, look: Look, icon: ImageVector? = null, enabled: Boolean = true, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().tvFocus(look, look.card, 18.dp, grow = 1.02f).clickable(enabled = enabled, onClick = onToggle).padding(horizontal = 18.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().tvFocus(look, look.card, 18.dp, grow = 1.02f, fill = true) { focused = it }.clickable(enabled = enabled, onClick = onClick).padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val ink = if (focused) look.onAccent else if (enabled) look.ink else look.soft
+        if (icon != null) Icon(icon, null, tint = if (focused) look.onAccent else look.accent, modifier = Modifier.padding(end = 12.dp).size(22.dp))
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, color = ink, fontSize = 18.sp)
+            if (sub.isNotEmpty()) Text(sub, color = if (focused) look.onAccent.copy(alpha = .8f) else look.soft, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Text("›", color = ink, fontSize = 26.sp)
+    }
+}
+
+/** A popup over Settings: a title and a list, with the first entry selected. */
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun TvSheet(title: String, look: Look, onDismiss: () -> Unit, content: LazyListScope.(first: FocusRequester) -> Unit) {
+    val first = remember { FocusRequester() }
+    Overlay(onDismiss) {
+        Box(Modifier.fillMaxSize().background(Color(0xB3000000)), contentAlignment = Alignment.Center) {
+            Column(Modifier.widthIn(min = 480.dp, max = 760.dp).fillMaxHeight(.86f).clip(RoundedCornerShape(28.dp)).background(look.bg).padding(24.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, Modifier.weight(1f), color = look.ink, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+                    TvButton("Done", look, onClick = onDismiss)
+                }
+                Spacer(Modifier.height(12.dp))
+                CompositionLocalProvider(LocalBringIntoViewSpec provides CalmScroll) {
+                    LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(6.dp)) { content(first) }
+                }
+            }
+        }
+    }
+    FocusWhenReady(first, title)
+}
+
+@Composable
+private fun SwitchRow(title: String, sub: String, on: Boolean, enabled: Boolean, look: Look, icon: ImageVector? = null, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().tvFocus(look, look.card, 18.dp, grow = 1.02f).clickable(enabled = enabled, onClick = onToggle).padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) Icon(icon, null, tint = look.accent, modifier = Modifier.padding(end = 12.dp).size(22.dp))
@@ -1388,14 +1572,17 @@ private fun ActionPicker(key: String, installed: List<TvApp>, look: Look, onPick
 // ---- the app drawer: every app on the TV
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun AppDrawer(installed: List<TvApp>, look: Look, pickFor: Int?, onPick: (String) -> Unit, onMenu: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val first = remember { FocusRequester() }
     ViewFrame(if (pickFor != null) "Choose an app for tile ${pickFor + 1}" else "Apps", look, onBack, start = if (installed.isNotEmpty()) first else null) {
+        CompositionLocalProvider(LocalBringIntoViewSpec provides CalmScroll) {
         LazyVerticalGrid(GridCells.Fixed(5), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(8.dp)) {
             itemsIndexed(installed, key = { _, a -> a.pkg }) { i, app ->
                 DrawerTile(app, look, if (i == 0) Modifier.focusRequester(first) else Modifier, onClick = { if (pickFor != null) onPick(app.pkg) else launch(context, app.pkg) }, onLongClick = { onMenu(app.pkg) })
             }
+        }
         }
     }
 }
@@ -1531,23 +1718,31 @@ private fun launch(context: Context, pkg: String) {
 }
 
 @Composable
-private fun Launcher(api: Api, config: TvConfig, installed: List<TvApp>, serverApps: JSONArray?, look: Look, onEmpty: (Int) -> Unit, onMenu: (String) -> Unit) {
+private fun Launcher(api: Api, config: TvConfig, installed: List<TvApp>, serverApps: JSONArray?, look: Look, onMenu: (String) -> Unit) {
     val context = LocalContext.current
     val pictures = objs(serverApps).associate { it.optString("pkg") to it.optLong("image") }
+    val apps = launcherApps(config, installed)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gap = 12.dp
         val n = config.slots
-        // Tiles share the width, 16:9 like the apps' own banners, and no taller than 100dp.
+        // Tiles are sized for the chosen number, 16:9 like the apps' own banners, and no taller than 100dp.
         val w: Dp = minOf((maxWidth - gap * (n - 1)) / n, 100.dp * 16 / 9)
-        // Centred as a group, however many tiles there are.
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)) {
-            for (i in 0 until n) {
-                val app = config.apps?.getOrNull(i)?.let { p -> installed.find { it.pkg == p } }
-                AppTile(api, app, pictures[app?.pkg] ?: 0L, w, look, onClick = { if (app != null) launch(context, app.pkg) else onEmpty(i) }, onLongClick = { if (app != null) onMenu(app.pkg) else onEmpty(i) })
+        if (apps.isEmpty()) {
+            Box(Modifier.fillMaxWidth().height(w * 9 / 16), contentAlignment = Alignment.Center) {
+                Text("Add apps here from Apps: hold OK on one and choose Add to the launcher.", color = look.soft, fontSize = 15.sp)
+            }
+        } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)) {
+            // Centred as a group, however many there are.
+            apps.forEach { app ->
+                AppTile(api, app, pictures[app.pkg] ?: 0L, w, look, onClick = { launch(context, app.pkg) }, onLongClick = { onMenu(app.pkg) })
             }
         }
     }
 }
+
+/** The apps on the launcher, in order (ones since uninstalled are left out). */
+private fun launcherApps(config: TvConfig, installed: List<TvApp>): List<TvApp> =
+    (config.apps ?: emptyList()).take(config.slots).filter { it.isNotEmpty() }.mapNotNull { p -> installed.find { it.pkg == p } }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1604,4 +1799,285 @@ private suspend fun loadPicture(context: Context, api: Api, pkg: String, stamp: 
         file.writeBytes(bytes)
     }
     BitmapFactory.decodeFile(file.path)?.asImageBitmap()
+}
+
+// ---- the screen saver, and family updates popping up
+
+/** Whether the screen saver is up, and when the remote was last used. */
+object TvSaver {
+    var on by mutableStateOf(false)
+    @Volatile var lastInput = SystemClock.elapsedRealtime()
+    fun touch() { lastInput = SystemClock.elapsedRealtime() }
+}
+
+private fun saverKindName(kind: String) = when (kind) {
+    "photos" -> "family photos"; "stream" -> "the photo link"; "theme" -> "a theme"; "mix" -> "a mix"; else -> "the family clock"
+}
+
+@Composable
+private fun SaverSheet(config: TvConfig, board: JSONObject?, look: Look, onTry: () -> Unit, onDismiss: () -> Unit) {
+    val photos = board?.optJSONArray("photos")?.length() ?: 0
+    val stream = board?.optBoolean("stream") == true
+    TvSheet("Screen saver", look, onDismiss) { first ->
+        item { Heading("Starts after", look) }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0 to "Off", 5 to "5 min", 10 to "10 min", 15 to "15 min", 30 to "30 min").forEachIndexed { i, (m, t) ->
+                    TvButton(t, look, if (i == 0) Modifier.focusRequester(first) else Modifier, selected = config.saverMinutes == m) { config.setSaver(minutes = m) }
+                }
+            }
+        }
+        item { Heading("Shows", look) }
+        val kinds = listOf(
+            "clock" to "Family clock: the time, drifting slowly, with what's next and who's home",
+            "photos" to "Family photos: ${if (photos == 0) "none yet (add them on the console's TV page)" else "$photos in the album"}",
+            "stream" to "Photo link: ${if (stream) "pictures from the link set on the console" else "none set (add one on the console's TV page)"}",
+            "theme" to "A theme: a slow gradient, a starry sky, or the season",
+            "mix" to "A mix: a few minutes of each",
+        )
+        kinds.forEach { (k, label) ->
+            item(key = "k$k") { MenuRow((if (config.saverKind == k) "✓  " else "     ") + label, look) { config.setSaver(kind = k) } }
+        }
+        if (config.saverKind == "theme" || config.saverKind == "mix") {
+            item { Heading("Theme", look) }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("gradient" to "Gradient", "stars" to "Starry sky", "seasonal" to "The season").forEach { (k, t) ->
+                        TvButton(t, look, selected = config.saverTheme == k) { config.setSaver(theme = k) }
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+        item { TvButton("Try it now", look, onClick = onTry) }
+        item { Text("Any button wakes the TV. Hold OK to ask Steward, even from the screen saver.", Modifier.padding(top = 6.dp), color = look.soft, fontSize = 14.sp) }
+    }
+}
+
+/** The screen saver itself. A mix moves on every three minutes. */
+@Composable
+private fun ScreenSaver(config: TvConfig, board: JSONObject?, api: Api, names: Map<String, String>) {
+    val photoIds = objs(board?.optJSONArray("photos")).map { it.optString("id") }
+    val hasStream = board?.optBoolean("stream") == true
+    var stream by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(hasStream) {
+        if (hasStream) runCatching { api.call("GET", "/api/display/stream") }.onSuccess { stream = strs(it.optJSONArray("pictures")) }
+    }
+    val choices = buildList {
+        add("clock")
+        if (photoIds.isNotEmpty()) add("photos")
+        if (stream.isNotEmpty()) add("stream")
+        add("theme")
+    }
+    var turn by remember { mutableIntStateOf(0) }
+    LaunchedEffect(config.saverKind) { if (config.saverKind == "mix") while (true) { delay(180_000); turn++ } }
+    val kind = when (val k = config.saverKind) {
+        "mix" -> choices[turn % choices.size]
+        "photos" -> if (photoIds.isNotEmpty()) k else "clock"
+        "stream" -> if (stream.isNotEmpty()) k else "clock"
+        else -> k
+    }
+    val shown = remember { MutableTransitionState(false).apply { targetState = true } }
+    AnimatedVisibility(shown, enter = fadeIn(tween(1500))) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            when (kind) {
+                "photos" -> PhotoShow(photoIds.map { "/api/display/photos/$it" }, api)
+                "stream" -> PhotoShow(stream, api)
+                "theme" -> ThemeSaver(config.saverTheme)
+                else -> FamilyClock(board, names)
+            }
+            if (kind != "clock") Text(time(System.currentTimeMillis()), Modifier.align(Alignment.TopEnd).padding(36.dp), color = Color.White.copy(alpha = .8f),
+                fontFamily = Serif, fontSize = 44.sp, style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(Color.Black, blurRadius = 12f)))
+            Text("Hold OK to ask Steward", Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp), color = Color.White.copy(alpha = .35f), fontSize = 13.sp)
+        }
+    }
+}
+
+/** The family clock: big and calm, wandering slowly round the screen so nothing burns in. */
+@Composable
+private fun FamilyClock(board: JSONObject?, names: Map<String, String>) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var spot by remember { mutableStateOf(Offset(.1f, .15f)) }
+    LaunchedEffect(Unit) {
+        val rnd = java.util.Random()
+        var tick = 0
+        while (true) {
+            delay(15_000); now = System.currentTimeMillis()
+            if (++tick % 4 == 0) spot = Offset(rnd.nextFloat(), rnd.nextFloat())
+        }
+    }
+    val x by animateFloatAsState(spot.x, tween(8000, easing = FastOutSlowInEasing), label = "x")
+    val y by animateFloatAsState(spot.y, tween(8000, easing = FastOutSlowInEasing), label = "y")
+    val ink = Color(0xFFE6E1F5).copy(alpha = .85f)
+    val soft = Color(0xFF9A93B5)
+    // What's next: today's (or tomorrow's) next event, and the routine on now or later today.
+    val next = objs(board?.optJSONObject("events")?.optJSONArray("events")).firstOrNull { it.optLong("start") > now || it.optBoolean("allDay") }
+    val routines = board?.optJSONObject("routines")
+    val routineNow = routines?.optJSONObject("now")?.let { n -> n.keys().asSequence().firstOrNull()?.let { n.optString(it) } }
+        ?.let { id -> objs(routines.optJSONArray("routines")).find { it.optString("id") == id }?.optString("title") }
+    val later = objs(board?.optJSONArray("routinesLater")).firstOrNull()
+    val people = objs(board?.optJSONObject("members")?.optJSONArray("members")).filter { it.optString("id") in names }
+    BoxWithConstraints(Modifier.fillMaxSize().padding(40.dp)) {
+        val w = 560.dp
+        val h = 300.dp
+        Column(Modifier.offset { IntOffset(((maxWidth - w).toPx() * x).toInt(), ((maxHeight - h).toPx() * y).toInt()) }.width(w)) {
+            Text(time(now), color = ink, fontFamily = Serif, fontSize = 96.sp, lineHeight = 100.sp)
+            Text(SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date(now)), color = soft, fontSize = 24.sp)
+            Spacer(Modifier.height(14.dp))
+            next?.let {
+                val day = if (CalDays.day(it.optLong("start")) == CalDays.day(now)) "" else SimpleDateFormat("EEEE ", Locale.getDefault()).format(Date(it.optLong("start")))
+                Text("Next: ${it.optString("title")} · $day${if (it.optBoolean("allDay")) "all day" else time(it.optLong("start"))}", color = ink, fontSize = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            when {
+                routineNow != null -> Text("On now: $routineNow", color = ink, fontSize = 20.sp)
+                later != null -> Text("${later.optString("title")} at ${clock(later.optString("at"))}", color = ink, fontSize = 20.sp)
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                people.take(8).forEach { p ->
+                    val home = p.optString("place").equals("home", ignoreCase = true)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(Color(parseColor(p.optString("color"))).copy(alpha = if (home) .9f else .35f)), contentAlignment = Alignment.Center) {
+                            Text(p.optString("emoji").ifEmpty { initialOf(p.optString("name")) }, color = Color.White, fontSize = 18.sp)
+                        }
+                        Text(if (home) "home" else "out", color = soft, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Photos, one at a time, slowly drifting closer (a Ken Burns pan), crossfading every 15 seconds. */
+@Composable
+private fun PhotoShow(urls: List<String>, api: Api) {
+    val context = LocalContext.current
+    val order = remember(urls) { urls.shuffled() }
+    var current by remember { mutableStateOf<ImageBitmap?>(null) }
+    var count by remember { mutableIntStateOf(0) }
+    LaunchedEffect(order) {
+        var i = 0
+        while (order.isNotEmpty()) {
+            loadSaverPicture(context, api, order[i % order.size])?.let { current = it; count++ }
+            i++
+            delay(15_000)
+        }
+    }
+    Crossfade(current to count, animationSpec = tween(2500), label = "photo") { (bmp, n) ->
+        if (bmp != null) {
+            val zoom = remember(n) { Animatable(1f) }
+            LaunchedEffect(n) { zoom.animateTo(1.14f, tween(17_500, easing = LinearEasing)) }
+            val dir = if (n % 2 == 0) 1f else -1f
+            Image(bmp, null, Modifier.fillMaxSize().graphicsLayer {
+                scaleX = zoom.value; scaleY = zoom.value
+                translationX = dir * (zoom.value - 1f) * size.width * .3f
+            }, contentScale = ContentScale.Crop)
+        }
+    }
+}
+
+/** A picture for the screen saver: from the server (the album) or straight from its link. */
+private suspend fun loadSaverPicture(context: Context, api: Api, url: String): ImageBitmap? = withContext(Dispatchers.IO) {
+    runCatching {
+        val bytes = if (url.startsWith("/")) api.bytes(url) else (java.net.URL(url).openConnection() as java.net.HttpURLConnection).run {
+            connectTimeout = 15_000; readTimeout = 30_000; setRequestProperty("User-Agent", "FamLogic TV")
+            try { inputStream.use { it.readBytes() } } finally { disconnect() }
+        }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= 1920) sample *= 2
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+    }.getOrNull()
+}
+
+/** One of the calm themes, drawn frame by frame (only the drawing changes, nothing is laid out again). */
+@Composable
+private fun ThemeSaver(theme: String) {
+    var t by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val start = withFrameMillis { it }
+        while (true) withFrameMillis { t = (it - start) / 1000f }
+    }
+    val month = remember { Calendar.getInstance().get(Calendar.MONTH) }
+    val rnd = remember { java.util.Random(7) }
+    val dots = remember { List(160) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), .5f + rnd.nextFloat(), rnd.nextFloat() * 6.28f, .3f + rnd.nextFloat()) } }
+    Canvas(Modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+        when (theme) {
+            "gradient" -> {
+                val a = (t * 2f) % 360f
+                drawRect(Brush.linearGradient(listOf(Color.hsv((250f + 40f * kotlin.math.sin(a * .0174f)), .5f, .32f), Color.hsv((300f + 50f * kotlin.math.cos(a * .0123f)) % 360f, .45f, .18f)),
+                    start = Offset(0f, 0f), end = Offset(w, h)))
+            }
+            "stars" -> {
+                drawRect(Brush.verticalGradient(listOf(Color(0xFF0B0A1A), Color(0xFF1B1636))))
+                dots.forEach { d ->
+                    val x = ((d[0] + t * .002f * d[4]) % 1f) * w
+                    val alpha = .25f + .75f * kotlin.math.abs(kotlin.math.sin(t * d[4] + d[3]))
+                    drawCircle(Color.White.copy(alpha = alpha), radius = d[2] * 1.6f, center = Offset(x, d[1] * h))
+                }
+            }
+            else -> {
+                // The season: snow in winter, petals in spring, fireflies in summer, leaves in autumn.
+                val (bg, colors) = when (month) {
+                    11, 0, 1 -> listOf(Color(0xFF10172A), Color(0xFF263A5C)) to listOf(Color.White)
+                    2, 3, 4 -> listOf(Color(0xFF1E1830), Color(0xFF3A2948)) to listOf(Color(0xFFF7C6D9), Color(0xFFFFE3EC))
+                    5, 6, 7 -> listOf(Color(0xFF07140F), Color(0xFF15281C)) to listOf(Color(0xFFD9F27A), Color(0xFFF4E36B))
+                    else -> listOf(Color(0xFF1C130C), Color(0xFF3A2414)) to listOf(Color(0xFFE07A2F), Color(0xFFC0392B), Color(0xFFD4A017))
+                }
+                drawRect(Brush.verticalGradient(bg))
+                val summer = month in 5..7
+                dots.take(90).forEachIndexed { i, d ->
+                    val c = colors[i % colors.size]
+                    if (summer) {
+                        val x = (d[0] + .05f * kotlin.math.sin(t * .3f * d[4] + d[3])) * w
+                        val y = (d[1] + .05f * kotlin.math.cos(t * .25f * d[4] + d[3])) * h
+                        val glow = .2f + .8f * kotlin.math.abs(kotlin.math.sin(t * .8f * d[4] + d[3]))
+                        drawCircle(c.copy(alpha = glow * .25f), radius = 9f * d[2], center = Offset(x, y))
+                        drawCircle(c.copy(alpha = glow), radius = 2.6f * d[2], center = Offset(x, y))
+                    } else {
+                        val y = (((d[1] + t * .025f * d[4]) % 1.1f) - .05f) * h
+                        val x = (d[0] + .02f * kotlin.math.sin(t * .6f * d[4] + d[3])) * w
+                        if (month in 2..4 || month in 8..10) {
+                            rotate(t * 40f * d[4] + d[3] * 57f, Offset(x, y)) {
+                                drawOval(c.copy(alpha = .85f), topLeft = Offset(x - 7f * d[2], y - 4f * d[2]), size = Size(14f * d[2], 8f * d[2]))
+                            }
+                        } else drawCircle(c.copy(alpha = .8f), radius = 2.5f * d[2], center = Offset(x, y))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Family updates popping up: the newest feed entry flies up into a corner with a bounce,
+ * stays a few seconds, then drops away.
+ */
+@Composable
+private fun BoxScope.FeedPopup(queue: MutableList<JSONObject>, look: Look, saver: Boolean) {
+    val e = queue.firstOrNull() ?: return
+    val shown = remember(e) { MutableTransitionState(false).apply { targetState = true } }
+    LaunchedEffect(e) {
+        delay(6_000)
+        shown.targetState = false
+        delay(700)
+        queue.remove(e)
+    }
+    AnimatedVisibility(shown, Modifier.align(Alignment.BottomEnd).padding(end = if (saver) 40.dp else 120.dp, bottom = if (saver) 48.dp else 30.dp),
+        enter = slideInVertically(spring(dampingRatio = .5f, stiffness = Spring.StiffnessMediumLow)) { it * 2 } + fadeIn(tween(250)),
+        exit = slideOutVertically(tween(450)) { it * 2 } + fadeOut(tween(400))) {
+        Row(
+            Modifier.widthIn(min = 300.dp, max = 440.dp).shadow(16.dp, RoundedCornerShape(22.dp)).clip(RoundedCornerShape(22.dp)).background(if (saver) Color(0xEE1C1A29) else look.card).padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(feedEmoji(e.optString("type")), fontSize = 28.sp)
+            Column(Modifier.padding(start = 14.dp)) {
+                Text("${e.optString("name")} ${feedWhat(e)}", color = if (saver) Color(0xFFE6E1F5) else look.ink, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(time(e.optLong("time")), color = if (saver) Color(0xFF9A93B5) else look.soft, fontSize = 13.sp)
+            }
+        }
+    }
 }

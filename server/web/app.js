@@ -2921,12 +2921,75 @@ async function renderHomestead(box, force = false) {
 // Corkboard: the TV app and family displays. Parents start quiet time and send
 // messages; the displays themselves are paired on the Devices page.
 let corkDrawn = "";
+// The TV's screen saver: the family album (drag photos, or a whole folder, onto the box) and a photo link.
+function screensaverPanel(box, b) {
+  const status = el("p", { class: "muted small" });
+  const upload = async (files) => {
+    const list = [...files].filter((f) => /^image\//.test(f.type));
+    if (!list.length) { status.textContent = "Those aren't pictures."; return; }
+    let done = 0, failed = 0;
+    for (const f of list) {
+      status.textContent = `Adding ${done + failed + 1} of ${list.length}…`;
+      try {
+        const res = await fetch(`/api/display/photos?name=${encodeURIComponent(f.name)}`, { method: "POST", body: f, credentials: "same-origin" });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+        done++;
+      } catch (err) { failed++; status.textContent = err.message; }
+    }
+    status.textContent = `Added ${done} ${done === 1 ? "photo" : "photos"}` + (failed ? `; ${failed} didn't go` : "") + ".";
+    renderCorkboard(box, true);
+  };
+  const files = el("input", { type: "file", accept: "image/*", multiple: "", hidden: "" });
+  const folder = el("input", { type: "file", accept: "image/*", multiple: "", webkitdirectory: "", hidden: "" });
+  files.addEventListener("change", () => upload(files.files));
+  folder.addEventListener("change", () => upload(folder.files));
+  const pickFiles = el("button", { type: "button", class: "secondary" }, "Choose photos");
+  pickFiles.addEventListener("click", () => files.click());
+  const pickFolder = el("button", { type: "button", class: "secondary" }, "Choose a folder");
+  pickFolder.addEventListener("click", () => folder.click());
+  const drop = el("div", { class: "dropzone" }, el("div", {}, "Drop photos or a folder here"), el("div", { class: "row" }, pickFiles, pickFolder), files, folder, status);
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", async (e) => {
+    e.preventDefault(); drop.classList.remove("over");
+    // A dropped folder: read every picture inside it.
+    const items = [...(e.dataTransfer.items || [])].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+    if (items.some((it) => it.isDirectory)) {
+      const out = [];
+      const walk = (entry) => new Promise((res) => {
+        if (entry.isFile) entry.file((f) => { out.push(f); res(); }, () => res());
+        else { const r = entry.createReader(); const all = []; const read = () => r.readEntries(async (ents) => { if (!ents.length) { for (const x of all) await walk(x); res(); } else { all.push(...ents); read(); } }, () => res()); read(); }
+      });
+      for (const it of items) await walk(it);
+      upload(out);
+    } else upload(e.dataTransfer.files);
+  });
+  const photos = b.photos || [];
+  const grid = el("div", { class: "photo-grid" }, ...photos.map((p) => {
+    const rm = el("button", { type: "button", class: "photo-rm", "aria-label": "Remove" }, "×");
+    rm.addEventListener("click", async () => { try { await api("DELETE", `/api/display/photos/${p.id}`); renderCorkboard(box, true); } catch (err) { alert(err.message); } });
+    return el("div", { class: "photo" }, el("img", { src: `/api/display/photos/${p.id}`, alt: p.name || "", loading: "lazy" }), rm);
+  }));
+  const link = el("input", { placeholder: "https://… (an Immich shared album, a photo feed, or a picture link)" });
+  const linkForm = el("form", { class: "upkeep-add" }, el("label", {}, "Photo link", link),
+    el("div", { class: "row" }, el("button", { type: "submit", class: "tonal" }, "Use this link"), b.stream ? (() => { const x = el("button", { type: "button", class: "link" }, "Stop using the link"); x.addEventListener("click", async () => { await api("PUT", "/api/display/stream", { url: "" }).catch(() => {}); renderCorkboard(box, true); }); return x; })() : null));
+  linkForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try { await api("PUT", "/api/display/stream", { url: link.value.trim() }); renderCorkboard(box, true); } catch (err) { alert(err.message); }
+  });
+  return [el("h2", {}, "Screen saver"),
+    el("p", { class: "muted small" }, "When the TV sits idle, it can show the family's photos, a photo link, a family clock or a calm theme. Choose which, and when, in the TV's Settings."),
+    drop, photos.length ? el("p", { class: "muted small" }, `${photos.length} ${photos.length === 1 ? "photo" : "photos"} in the album.`) : null, grid,
+    el("p", { class: "muted small" }, b.stream ? "A photo link is in use." : "Or show pictures from a link: an Immich shared album (share/…), an RSS or Atom feed of photos, a web page of pictures, or a single picture that changes (like a webcam)."),
+    linkForm];
+}
+
 async function renderCorkboard(box, force = false) {
   if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
   let b;
   try { b = await api("GET", "/api/display/board"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   if (box.dataset.module !== "display") return;
-  const sig = JSON.stringify([b.quiet, b.messages, b.apps]);
+  const sig = JSON.stringify([b.quiet, b.messages, b.apps, b.photos, b.stream]);
   if (!force && sig === corkDrawn && box.childElementCount) return;
   corkDrawn = sig;
   const act = async (method, path, body) => { try { await api(method, path, body); renderCorkboard(box, true); } catch (err) { alert(err.message); } };
@@ -2976,6 +3039,7 @@ async function renderCorkboard(box, force = false) {
       return el("li", {}, pic, el("div", { class: "grow" }, el("div", { class: "title" }, a.label), el("div", { class: "sub" }, a.pkg)), file, up, rm);
     })));
   }
+  if (b.canControl) parts.push(...screensaverPanel(box, b));
   parts.push(el("h2", {}, "Setting up a TV"), el("p", { class: "muted small" }, "Install famlogic-tv.apk on the TV (with Obtainium or a file manager). On the Devices page, choose Pair a family display, then type the server address and the code on the TV. To make FamLogic the TV's home screen on Google TV, see the guide in the wiki (Corkboard)."));
   box.replaceChildren(...parts.filter(Boolean));
 }

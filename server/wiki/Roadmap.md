@@ -175,6 +175,11 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.48.0: The TV's screen saver
+- **Screen saver:** after the TV sits idle, a family clock (drifting, with what's next and who's home), the family photo album (drag photos or a folder onto the console), a photo link (an Immich shared album, a photo feed, a webcam), calm themes (gradient, starry sky, the season), or a mix. Any button wakes it; hold OK to ask Steward.
+- **Family updates** pop up in a corner as they happen, over the screen saver and (if you like) the home screen.
+- Tidier TV: no empty launcher tiles, apps on the launcher aren't repeated in Apps, Settings in popups (Quick Access Modules, Hidden apps, Remote buttons, Screen saver), and no more hopping in the app grid.
+
 ### ✅ 0.47.0: Huddle, family meetings
 - **Huddle:** a parent writes a short agenda (or asks Steward to), and the family clicks through it together on the TV, a tablet or the console: hand out jobs or ask for volunteers, keep notes, then send the jobs to the Docket. Each meeting is a note in the vault's Meetings/ folder, so it's the minutes too.
 - On the TV, the side buttons share the height, so more of them fit.
@@ -193,6 +198,9 @@ In this order (each is finished before the next starts):
 - **Home and the remote:** an optional accessibility helper lets FamLogic take over from Google TV's own home screen, start when the TV turns on, and give remote buttons new jobs.
 - **Fits every TV:** the screen stretches to fit any resolution or display size, with a setting for TVs that cut off the edges.
 - **Messages** rise in with a soft chime, and can be read aloud; a wide FamLogic banner for the TV's app row; displays are named by their own name in the console.
+
+### 💡 Further out
+- **Cameras (RTSP):** the family's cameras (doorbell, nursery, driveway) on the TV and in the app; a camera's view popping up on the TV when the doorbell rings.
 
 ### 💡 Future modules (switch-on placeholders since 0.39.0: Outings, Garage, Ledger, Menagerie, Who's Who, Homestead, Rolodex; Steward keeps their notes until each is built)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.

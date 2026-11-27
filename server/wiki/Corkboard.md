@@ -9,8 +9,9 @@ when the sun rises and sets).
 
 Down the right side are buttons for the **Map** (where everyone is), the **Feed** (today so far),
 **Steward** (ask by talking into the remote), **Datebook** (what's coming up) and **Pantry**
-(meals) and **Meeting** ([Huddle](Huddle.md), family meetings), then **Apps** (every app on the TV) and **Settings**. Choose which buttons show in
-**Settings**.
+(meals) and **Huddle** ([family meetings](Huddle.md)), then **Apps** (every app on the TV) and **Settings**. These are the
+**Quick Access Modules**: choose which show in **Settings → Quick Access Modules**. Steward also has its own round button at
+the bottom right, always there. (With Plain Labels switched on, they're called Map, Calendar, Meals and Meetings.)
 
 - **Map:** the family down the left; choose someone to zoom to them, or Everyone.
 - **Feed:** today so far, across the screen. Choose an entry to go where it happened (the map,
@@ -49,9 +50,10 @@ can't post. On the console's Devices page it's listed by its own name ("Living r
 
 ## The TV's apps
 
-The launcher along the bottom shows from 1 to 6 tiles (choose how many in **Settings**). Each
-tile is one of the TV's apps, shown as one big picture. It starts with Jellyfin, Spotify and
-SmartTube if they're installed; an empty tile (+) asks which app to put there.
+The launcher along the bottom holds up to 1 to 6 apps (choose how many in **Settings**), each shown as
+one big picture and centred as a group. It starts with Jellyfin, Spotify and SmartTube if they're
+installed. To add one, open **Apps**, hold OK on it and choose **Add to the launcher**. Apps on the
+launcher aren't listed in Apps again.
 
 **Apps** (on the right) shows every app on the TV. Press OK to open one. **Press and hold OK** on
 an app, there or on the launcher, for more: add it to the launcher or remove it, move it left or
@@ -62,8 +64,27 @@ TV's files (you'll need a file manager app, such as FX File Explorer), or a pare
 on the **TV** page of the web console. A wide picture works best, 16:9 like 1280 × 720. **Use
 the app's own picture** puts it back.
 
-**Hide apps:** hold OK on an app in Apps and choose **Hide from Apps**. Hidden apps are listed in
-**Settings → Hidden apps**, where **Show** brings them back.
+**Hide apps:** hold OK on an app in Apps and choose **Hide from Apps**. **Settings → Hidden apps**
+lists them; choose one to show it again.
+
+## The screen saver
+
+When the TV sits idle (5, 10, 15 or 30 minutes; or Off), the screen saver comes up. Any button
+wakes the TV; **hold OK to ask Steward**, even from the screen saver. Choose it in **Settings →
+Screen saver**:
+
+- **Family clock:** a big clock that drifts slowly round the screen (so nothing burns in), with
+  the next event, the routine on now or next, and everyone's picture, bright when they're home.
+- **Family photos:** the album, drifting slowly closer and crossfading. Add photos on the console's
+  **TV** page: drag photos, or a whole folder, onto it (or choose them).
+- **Photo link:** pictures from a link set on the console's TV page: an Immich shared album, an
+  RSS or Atom feed of photos, a web page of pictures, or a single picture that changes (a webcam).
+- **A theme:** a slow gradient, a starry sky, or the season (snow, petals, fireflies or leaves).
+- **A mix:** a few minutes of each.
+
+**Family updates:** as things happen (someone arrives home, a chore is done), they pop up in a
+corner for a few seconds. Switch them on for the screen saver, the home screen, or both, in
+**Settings**.
 
 ## Steward on the TV
 
@@ -87,9 +108,10 @@ FamLogic gets round that the way other launchers do, with an accessibility helpe
    - **Override current launcher:** when the TV's own home screen opens (pressing Home, or
      after leaving an app), FamLogic opens instead. Google TV stays installed underneath.
    - **Start when the TV turns on**, if you like.
-4. **Remote buttons:** choose **Add a button**, press a button on the remote (the Netflix or
-   YouTube button, say), then pick what it should do: open an app, open FamLogic, or ask Steward.
-   The arrows, OK and Back can't be changed, so the remote always works.
+4. **Remote buttons:** open it, choose **Add a button**, press a button on the remote (the Netflix
+   or YouTube button, say), then pick what it should do: open an app, open FamLogic, or ask
+   Steward. The buttons you've changed are listed there too, to remove. The arrows, OK and Back
+   can't be changed, so the remote always works.
 
 If the switch in Accessibility settings is greyed out ("restricted setting"), open the TV's
 **Settings → Apps → FamLogic**, choose **Allow restricted settings** from its menu, and try

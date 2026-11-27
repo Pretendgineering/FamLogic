@@ -28,6 +28,8 @@ type DisplayState struct {
 	QuietBy    string           `json:"quietBy,omitempty"`
 	Messages   []DisplayMessage `json:"messages,omitempty"` // newest last, the last 20
 	Apps       []DisplayApp     `json:"apps,omitempty"`     // the apps on the TVs' launchers, for pictures from the console
+	Photos     []DisplayPhoto   `json:"photos,omitempty"`   // the screen saver's album
+	Stream     string           `json:"stream,omitempty"`   // the screen saver's photo link
 }
 
 // DisplayApp is an app on a TV's launcher. Image is when a picture was uploaded
@@ -57,6 +59,7 @@ func (s *Store) Display() DisplayState {
 	d := *s.d.Display
 	d.Messages = append([]DisplayMessage{}, d.Messages...)
 	d.Apps = append([]DisplayApp{}, d.Apps...)
+	d.Photos = append([]DisplayPhoto{}, d.Photos...)
 	return d
 }
 
@@ -151,6 +154,8 @@ func (s *Server) handleDisplayBoard(w http.ResponseWriter, r *http.Request, me *
 		"steward":    s.mayTalkToSteward(me),
 		"modules":    enabledIDs(on),
 		"apps":       st.Apps,
+		"photos":     st.Photos,
+		"stream":     st.Stream != "",
 		"members":    s.callAs(me, s.handleMembers, "GET", "/api/members?since="+strconv.FormatInt(now.UnixMilli()*2, 10), nil, nil),
 		"feed":       s.callAs(me, s.handleFeed, "GET", fmt.Sprintf("/api/feed?from=%d&to=%d", midnight.UnixMilli(), now.UnixMilli()+60000), nil, nil),
 	}
