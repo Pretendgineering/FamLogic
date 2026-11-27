@@ -98,7 +98,7 @@ var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "
 	"outings", "garage", "ledger", "pets", "profiles", "homestead", "contacts"}
 
 // "2x1@0": 2 columns, 1 row, in the first column.
-var gridSize = regexp.MustCompile(`^[1-5]x[1-3](@[0-4])?$`) // up to 5 across; 3 tall: the map only (the app keeps others to 2)
+var gridSize = regexp.MustCompile(`^[1-5]x[1-5](@[0-4])?$`) // up to 5 across and 5 tall (one-button tiles: the app keeps them to 2 x 1)
 
 var convoTile = regexp.MustCompile(`^convo\.[A-Za-z0-9_-]{1,64}$`)
 

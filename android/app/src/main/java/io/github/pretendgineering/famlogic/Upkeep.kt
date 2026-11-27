@@ -156,7 +156,7 @@ fun UpkeepScreen(prefs: Prefs) {
         },
         floatingActionButton = {
             if (data?.canEdit == true || data?.level == "add") {
-                ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Add a chore") })
+                ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Add a chore") }, modifier = Modifier.pageFab())
             }
         },
     ) { padding ->

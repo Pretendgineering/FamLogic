@@ -175,7 +175,7 @@ fun HuddleScreen(prefs: Prefs, onBack: () -> Unit) {
     }
     Scaffold(
         topBar = { TopAppBar(title = { Text(Access.name("meetings")) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }) },
-        floatingActionButton = { if (d?.canEdit == true) ExtendedFloatingActionButton(onClick = { making = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("New meeting") }) },
+        floatingActionButton = { if (d?.canEdit == true) ExtendedFloatingActionButton(onClick = { making = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("New meeting") }, modifier = Modifier.pageFab()) },
     ) { pad ->
         if (d == null) { Text("Loading…", Modifier.padding(pad).padding(16.dp)); return@Scaffold }
         LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

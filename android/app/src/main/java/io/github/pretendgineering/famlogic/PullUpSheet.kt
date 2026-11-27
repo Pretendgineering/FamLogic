@@ -134,6 +134,7 @@ fun PullUpSheet(
 
         Surface(
             modifier = Modifier.offset { IntOffset(0, offset.roundToInt()) }
+                .liftsSteward() // Steward's button rides on top of the sheet
                 .fillMaxWidth()
                 .height(with(density) { (h - offset).coerceAtLeast(0f).toDp() })
                 .nestedScroll(nested),

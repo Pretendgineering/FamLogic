@@ -251,7 +251,7 @@ private fun ConversationList(
         },
         floatingActionButton = {
             if (Access.can("chat_start") && expanded == null && !searching) {
-                LargeFloatingActionButton(onClick = { newChat = true }) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
+                LargeFloatingActionButton(onClick = { newChat = true }, modifier = Modifier.pageFab()) { Icon(Icons.Filled.Add, contentDescription = "New chat") }
             }
         },
     ) { padding ->
@@ -924,7 +924,7 @@ private fun ConversationView(
                 }
             }
             if (canPost) {
-                Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().liftsSteward().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (canTalk && !talkBar) {
                         TalkButton(prefs, 48.dp, onText = { said ->
                             if (said.isEmpty()) android.widget.Toast.makeText(context, "Didn't catch that. Hold, talk, then let go.", android.widget.Toast.LENGTH_SHORT).show()

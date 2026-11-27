@@ -93,7 +93,7 @@ object Access {
     fun defaultHome(): List<String> = when {
         isDisplay -> listOf("map:big", "chat:half", "calendar:half", "todos:half", "chores:half", "meals:half")
         younger -> listOf("map:wide", "chat:wide", "sos:wide")
-        else -> listOf("map:wide", "chat:wide", "checkin:half", "sos:half", "calendar:half", "todos:half", "chores:half", "meals:half")
+        else -> listOf("map:wide", "chat:wide", "checkin:2x1", "sos:2x1", "calendar:half", "todos:half", "chores:half", "meals:half")
     }
 
     /** A module's name: its own (Thereabouts, Chitchat…) or the plain one (Map, Chat…). */

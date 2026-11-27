@@ -170,6 +170,7 @@ fun HomeScreen(
                 val res = api.members(since = prefs.eventCursor)
                 Alerts.handle(context, res.events)
                 Access.update(context, res)
+                Steward.noteFeatures(prefs, res.features)
                 members = res.members.sortedBy { it.id == prefs.memberId } // you last
                 familyName = res.server.name
                 tileUrl = res.server.tileUrl
@@ -301,8 +302,10 @@ fun HomeScreen(
                 )
             }
             val tile: @Composable (HomeTile, Dp) -> Unit = { t, h ->
-                val tiny = LocalTileWidth.current < ICON_ONLY_WIDTH && t.id != "map"
-                if (tiny && t.id != "sos") IconTile(t.id, h) {
+                // One-button tiles: just the icon at one column, its name too at two. Others
+                // turn into a plain shortcut only when they're too narrow to show anything.
+                val tiny = (if (isButtonTile(t.id)) t.w(cols) == 1 else LocalTileWidth.current < ICON_ONLY_WIDTH) && t.id != "map"
+                if (tiny && t.id != "sos" && !t.id.startsWith("convo.")) IconTile(t.id, h) {
                     when (t.id) {
                         "chat" -> onOpen(Tab.Chat)
                         "checkin" -> confirmCheckIn = true
@@ -355,7 +358,7 @@ fun HomeScreen(
                     "ride" -> ButtonTile(if (Access.pictures) "Pick me up" else Access.name("ride"), h, big, picture = { Pictures.Pickup(it) }, icon = tileIcon("ride")) { shortcut = "ride" }
                     "convo.new" -> SimpleTile(Access.name(t.id), "Choosing a chat…", h, big, icon = tileIcon(t.id)) {}
                     else -> if (t.id.startsWith("convo.")) {
-                        ConvoTile(chats.find { it.id == t.id.removePrefix("convo.") }, members, prefs.memberId, big, h, onOpenChat)
+                        ConvoTile(chats.find { it.id == t.id.removePrefix("convo.") }, members, prefs.memberId, big, h, onOpenChat, label = t.w(cols) > 1)
                     }
                 }
             }
@@ -465,14 +468,16 @@ object HomeEditor {
  * width and two rows. (The map shows its title bar only at 2 by 2 or bigger.)
  */
 /** Rows a tile may be tall: the map up to 3, everything else 2. */
-fun maxH(id: String) = if (id == "map") 3 else if (isButtonTile(id)) 1 else 2
+fun maxH(id: String) = if (isButtonTile(id)) 1 else 5
 
 /**
- * Tiles that only do one thing (send, open a pop-up, or open their page): a row tall at
- * most and two columns wide at most, so no button takes half the screen for nothing.
+ * Tiles that only do one thing (send, or open a pop-up): one column (just the icon) or
+ * two (the icon and its name), and a row tall, so no button takes half the screen for
+ * nothing. Every other tile goes from 1 x 1 up to 5 x 5 (as wide as the grid allows),
+ * taller than wide if you like.
  */
 fun isButtonTile(id: String) = id in BUTTON_TILES || id.startsWith("convo.")
-val BUTTON_TILES = setOf("sos", "checkin", "ride", "nudges", "display", "steward", "profiles", "pets", "homestead", "garage", "meetings", "outings", "ledger", "contacts")
+val BUTTON_TILES = setOf("sos", "checkin", "ride", "nudges", "steward")
 fun maxW(id: String, cols: Int) = if (isButtonTile(id)) minOf(2, cols) else cols
 
 /** The width of the tile being drawn (for tiles that turn into just an icon when narrow). */
@@ -774,6 +779,7 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
         return when (resizeEdge) {
             'r' -> Rect(r.left, r.top, maxOf(finger.x, r.left + min), r.bottom)
             'l' -> Rect(minOf(finger.x, r.right - min), r.top, r.right, r.bottom)
+            'c' -> Rect(r.left, r.top, maxOf(finger.x, r.left + min), maxOf(finger.y, r.top + min))
             else -> Rect(r.left, r.top, r.right, maxOf(finger.y, r.top + min))
         }
     }
@@ -790,7 +796,11 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
             'l' -> (spot.col + spot.w - w).coerceAtLeast(0) // grows to the left: the right edge stays put
             else -> spot.col.coerceAtMost(cols - w)
         }
-        return t.sized(if (resizeEdge == 'b') spot.w else w, if (resizeEdge == 'b') h else spot.h, col)
+        return when (resizeEdge) {
+            'b' -> t.sized(spot.w, h, col)
+            'c' -> t.sized(w, h, col) // the corner: both at once
+            else -> t.sized(w, spot.h, col)
+        }
     }
     var ghostSeen by remember { mutableStateOf("") }
     fun stretch() {
@@ -877,8 +887,10 @@ private fun TileBoard(tiles: List<HomeTile>, unit: Dp, cols: Int, edit: TileEdit
             val sel = selected
             // Bigger targets near the screen's edges, where Android's back gesture lives.
             val screenRight = boardAt.x + boardSize.width
-            fun reach(r: Rect) = if (r.left - boardAt.x < 48.dp.toPx() || screenRight - r.right < 48.dp.toPx()) 26.dp.toPx() else 14.dp.toPx()
-            val grabbed = if (sel != null) edges.entries.firstOrNull { it.value.inflate(reach(it.value)).contains(at) }?.key else null
+            fun reach(r: Rect) = if (r.left - boardAt.x < 48.dp.toPx() || screenRight - r.right < 48.dp.toPx()) 30.dp.toPx() else 22.dp.toPx()
+            // Of the handles in reach, the nearest (the corner wins over the edges beside it).
+            val grabbed = if (sel != null) edges.entries.filter { it.value.inflate(reach(it.value)).contains(at) }
+                .minByOrNull { (it.value.center - at).getDistance() }?.key else null
             if (sel != null && grabbed != null) {
                 var moved = false
                 while (true) {
@@ -1039,12 +1051,13 @@ private fun androidx.compose.foundation.layout.BoxScope.EditChrome(
     if (!selected) return
     DisposableEffect(id) { onDispose { edges.clear() } }
     val d = androidx.compose.ui.platform.LocalDensity.current.density
-    // Grab bars: a thicker pill in the middle of each edge.
+    // Grab bars: a thicker pill in the middle of each edge (shorter on small tiles), and a
+    // round handle on the corner that changes both width and height.
     @Composable
     fun Bar(edge: Char, align: Alignment, vertical: Boolean) {
         Box(
             Modifier.align(align).padding(3.dp)
-                .size(if (vertical) 8.dp else 44.dp, if (vertical) 44.dp else 8.dp)
+                .size(if (vertical) 8.dp else 32.dp, if (vertical) 32.dp else 8.dp)
                 .clip(RoundedCornerShape(4.dp)).background(accent)
                 .onGloballyPositioned { edges[edge] = it.boundsInRoot() }
                 // Swiping from a screen edge here resizes the tile instead of going Back.
@@ -1055,6 +1068,13 @@ private fun androidx.compose.foundation.layout.BoxScope.EditChrome(
     Bar('l', Alignment.CenterStart, vertical = true)
     Bar('r', Alignment.CenterEnd, vertical = true)
     Bar('b', Alignment.BottomCenter, vertical = false)
+    if (maxH(id) > 1) Box(
+        Modifier.align(Alignment.BottomEnd).padding(2.dp).size(22.dp).clip(CircleShape).background(accent)
+            .border(3.dp, MaterialTheme.colorScheme.surface, CircleShape)
+            .onGloballyPositioned { edges['c'] = it.boundsInRoot() }
+            .systemGestureExclusion { c -> val m = 24f * d; Rect(Offset(-m, -m), androidx.compose.ui.geometry.Size(c.size.width + 2 * m, c.size.height + 2 * m)) }
+            .semantics { contentDescription = "Drag to change its size" },
+    )
     Box(
         Modifier.align(Alignment.TopEnd).padding(5.dp).size(30.dp).clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface).border(1.dp, accent.copy(alpha = .5f), CircleShape)
@@ -1222,7 +1242,7 @@ private fun ConvoFace(c: ChatConversation, members: List<Member>, me: String, si
  * to find, and its name. A tap opens that chat.
  */
 @Composable
-private fun ConvoTile(c: ChatConversation?, members: List<Member>, me: String, big: Boolean, height: Dp, onOpenChat: (String) -> Unit) {
+private fun ConvoTile(c: ChatConversation?, members: List<Member>, me: String, big: Boolean, height: Dp, onOpenChat: (String) -> Unit, label: Boolean = true) {
     Column(
         Modifier.fillMaxWidth().height(height).then(if (c != null) Modifier.clickable(onClickLabel = "Open ${c.title}") { onOpenChat(c.id) } else Modifier).padding(10.dp),
         verticalArrangement = Arrangement.Center,
@@ -1234,10 +1254,12 @@ private fun ConvoTile(c: ChatConversation?, members: List<Member>, me: String, b
             return@Column
         }
         Box {
-            ConvoFace(c, members, me, if (Access.younger || big) 84 else 64)
+            // One column: the face alone, as big as fits.
+            val fit = ((LocalTileWidth.current.takeIf { it != Dp.Unspecified } ?: 84.dp).coerceAtMost(height) * .62f).value.toInt()
+            ConvoFace(c, members, me, if (!label) fit else if (Access.younger || big) 84 else 64)
             if (c.unread > 0) androidx.compose.material3.Badge(Modifier.align(Alignment.TopEnd), containerColor = MaterialTheme.colorScheme.primary) { Text("${c.unread}") }
         }
-        Text(c.title, Modifier.padding(top = 6.dp), style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (label) Text(c.title, Modifier.padding(top = 6.dp), style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

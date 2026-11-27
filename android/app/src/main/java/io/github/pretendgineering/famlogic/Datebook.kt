@@ -142,7 +142,7 @@ fun CalendarScreen(prefs: Prefs) {
             }
         },
         floatingActionButton = {
-            if (data?.canEdit == true) ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Add an event") })
+            if (data?.canEdit == true) ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Add an event") }, modifier = Modifier.pageFab())
         },
     ) { padding ->
         if (data == null) {

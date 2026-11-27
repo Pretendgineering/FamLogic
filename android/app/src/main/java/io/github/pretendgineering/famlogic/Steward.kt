@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -68,6 +71,17 @@ object Steward {
         runCatching { Pantry.refresh(prefs, Pantry.data?.week.orEmpty()) }
     }
 
+    /** Bumped when the server's features change (Steward switched on or off in the console). */
+    var featuresSeen by androidx.compose.runtime.mutableIntStateOf(0)
+
+    /** Keeps the server's features up to date, from any screen that hears them. */
+    fun noteFeatures(prefs: Prefs, features: Set<String>) {
+        if (features.isNotEmpty() && features != prefs.serverFeatures) {
+            prefs.serverFeatures = features
+            featuresSeen++
+        }
+    }
+
     fun available(prefs: Prefs): Boolean {
         val f = prefs.serverFeatures
         return "steward" in f && prefs.access != "dependent" && (!Access.isChild || "steward-kids" in f)
@@ -89,7 +103,8 @@ private fun parseSteward(o: JSONObject): StewardState {
 }
 
 suspend fun Api.steward(): StewardState = parseSteward(call("GET", "/api/steward"))
-suspend fun Api.stewardSay(text: String, page: String = ""): StewardState = parseSteward(call("POST", "/api/steward", JSONObject().put("text", text).put("page", page)))
+// A small model on a small home server can take a few minutes; the server waits up to five.
+suspend fun Api.stewardSay(text: String, page: String = ""): StewardState = parseSteward(call("POST", "/api/steward", JSONObject().put("text", text).put("page", page), timeoutMs = 360_000))
 suspend fun Api.stewardUndo(): StewardState = parseSteward(call("POST", "/api/steward/undo"))
 suspend fun Api.stewardClear() { call("DELETE", "/api/steward") }
 
@@ -199,20 +214,72 @@ fun StewardChat(prefs: Prefs, page: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * Steward from any screen: a small round button in the corner (not on Chat, which has
- * its own voice, or the map) that opens Steward in a sheet, knowing which screen it's on.
- * Only when Steward is set up for this person.
+ * What's at the bottom of the screen, so Steward's button keeps out of its way: a
+ * screen's own button ("Add a chore") it moves over to sit beside, and things it
+ * sits above (the message box in a chat, the map's pull-up sheet).
+ */
+object FabSpot {
+    val widths = androidx.compose.runtime.mutableStateMapOf<Any, Int>() // a screen's own button, px wide
+    val tops = androidx.compose.runtime.mutableStateMapOf<Any, Float>() // the top of something at the bottom, px from the screen's top
+}
+
+/** On a screen's own floating button: Steward's button slides over to sit beside it. */
+@Composable
+fun Modifier.pageFab(): Modifier {
+    val key = androidx.compose.runtime.remember { Any() }
+    androidx.compose.runtime.DisposableEffect(key) { onDispose { FabSpot.widths.remove(key) } }
+    return this.onGloballyPositioned { FabSpot.widths[key] = it.size.width }
+}
+
+/** On something along the bottom (a message box, a sheet): Steward's button sits above it. */
+@Composable
+fun Modifier.liftsSteward(): Modifier {
+    val key = androidx.compose.runtime.remember { Any() }
+    androidx.compose.runtime.DisposableEffect(key) { onDispose { FabSpot.tops.remove(key) } }
+    return this.onGloballyPositioned { FabSpot.tops[key] = it.boundsInRoot().top }
+}
+
+/**
+ * Steward from any screen: a round button in the bottom-right corner, over
+ * everything (the page scrolls by under it). It glides over beside a screen's own
+ * button, and above a chat's message box or the map's sheet. Only when Steward is
+ * switched on and set up for this person; a family doing everything by hand never
+ * sees it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun androidx.compose.foundation.layout.BoxScope.StewardButton(prefs: Prefs, page: String) {
+    Steward.featuresSeen // read, so the button comes and goes when the server's features change
     if (!Steward.available(prefs)) return
-    androidx.compose.material3.SmallFloatingActionButton(
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var boxBottom by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var boxHeight by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val beside = FabSpot.widths.values.maxOrNull() ?: 0
+    val top = FabSpot.tops.values.filter { it < boxBottom }.minOrNull()
+    val lift = if (top != null && boxBottom > 0f) boxBottom - top else 0f
+    val glide = androidx.compose.animation.core.spring<androidx.compose.ui.unit.Dp>(dampingRatio = .72f, stiffness = 320f)
+    val dx by androidx.compose.animation.core.animateDpAsState(if (beside > 0) -(with(density) { beside.toDp() } + 12.dp) else 0.dp, glide, label = "stewardX")
+    // Following a sheet that's being dragged: quick, so it keeps up.
+    val dy by androidx.compose.animation.core.animateDpAsState(-with(density) { lift.toDp() },
+        androidx.compose.animation.core.spring(stiffness = 1400f), label = "stewardY")
+    Box(Modifier.matchParentSize().onGloballyPositioned { boxBottom = it.boundsInRoot().bottom; boxHeight = it.size.height.toFloat() })
+    // A sheet pulled most of the way up: the button steps aside until it comes down again.
+    val away = boxHeight > 0f && lift > boxHeight * .55f
+    androidx.compose.animation.AnimatedVisibility(
+        visible = !away,
+        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).offset(x = dx, y = dy),
+        enter = androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut(),
+    ) {
+    androidx.compose.material3.FloatingActionButton(
         onClick = { Steward.sheetOpen = true },
-        modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+        shape = androidx.compose.foundation.shape.CircleShape,
         containerColor = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) { Icon(FamIcons.Spark, contentDescription = "Ask ${Access.name("steward")}") }
+    ) {
+        Icon(FamIcons.Spark, contentDescription = "Ask ${Access.name("steward")}", modifier = Modifier.size(if (Access.pictures || Access.big) 30.dp else 24.dp))
+    }
+    }
     if (Steward.sheetOpen) {
         androidx.compose.material3.ModalBottomSheet(onDismissRequest = { Steward.sheetOpen = false }, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             Text(Access.name("steward"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp))

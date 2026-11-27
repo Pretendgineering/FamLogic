@@ -245,7 +245,7 @@ fun MapScreen(
             res.members.find { it.id == prefs.memberId }?.let { prefs.role = it.role; prefs.access = it.access; if (it.access == "display") prefs.deviceMode = "display" }
             Access.update(context, res)
             if (res.features != prefs.serverFeatures) {
-                prefs.serverFeatures = res.features
+                Steward.noteFeatures(prefs, res.features)
                 onFeatures(res.features)
             }
             serverVersion = res.server.version

@@ -891,7 +891,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
     }
 
     /** Any call, for features kept in their own files (Steward). */
-    suspend fun call(method: String, path: String, body: JSONObject? = null): JSONObject = request(method, path, body, readTimeoutMs = 130_000)
+    suspend fun call(method: String, path: String, body: JSONObject? = null, timeoutMs: Int = 130_000): JSONObject = request(method, path, body, readTimeoutMs = timeoutMs)
 
     private suspend fun request(
         method: String,

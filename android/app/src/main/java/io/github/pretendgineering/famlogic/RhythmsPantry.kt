@@ -102,7 +102,7 @@ fun RoutinesScreen(prefs: Prefs) {
     val big = Access.big || Access.younger
     Scaffold(
         topBar = { TopAppBar(title = { Text(Access.name("routines")) }) },
-        floatingActionButton = { if (data?.canEdit == true) ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("New routine") }) },
+        floatingActionButton = { if (data?.canEdit == true) ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("New routine") }, modifier = Modifier.pageFab()) },
     ) { padding ->
         if (data == null) { Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) { Text("Loading…") }; return@Scaffold }
         val mine = data.routines.find { it.list.id == data.now[prefs.memberId] }

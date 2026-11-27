@@ -137,7 +137,7 @@ fun ListsScreen(prefs: Prefs, openList: String? = null) {
         topBar = { TopAppBar(title = { Text(Access.name("todos")) }) },
         floatingActionButton = {
             if (data?.canEdit == true || data?.canAdd == true) {
-                ExtendedFloatingActionButton(onClick = { making = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("New list") })
+                ExtendedFloatingActionButton(onClick = { making = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("New list") }, modifier = Modifier.pageFab())
             }
         },
     ) { padding ->
