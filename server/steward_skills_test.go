@@ -46,10 +46,10 @@ func TestStewardPromptBudget(t *testing.T) {
 
 func TestGuessSkills(t *testing.T) {
 	cases := map[string]string{
-		"add milk to the shopping list":       "lists",
-		"I unloaded the dishwasher":           "chores",
-		"Sam has the dentist tomorrow at 3pm": "calendar",
-		"what's for dinner tonight":           "meals",
+		"add milk to the shopping list":        "lists",
+		"I unloaded the dishwasher":            "chores",
+		"Sam has the dentist tomorrow at 3pm":  "calendar",
+		"what's for dinner tonight":            "meals",
 		"put quiet time on the TV for an hour": "tv",
 	}
 	for say, want := range cases {

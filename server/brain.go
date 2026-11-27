@@ -159,13 +159,13 @@ func specCheck(modelsDir string) machineSpec {
 // estimate is a rough guess at how quick a model would be on this computer, before
 // anyone tries it (the console's test then measures it for real).
 type estimate struct {
-	Fits      bool    `json:"fits"`
-	Why       string  `json:"why,omitempty"`  // why it doesn't fit
-	ReadTPS   float64 `json:"readTPS"`        // words (tokens) a second it reads
-	WriteTPS  float64 `json:"writeTPS"`       // ...and writes
-	TypicalS  float64 `json:"typicalS"`       // a usual answer, once warmed up
-	FirstS    float64 `json:"firstS"`         // the first answer after it starts
-	Verdict   string  `json:"verdict"`        // quick, fine, slow, too slow
+	Fits     bool    `json:"fits"`
+	Why      string  `json:"why,omitempty"` // why it doesn't fit
+	ReadTPS  float64 `json:"readTPS"`       // words (tokens) a second it reads
+	WriteTPS float64 `json:"writeTPS"`      // ...and writes
+	TypicalS float64 `json:"typicalS"`      // a usual answer, once warmed up
+	FirstS   float64 `json:"firstS"`        // the first answer after it starts
+	Verdict  string  `json:"verdict"`       // quick, fine, slow, too slow
 }
 
 func estimateFor(sp machineSpec, m brainModel) estimate {
@@ -215,8 +215,8 @@ func estimateFor(sp machineSpec, m brainModel) estimate {
 
 type brainState struct {
 	mu          sync.Mutex
-	downloading string  // model id
-	got, total  int64   // bytes
+	downloading string // model id
+	got, total  int64  // bytes
 	dlErr       string
 	cancel      context.CancelFunc
 	cmd         *exec.Cmd

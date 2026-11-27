@@ -50,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -294,7 +295,32 @@ fun CalendarTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, o
         if (next.isEmpty()) {
             Spacer(Modifier.weight(1f)); Text("Nothing coming up", color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column
         }
-        if (tall >= 2 || wide >= 2) {
+        if (wide >= 3 && tall >= 2) {
+            // Three or more wide: a column a day (as many days as columns), each event in its colour.
+            Row(Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (d in 0 until wide) {
+                    val from = Datebook.midnight(d); val to = Datebook.midnight(d + 1)
+                    val today = next.filter { it.start < to && it.end > from }
+                    Column(Modifier.weight(1f)) {
+                        Text(when (d) { 0 -> "Today"; 1 -> "Tomorrow"; else -> java.text.SimpleDateFormat("EEE d", java.util.Locale.getDefault()).format(Date(from)) },
+                            style = MaterialTheme.typography.labelLarge, color = if (d == 0) Accent2 else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(top = 4.dp)) {
+                            val fit = (maxHeight / 44.dp).toInt().coerceAtLeast(1)
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                today.take(fit).forEach { o ->
+                                    val tint = runCatching { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(o.color)) }.getOrDefault(Accent2)
+                                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(tint.copy(alpha = .16f)).padding(horizontal = 6.dp, vertical = 3.dp)) {
+                                        Text(o.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+                                        Text(Datebook.timeText(o), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                    }
+                                }
+                                if (today.size > fit) Text("+${today.size - fit}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (tall >= 2 || wide >= 2) {
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp)) {
                 val fit = (maxHeight / 40.dp).toInt().coerceAtLeast(1)
                 Column {

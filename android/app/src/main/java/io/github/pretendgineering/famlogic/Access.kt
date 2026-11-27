@@ -112,6 +112,9 @@ object Access {
         "ride" to ("Pickup" to "Pickup"), "convo.new" to ("Chat shortcut" to "Chat shortcut"),
         "outings" to ("Vitals" to "Health & activity"), "garage" to ("Driveway" to "Vehicles"), "ledger" to ("Ledger" to "Budget"),
         "pets" to ("Menagerie" to "Pets"), "profiles" to ("Dossier" to "Profiles"), "homestead" to ("Homestead" to "Home care"), "meetings" to ("Huddle" to "Meetings"),
+        "today" to ("Today" to "Today"), "feed" to ("Feed" to "Feed"), "whoshome" to ("Who's home" to "Who's home"), "countdown" to ("Countdown" to "Countdown"),
+        "clock" to ("Clock" to "Clock"), "note" to ("Sticky note" to "Sticky note"), "quickadd" to ("Quick add" to "Quick add"), "quiet" to ("Quiet time" to "Quiet time"),
+        "weather" to ("Weather" to "Weather"),
         "contacts" to ("Rolodex" to "Contacts"),
     )
 }

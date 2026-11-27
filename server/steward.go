@@ -479,18 +479,18 @@ type llmToolCall struct {
 
 // turnStats is how one answer went, for the console's AI page (speed, tokens, which model).
 type turnStats struct {
-	Time       int64  `json:"time"`
-	Model      string `json:"model"`
-	Fallback   bool   `json:"fallback,omitempty"`
-	Why        string `json:"why,omitempty"` // why the fallback answered
-	MS         int64  `json:"ms"`
-	Rounds     int    `json:"rounds"`
-	Prompt     int    `json:"prompt"`           // tokens the model read
-	Cached     int    `json:"cached,omitempty"` // ...of which it had kept from before
-	Completion int    `json:"completion"`       // tokens it wrote
+	Time       int64    `json:"time"`
+	Model      string   `json:"model"`
+	Fallback   bool     `json:"fallback,omitempty"`
+	Why        string   `json:"why,omitempty"` // why the fallback answered
+	MS         int64    `json:"ms"`
+	Rounds     int      `json:"rounds"`
+	Prompt     int      `json:"prompt"`           // tokens the model read
+	Cached     int      `json:"cached,omitempty"` // ...of which it had kept from before
+	Completion int      `json:"completion"`       // tokens it wrote
 	Actions    []string `json:"actions,omitempty"`
-	OK         bool   `json:"ok"`
-	Error      string `json:"error,omitempty"`
+	OK         bool     `json:"ok"`
+	Error      string   `json:"error,omitempty"`
 }
 
 var (

@@ -247,6 +247,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/people", s.device(s.handlePeople))
 	mux.HandleFunc("GET /api/v1/openapi.json", s.handleOpenAPI)
 	mux.HandleFunc("POST /mcp", s.handleMCP)
+	mux.HandleFunc("GET /api/weather", s.device(s.handleWeather))
+	mux.HandleFunc("GET /api/fridge", s.device(s.handleFridge))
+	mux.HandleFunc("PUT /api/fridge", s.device(s.handleFridge))
+	mux.HandleFunc("POST /api/fridge", s.device(s.handleFridge)) // for clients that can't send PUT
 	mux.HandleFunc("GET /api/v1/agent-skill", s.handleAgentSkill)
 	mux.HandleFunc("GET /api/admin/keys", s.admin(s.handleAdminKeys))
 	mux.HandleFunc("POST /api/admin/keys", s.admin(s.handleAdminCreateKey))

@@ -61,7 +61,7 @@ var kidModules = []kidModule{
 	{"chores", "Upkeep", "Chores", LevelView, LevelFull}, // younger children see and tick off their own chores
 	{"routines", "Rhythms", "Routines", LevelView, LevelFull},
 	{"meals", "Pantry", "Meals", LevelView, LevelFull},
-	{"profiles", "Dossier", "Profiles", LevelView, LevelFull},   // children edit only their own (older ones)
+	{"profiles", "Dossier", "Profiles", LevelView, LevelFull},     // children edit only their own (older ones)
 	{"homestead", "Homestead", "Home care", LevelView, LevelView}, // parents set up the home
 	{"meetings", "Huddle", "Meetings", LevelView, LevelView},      // parents write the meetings
 }
@@ -95,7 +95,9 @@ var kidFeatures = []kidSwitch{
 // Home tiles. Some are placeholders for modules still being built (they show
 // "coming soon"); "convo.<id>" is a shortcut to one chat.
 var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward", "display", "meetings",
-	"outings", "garage", "ledger", "pets", "profiles", "homestead", "contacts"}
+	"outings", "garage", "ledger", "pets", "profiles", "homestead", "contacts",
+	// 0.50.1: glance tiles
+	"today", "feed", "whoshome", "countdown", "clock", "note", "quickadd", "quiet", "weather"}
 
 // "2x1@0": 2 columns, 1 row, in the first column.
 var gridSize = regexp.MustCompile(`^[1-5]x[1-5](@[0-4])?$`) // up to 5 across and 5 tall (one-button tiles: the app keeps them to 2 x 1)

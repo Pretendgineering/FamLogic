@@ -42,12 +42,17 @@ object Corkboard {
     var quietFor by mutableStateOf("")
     /** The family's displays: id to name. */
     var displays by mutableStateOf<List<Pair<String, String>>>(emptyList())
+    /** The newest message on the TV ("" if none), and who sent it. */
+    var lastMessage by mutableStateOf("")
+    var lastFrom by mutableStateOf("")
     suspend fun refresh(prefs: Prefs) {
         runCatching { Api(prefs.serverUrl, prefs.token).call("GET", "/api/display/board") }.onSuccess {
             val q = it.optJSONObject("quiet")
             quietOn = q?.optBoolean("on") == true
             quietUntil = q?.optLong("until") ?: 0L
             quietFor = q?.optString("for").orEmpty()
+            val msg = it.optJSONArray("messages")?.optJSONObject(0)
+            lastMessage = msg?.optString("text").orEmpty(); lastFrom = msg?.optString("from").orEmpty()
             displays = it.optJSONArray("displays")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { d -> d.optString("id") to d.optString("name") } } } ?: emptyList()
         }
     }

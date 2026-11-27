@@ -121,11 +121,10 @@ fun FeedScreen(prefs: Prefs, visible: Boolean, onOpen: (AppEvent) -> Unit = {}) 
     }
 }
 
-/** One moment on the timeline: the time, a dot in the person's colour, and what happened. */
-@Composable
-private fun FeedRow(prefs: Prefs, e: AppEvent, onClick: () -> Unit) {
+/** A feed entry in words: what happened, and a detail line ("" if none). Shared by the feed and its tile. */
+fun feedText(prefs: Prefs, e: AppEvent): Pair<String, String> {
     val names = prefs.fenceNames
-    val (text, sub) = when (e.type) {
+    return when (e.type) {
         "arrived" -> "${e.name} got to ${e.place.ifEmpty { names[e.placeId] ?: "a place" }}" to ""
         "left" -> "${e.name} left ${e.place.ifEmpty { names[e.placeId] ?: "a place" }}" to ""
         "checkin" -> "${e.name} checked in" to e.note
@@ -140,6 +139,12 @@ private fun FeedRow(prefs: Prefs, e: AppEvent, onClick: () -> Unit) {
         "reward_spent" -> "${e.name} got “${e.title}”" to "★ ${e.level} spent"
         else -> "${e.name}: ${e.type}" to ""
     }
+}
+
+/** One moment on the timeline: the time, a dot in the person's colour, and what happened. */
+@Composable
+private fun FeedRow(prefs: Prefs, e: AppEvent, onClick: () -> Unit) {
+    val (text, sub) = feedText(prefs, e)
     val color = when (e.type) {
         "sos" -> SOS_RED
         "chore_done", "reward_spent" -> androidx.compose.ui.graphics.Color(0xFFE0A82E)

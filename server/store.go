@@ -161,6 +161,7 @@ type data struct {
 	Feeds []CalFeed `json:"calendarFeeds,omitempty"`
 	// The family displays\' quiet time and messages (see display.go).
 	Display *DisplayState      `json:"display,omitempty"`
+	Fridge  *FridgeNote        `json:"fridge,omitempty"` // the family's sticky note
 	KeyLog  []KeyUse           `json:"keyLog,omitempty"`
 	Members map[string]*Member `json:"members"`
 	Invites map[string]*Invite `json:"invites"`

@@ -206,6 +206,22 @@ fun RoutinesTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, o
     val mine = data?.routines?.find { it.list.id == data.now[prefs.memberId] }
     Column(Modifier.fillMaxWidth().height(height).clickable(onClickLabel = "Open ${Access.name("routines")}", onClick = onOpen).padding(14.dp)) {
         TileHead(wide, big, mine?.list?.title ?: Access.name("routines"), icon = { ModuleIcon("routines", if (big) 32.dp else 26.dp) })
+        // Wide and tall: every routine on now, side by side (overlapping ones too).
+        val onNow = data?.now?.values?.distinct()?.mapNotNull { id -> data.routines.find { it.list.id == id } }.orEmpty()
+        if (wide >= 3 && tall >= 2 && onNow.size > 1) {
+            Row(Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                onNow.take(wide).forEach { r ->
+                    Column(Modifier.weight(1f)) {
+                        Text(r.list.title, style = MaterialTheme.typography.labelLarge, color = Accent2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                            val fit = (maxHeight / 34.dp).toInt().coerceAtLeast(1)
+                            Column { r.list.items.take(fit).forEach { RoutineStep(prefs, r, it, false) } }
+                        }
+                    }
+                }
+            }
+            return@Column
+        }
         if (mine == null) { Spacer(Modifier.weight(1f)); Text("Nothing on now", color = MaterialTheme.colorScheme.onSurfaceVariant); return@Column }
         val left = mine.list.items.filter { !it.done }
         if (tall >= 2 || wide >= 2) {
@@ -372,10 +388,33 @@ fun MealsTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onOp
     val days = Pantry.data?.days.orEmpty().filter { it.date >= today }
     Column(Modifier.fillMaxWidth().height(height).clickable(onClickLabel = "Open ${Access.name("meals")}", onClick = onOpen).padding(14.dp)) {
         TileHead(wide, big, Access.name("meals"), icon = { ModuleIcon("meals", if (big) 32.dp else 26.dp) })
-        if (tall >= 2 && days.isNotEmpty()) {
-            days.take(5).forEach { d ->
+        val dayName = { d: MealDay -> java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault()).format(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(d.date)!!) }
+        if (wide >= 3 && days.isNotEmpty()) {
+            // Wide: the week ahead, a column a day (dinner; every meal when there's room).
+            Row(Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                days.take(minOf(7, wide + 2)).forEachIndexed { i, d ->
+                    Column(Modifier.weight(1f)) {
+                        Text(if (i == 0) "Today" else dayName(d), style = MaterialTheme.typography.labelLarge, color = if (i == 0) Accent2 else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        val shown = if (tall >= 2) MEALS else listOf("Dinner")
+                        shown.forEach { m ->
+                            val dish = d.meals[m].orEmpty()
+                            if (dish.isNotEmpty() || m == "Dinner") Text(dish.ifEmpty { "–" }, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        } else if (tall >= 2 && days.isNotEmpty()) {
+            // Tall: today's meals, then the dinners after it.
+            val first = days.first()
+            MEALS.forEach { m ->
                 Row(Modifier.padding(top = 4.dp)) {
-                    Text(java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault()).format(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(d.date)!!), Modifier.width(44.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(m, Modifier.width(76.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(first.meals[m].orEmpty().ifEmpty { "–" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (tall >= 3) days.drop(1).take(tall * 2 - 3).forEach { d ->
+                Row(Modifier.padding(top = 4.dp)) {
+                    Text(dayName(d), Modifier.width(44.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(d.meals["Dinner"].orEmpty().ifEmpty { "–" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }

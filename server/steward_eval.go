@@ -342,13 +342,13 @@ func (e *evalFamily) close() { os.RemoveAll(e.dir) }
 
 // evalResult is how one case went.
 type evalResult struct {
-	ID      string    `json:"id"`
-	Level   string    `json:"level"`
-	Pass    bool      `json:"pass"`
-	Why     string    `json:"why,omitempty"`
-	Reply   string    `json:"reply"`
-	MS      int64     `json:"ms"`
-	Turns   []turnStats `json:"turns"`
+	ID    string      `json:"id"`
+	Level string      `json:"level"`
+	Pass  bool        `json:"pass"`
+	Why   string      `json:"why,omitempty"`
+	Reply string      `json:"reply"`
+	MS    int64       `json:"ms"`
+	Turns []turnStats `json:"turns"`
 }
 
 // evalReport is a whole run.

@@ -16,7 +16,7 @@ func TestEvalHarness(t *testing.T) {
 	var prompts []string
 	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Messages []llmMsg        `json:"messages"`
+			Messages []llmMsg         `json:"messages"`
 			Tools    []map[string]any `json:"tools"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)

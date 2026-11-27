@@ -544,6 +544,33 @@ fun UpkeepTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onO
                     if (due.size > n) Text("+${due.size - n}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            // Four or five wide and tall: a column for each person, with what they've left to do.
+            wide >= 4 && tall >= 2 -> {
+                val all = data?.chores?.filter { Upkeep.dueNow(it, data.today) }.orEmpty()
+                val names = Directory.names
+                val people = all.flatMap { it.who }.distinct().filter { it in names }.sortedBy { if (it == me) 0 else 1 }
+                if (people.isEmpty()) { Spacer(Modifier.weight(1f)); Text("All done", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                else Row(Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    people.take(wide).forEach { id ->
+                        Column(Modifier.weight(1f)) {
+                            Text(names[id] ?: "", style = MaterialTheme.typography.labelLarge, color = Accent2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                                val fit = (maxHeight / 32.dp).toInt().coerceAtLeast(1)
+                                val theirs = all.filter { id in it.who }
+                                Column {
+                                    theirs.take(fit).forEach { c ->
+                                        Row(Modifier.height(32.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            if (Upkeep.isMine(c, me)) tickBox(c) else Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.outline))
+                                            Text(c.title, Modifier.padding(start = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    }
+                                    if (theirs.size > fit) Text("+${theirs.size - fit}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // Tall (one wide and two up) or big: a checklist, as many as fit.
             tall >= 2 -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp)) {
                 val fit = ((maxHeight + 0.dp) / 34.dp).toInt().coerceAtLeast(1)

@@ -6,6 +6,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.WbCloudy
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.material.icons.filled.StickyNote2
+import androidx.compose.material.icons.filled.DynamicFeed
+import androidx.compose.material.icons.filled.AddTask
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Favorite
@@ -201,6 +210,13 @@ fun HomeScreen(
         "homestead" -> Modules.has(features, "homestead") && Access.can("homestead") && prefs.access != "dependent"
         "meetings" -> Modules.has(features, "meetings") && Access.can("meetings") && prefs.access != "dependent"
         in SOON_TILES -> "soon:$t" in features
+        // Glance tiles.
+        "today", "countdown", "clock" -> true
+        "note" -> prefs.access != "dependent"
+        "feed" -> Access.can("feed") && !Access.isDisplay
+        "whoshome", "weather" -> locationOn && Access.can("map")
+        "quickadd" -> Modules.has(features, "todos") && Access.can("todos") && !Access.isDisplay
+        "quiet" -> Modules.has(features, "display") && Corkboard.mayControl(prefs) && !Access.isDisplay
         "chores" -> Modules.has(features, Modules.CHORES) && Access.can("chores") && prefs.access != "dependent"
         "todos" -> Modules.has(features, Modules.TODOS) && Access.can("todos") && prefs.access != "dependent"
         "calendar" -> Modules.has(features, Modules.CALENDAR) && Access.can("calendar") && prefs.access != "dependent"
@@ -304,7 +320,8 @@ fun HomeScreen(
             val tile: @Composable (HomeTile, Dp) -> Unit = { t, h ->
                 // One-button tiles: just the icon at one column, its name too at two. Others
                 // turn into a plain shortcut only when they're too narrow to show anything.
-                val tiny = (if (isButtonTile(t.id)) t.w(cols) == 1 else LocalTileWidth.current < ICON_ONLY_WIDTH) && t.id != "map"
+                val tiny = (if (isButtonTile(t.id)) t.w(cols) == 1 else LocalTileWidth.current < ICON_ONLY_WIDTH) && t.id != "map" &&
+                    (t.id !in GLANCE_TILES || isButtonTile(t.id)) // a glance tile has its own small view
                 if (tiny && t.id != "sos" && !t.id.startsWith("convo.")) IconTile(t.id, h) {
                     when (t.id) {
                         "chat" -> onOpen(Tab.Chat)
@@ -321,6 +338,12 @@ fun HomeScreen(
                         "profiles" -> Profiles.open = true
                         "nudges" -> shortcut = "nudges"
                         "ride" -> shortcut = "ride"
+                        "quickadd" -> shortcut = "quickadd"
+                        "quiet" -> shortcut = "quiet"
+                        "feed" -> onOpen(Tab.Home) // the feed is a swipe right of Home
+                        "today" -> onOpen(Tab.Chores)
+                        "whoshome" -> onOpen(Tab.Map)
+                        "countdown", "clock", "weather", "note" -> {}
                         in SOON_TILES -> if (Steward.available(prefs)) Steward.sheetOpen = true
                         else -> if (t.id.startsWith("convo.")) onOpenChat(t.id.removePrefix("convo."))
                     }
@@ -340,22 +363,31 @@ fun HomeScreen(
                     "routines" -> RoutinesTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Routines) }
                     "meals" -> MealsTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Meals) }
                     "steward" -> SimpleTile(Access.name("steward"), "Ask, add or change anything", h, big, icon = FamIcons.Spark) { Steward.sheetOpen = true }
-                    "display" -> SimpleTile(Access.name("display"), if (Corkboard.quietOn) "Quiet time is on" else "Quiet time, messages", h, big, icon = tileIcon("display")) { Corkboard.open = true }
-                    "homestead" -> {
+                    "display" -> if (t.h() >= 2 || t.w(cols) >= 3) CorkboardTile(prefs, h, t.w(cols), t.h(), big) { Corkboard.open = true } else SimpleTile(Access.name("display"), if (Corkboard.quietOn) "Quiet time is on" else "Quiet time, messages", h, big, icon = tileIcon("display")) { Corkboard.open = true }
+                    "homestead" -> if (t.h() >= 2 || t.w(cols) >= 3) HomesteadTile(prefs, h, t.w(cols), t.h(), big) { Homestead.open = true } else {
                         LaunchedEffect(Unit) { Homestead.refresh(prefs) }
                         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
                         val next = Homestead.data?.jobs?.firstOrNull()
                         SimpleTile(Access.name("homestead"), next?.let { (if (it.due <= today) "Now: " else "Next: ") + it.title } ?: "Your home's upkeep", h, big, picture = { Pictures.Home(it) }, icon = tileIcon("homestead")) { Homestead.open = true }
                     }
-                    "meetings" -> {
+                    "meetings" -> if (t.h() >= 2 || t.w(cols) >= 3) HuddleTile(prefs, h, t.w(cols), t.h(), big) { Huddle.open = true } else {
                         LaunchedEffect(Unit) { Huddle.refresh(prefs) }
                         val next = Huddle.data?.meetings?.firstOrNull()
                         SimpleTile(Access.name("meetings"), next?.title ?: "Family meetings", h, big, icon = tileIcon("meetings")) { Huddle.open = true }
                     }
-                    "profiles" -> SimpleTile(Access.name("profiles"), "Allergies, medicines, contacts", h, big, icon = tileIcon("profiles")) { Profiles.open = true }
+                    "profiles" -> if (t.h() >= 2 || t.w(cols) >= 3) DossierTile(prefs, h, t.w(cols), t.h(), big) { Profiles.open = true } else SimpleTile(Access.name("profiles"), "Allergies, medicines, contacts", h, big, icon = tileIcon("profiles")) { Profiles.open = true }
                     in SOON_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) { if (Steward.available(prefs)) Steward.sheetOpen = true }
                     "nudges" -> ButtonTile(Access.name("nudges"), h, big, picture = { Pictures.Nudge(it) }, icon = tileIcon("nudges")) { shortcut = "nudges" }
                     "ride" -> ButtonTile(if (Access.pictures) "Pick me up" else Access.name("ride"), h, big, picture = { Pictures.Pickup(it) }, icon = tileIcon("ride")) { shortcut = "ride" }
+                    "quickadd" -> ButtonTile(Access.name("quickadd"), h, big, icon = tileIcon("quickadd")) { shortcut = "quickadd" }
+                    "quiet" -> ButtonTile(Access.name("quiet"), h, big, icon = tileIcon("quiet")) { shortcut = "quiet" }
+                    "today" -> TodayTile(prefs, h, t.w(cols), t.h(), big, onOpen)
+                    "feed" -> FeedTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Home) }
+                    "whoshome" -> WhosHomeTile(members, h, t.w(cols), t.h(), big) { onOpen(Tab.Map) }
+                    "countdown" -> CountdownTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Calendar) }
+                    "clock" -> ClockTile(h, t.w(cols), t.h(), big)
+                    "note" -> NoteTile(prefs, h, t.w(cols), t.h(), big)
+                    "weather" -> WeatherTile(prefs, h, t.w(cols), t.h(), big)
                     "convo.new" -> SimpleTile(Access.name(t.id), "Choosing a chat…", h, big, icon = tileIcon(t.id)) {}
                     else -> if (t.id.startsWith("convo.")) {
                         ConvoTile(chats.find { it.id == t.id.removePrefix("convo.") }, members, prefs.memberId, big, h, onOpenChat, label = t.w(cols) > 1)
@@ -429,6 +461,8 @@ fun HomeScreen(
     when (shortcut) {
         "nudges" -> NudgePopup(prefs, members) { shortcut = "" }
         "ride" -> PickupPopup(prefs, members) { shortcut = "" }
+        "quickadd" -> QuickAddPopup(prefs) { shortcut = "" }
+        "quiet" -> QuietPopup(prefs) { shortcut = "" }
     }
     if (confirmCheckIn) {
         AlertDialog(
@@ -477,7 +511,7 @@ fun maxH(id: String) = if (isButtonTile(id)) 1 else 5
  * taller than wide if you like.
  */
 fun isButtonTile(id: String) = id in BUTTON_TILES || id.startsWith("convo.")
-val BUTTON_TILES = setOf("sos", "checkin", "ride", "nudges", "steward")
+val BUTTON_TILES = setOf("sos", "checkin", "ride", "nudges", "steward", "quickadd", "quiet")
 fun maxW(id: String, cols: Int) = if (isButtonTile(id)) minOf(2, cols) else cols
 
 /** The width of the tile being drawn (for tiles that turn into just an icon when narrow). */
@@ -582,8 +616,11 @@ val PLACEHOLDER_TILES = listOf("nudges", "ride")
 /** Modules switched on but still being built: a tile that says so (and opens Steward, which can keep their notes already). */
 val SOON_TILES = listOf("outings", "garage", "ledger", "pets", "contacts")
 
+/** Glance tiles: at-a-glance things that aren't a module of their own. */
+val GLANCE_TILES = listOf("today", "whoshome", "weather", "clock", "countdown", "note", "feed", "quickadd", "quiet")
+
 /** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
-val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "profiles", "homestead", "meetings", "display") + SOON_TILES + PLACEHOLDER_TILES
+val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "profiles", "homestead", "meetings", "display") + GLANCE_TILES + SOON_TILES + PLACEHOLDER_TILES
 
 private val DRAWER_HEIGHT = 132.dp
 
@@ -603,6 +640,15 @@ fun tileIcon(id: String): ImageVector = when (id) {
     "ride" -> Icons.Filled.Place
     "steward" -> FamIcons.Spark
     "display" -> Icons.Filled.Tv
+    "today" -> Icons.Filled.WbSunny
+    "whoshome" -> Icons.Filled.Home
+    "weather" -> Icons.Filled.WbCloudy
+    "clock" -> Icons.Filled.Schedule
+    "countdown" -> Icons.Filled.HourglassBottom
+    "note" -> Icons.Filled.StickyNote2
+    "feed" -> Icons.Filled.DynamicFeed
+    "quickadd" -> Icons.Filled.AddTask
+    "quiet" -> Icons.Filled.Bedtime
     "outings" -> Icons.AutoMirrored.Filled.DirectionsWalk
     "garage" -> Icons.Filled.DirectionsCar
     "ledger" -> Icons.Filled.AccountBalanceWallet
