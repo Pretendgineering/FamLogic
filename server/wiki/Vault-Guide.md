@@ -229,6 +229,10 @@ who: ["[[Sam]]", "[[Mia]]"]
 A checklist that comes round again. FamLogic clears the ticks when the routine starts
 again, so don't keep history in it.
 
+Each step gets a picture, so children who don't read yet can follow along: "Brush teeth" shows
+🪥, "Pyjamas" 🌙, "Pack school bag" 🎒, and so on. To choose a step's picture yourself, start the
+step with an emoji: `- [ ] 🦖 Feed Rexy`.
+
 ### `rhythm`: Rhythms/<Title>.md
 
 ```markdown

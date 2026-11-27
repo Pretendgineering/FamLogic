@@ -341,7 +341,8 @@ func (s *Server) handleDisplayApps(w http.ResponseWriter, r *http.Request, me *M
 // tile its own picture. DELETE puts the app's own banner back.
 func (s *Server) handleDisplayAppImage(w http.ResponseWriter, r *http.Request, me *Member) {
 	pkg := r.PathValue("pkg")
-	if !mayControlDisplays(me) {
+	// Parents, or the TV itself (choosing a picture from its own files).
+	if !mayControlDisplays(me) && !me.Display {
 		writeError(w, http.StatusForbidden, "parents choose the TV's pictures")
 		return
 	}

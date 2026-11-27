@@ -70,7 +70,9 @@ import org.json.JSONObject
  * in the vault (Lists/, To-dos/), so the console, Obsidian and an AI agent all see
  * the same items.
  */
-data class ListItem(val id: String, val text: String, val done: Boolean, val who: String, val due: String, val section: String)
+data class ListItem(val id: String, val text: String, val done: Boolean, val who: String, val due: String, val section: String,
+    /** Routines: the item's picture (an emoji), for children who don't read yet. */
+    val emoji: String = "")
 data class FamilyList(val id: String, val title: String, val kind: String, val who: List<String>, val items: List<ListItem>)
 data class ListsData(val lists: List<FamilyList>, val canEdit: Boolean, val canAdd: Boolean)
 
@@ -81,7 +83,7 @@ private fun parseList(o: JSONObject): FamilyList {
         o.optString("id"), o.optString("title"), o.optString("kind"),
         (0 until who.length()).map { who.getString(it) },
         (0 until items.length()).map { i ->
-            items.getJSONObject(i).let { ListItem(it.optString("id"), it.optString("text"), it.optBoolean("done"), it.optString("who"), it.optString("due"), it.optString("section")) }
+            items.getJSONObject(i).let { ListItem(it.optString("id"), it.optString("text"), it.optBoolean("done"), it.optString("who"), it.optString("due"), it.optString("section"), it.optString("emoji")) }
         },
     )
 }

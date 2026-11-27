@@ -175,6 +175,11 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.46.0: Calendar views, routine pictures, and a roomier TV
+- **Calendar views** in the app, the console and on the TV: 3 days, the work week, the week and the month, each event in its person's (or outside calendar's) colour.
+- **Routine pictures:** each step gets a picture (🪥 Brush teeth, 🎒 Pack school bag), or one you choose by starting the step with an emoji.
+- **On the TV:** the map lists everyone to zoom to; the feed fills the screen and opens where things happened; hide apps from the drawer; change a tile's picture from the TV's files; a little more fits on screen; the launcher stays centred; a clearer selection.
+
 ### ✅ 0.45.1: Clearer on the TV
 - Steward has its own round button at the bottom right; the selection eases from button to button and is easy to see everywhere (it fills with the accent); the app drawer starts on the first app.
 - The Docket tile says "3 to do" or "3 left" instead of "3 to get"; the talk bar says "Hold to talk", and "let go to type it" where it types rather than sends.

@@ -38,6 +38,7 @@ type ListItem struct {
 	Due     string `json:"due,omitempty"`
 	DoneOn  string `json:"doneOn,omitempty"`
 	Section string `json:"section,omitempty"`
+	Emoji   string `json:"emoji,omitempty"` // routines: the item's picture (see routine_icons.go)
 }
 
 type List struct {

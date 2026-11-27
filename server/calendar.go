@@ -669,7 +669,18 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, me *Member
 	if to.Sub(from) > 400*24*time.Hour {
 		to = from.Add(400 * 24 * time.Hour)
 	}
-	events := append(s.cal.occurrences(s.store.Members(), from, to), s.feedOccurrences(from, to)...)
+	members := s.store.Members()
+	events := append(s.cal.occurrences(members, from, to), s.feedOccurrences(from, to)...)
+	// A family event for one person takes their colour (calendar views draw it as a dot).
+	colors := map[string]string{}
+	for _, m := range members {
+		colors[m.ID] = m.Color
+	}
+	for i := range events {
+		if events[i].Color == "" && len(events[i].Who) == 1 {
+			events[i].Color = colors[events[i].Who[0]]
+		}
+	}
 	sort.Slice(events, func(i, j int) bool { return events[i].Start < events[j].Start })
 	writeJSON(w, http.StatusOK, map[string]any{"events": events, "canEdit": s.canEditCalendar(me)})
 }

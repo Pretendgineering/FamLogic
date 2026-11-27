@@ -12,6 +12,15 @@ Down the right side are buttons for the **Map** (where everyone is), the **Feed*
 (meals), then **Apps** (every app on the TV) and **Settings**. Choose which buttons show in
 **Settings**.
 
+- **Map:** the family down the left; choose someone to zoom to them, or Everyone.
+- **Feed:** today so far, across the screen. Choose an entry to go where it happened (the map,
+  zoomed to that person, or Upkeep).
+- **Datebook:** the list, or the calendar as 3 days, the work week, the week or the month, each
+  event in its person's (or its calendar's) colour. In the month, move to a day to see what's on.
+
+Routine steps show a picture next to them (a toothbrush for "Brush teeth"), so younger
+children can follow them.
+
 The whole screen stretches to fit the TV, whatever its resolution or display size. If your TV
 still cuts off the edges, turn up **Settings → Fit to the screen**.
 
@@ -48,8 +57,13 @@ SmartTube if they're installed; an empty tile (+) asks which app to put there.
 an app, there or on the launcher, for more: add it to the launcher or remove it, move it left or
 right, its App info, or Uninstall.
 
-**Your own pictures:** a parent can give any tile its own picture on the **TV** page of the web
-console (Pictures for the TV's apps). A wide picture works best, 16:9 like 1280 × 720.
+**Your own pictures:** hold OK on a tile and choose **Change picture** to pick one from the
+TV's files (you'll need a file manager app, such as FX File Explorer), or a parent can upload one
+on the **TV** page of the web console. A wide picture works best, 16:9 like 1280 × 720. **Use
+the app's own picture** puts it back.
+
+**Hide apps:** hold OK on an app in Apps and choose **Hide from Apps**. Hidden apps are listed in
+**Settings → Hidden apps**, where **Show** brings them back.
 
 ## Steward on the TV
 

@@ -173,6 +173,13 @@ func (s *Server) handleRoutines(w http.ResponseWriter, r *http.Request, me *Memb
 	out := []List{}
 	for _, l := range all {
 		if canSeeList(me, l) {
+			// Each item's picture, for children who don't read yet.
+			items := make([]ListItem, len(l.Items))
+			for i, it := range l.Items {
+				it.Emoji, it.Text = routineEmoji(it.Text)
+				items[i] = it
+			}
+			l.Items = items
 			out = append(out, l)
 		}
 	}

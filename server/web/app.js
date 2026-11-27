@@ -2278,6 +2278,71 @@ async function renderLists(box, force = false) {
 
 // Datebook: the family calendar (Markdown notes in Calendar/; CalDAV for phones).
 let calDrawn = "";
+// Datebook's calendar views (the same as the app's and the TV's): the list, 3 days, the work
+// week, the week, and the month, each event in its calendar's or its person's colour.
+let calMode = (() => { try { return localStorage.getItem("calMode") || "list"; } catch (_) { return "list"; } })();
+let calAnchor = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+let calPicked = calAnchor;
+const CAL_MODES = [["list", "List"], ["3", "3 days"], ["work", "Work week"], ["week", "Week"], ["month", "Month"]];
+
+function calDay(t, add = 0) { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + add); return d.getTime(); }
+function calDaysFor(mode, anchor) {
+  const d = new Date(anchor);
+  const monday = calDay(anchor, -((d.getDay() + 6) % 7));
+  if (mode === "3") return [0, 1, 2].map((i) => calDay(anchor, i));
+  if (mode === "work") return [0, 1, 2, 3, 4].map((i) => calDay(monday, i));
+  if (mode === "week") return [0, 1, 2, 3, 4, 5, 6].map((i) => calDay(monday, i));
+  const first = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const start = calDay(first, -((new Date(first).getDay() + 6) % 7));
+  return Array.from({ length: 42 }, (_, i) => calDay(start, i));
+}
+function calStep(mode, anchor, by) {
+  if (mode === "month") { const d = new Date(anchor); return new Date(d.getFullYear(), d.getMonth() + by, 1).getTime(); }
+  return calDay(anchor, (mode === "3" ? 3 : 7) * by);
+}
+const calOn = (events, day) => events.filter((e) => e.start < calDay(day, 1) && Math.max(e.end || 0, e.start + 1) > day);
+const calColor = (e) => e.color || "var(--accent)";
+
+async function calendarViews(box, rerender) {
+  const modes = el("div", { class: "cal-modes" }, ...CAL_MODES.map(([m, t]) => {
+    const b = el("button", { type: "button", class: m === calMode ? "toggle on" : "toggle", "aria-pressed": String(m === calMode) }, t);
+    b.addEventListener("click", () => { calMode = m; try { localStorage.setItem("calMode", m); } catch (_) {} rerender(); });
+    return b;
+  }));
+  if (calMode === "list") return [modes];
+  const days = calDaysFor(calMode, calAnchor);
+  let events = [];
+  try { events = (await api("GET", `/api/events?from=${days[0]}&to=${calDay(days[days.length - 1], 1)}`)).events; } catch (_) {}
+  const nav = (by, label) => { const b = el("button", { type: "button", class: "secondary" }, label); b.addEventListener("click", () => { calAnchor = by === 0 ? calDay(Date.now()) : calStep(calMode, calAnchor, by); calPicked = by === 0 ? calAnchor : calPicked; rerender(); }); return b; };
+  const fmt = (t, o) => new Date(t).toLocaleDateString([], o);
+  const title = calMode === "month" ? fmt(calAnchor, { month: "long", year: "numeric" }) : `${fmt(days[0], { day: "numeric", month: "short" })} – ${fmt(days[days.length - 1], { day: "numeric", month: "short" })}`;
+  const head = el("div", { class: "cal-head" }, nav(-1, "‹"), el("h2", { class: "grow" }, title), nav(1, "›"), nav(0, "Today"));
+  const today = calDay(Date.now());
+  const chip = (e) => el("div", { class: "cal-chip", style: `--cal:${calColor(e)}` },
+    el("span", { class: "muted small" }, e.allDay ? "All day" : new Date(e.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })), el("span", {}, e.title));
+  if (calMode !== "month") {
+    const cols = el("div", { class: "cal-cols", style: `--n:${days.length}` }, ...days.map((d) => el("div", { class: "cal-col" + (d === today ? " today" : "") },
+      el("div", { class: "cal-colhead" }, el("span", { class: "muted small" }, fmt(d, { weekday: "short" })), el("span", { class: "cal-num" }, String(new Date(d).getDate()))),
+      ...(calOn(events, d).length ? calOn(events, d).map(chip) : [el("span", { class: "muted small" }, "—")]))));
+    return [modes, head, cols];
+  }
+  const month = new Date(calAnchor).getMonth();
+  const grid = el("div", { class: "cal-month" }, ...days.slice(0, 7).map((d) => el("div", { class: "cal-wd muted small" }, fmt(d, { weekday: "short" }))),
+    ...days.map((d) => {
+      const list = calOn(events, d);
+      const cell = el("button", { type: "button", class: "cal-cell" + (new Date(d).getMonth() !== month ? " other" : "") + (d === today ? " today" : "") + (d === calPicked ? " picked" : "") },
+        el("span", { class: "cal-num" }, String(new Date(d).getDate())),
+        ...list.slice(0, 3).map((e) => el("span", { class: "cal-bar", style: `--cal:${calColor(e)}` }, e.title)),
+        list.length > 3 ? el("span", { class: "muted small" }, `+${list.length - 3}`) : null);
+      cell.addEventListener("click", () => { calPicked = d; rerender(); });
+      return cell;
+    }));
+  const picked = calOn(events, calPicked);
+  const dayList = el("div", { class: "cal-daylist" }, el("h2", {}, fmt(calPicked, { weekday: "long", day: "numeric", month: "long" })),
+    ...(picked.length ? picked.map(chip) : [el("p", { class: "muted" }, "Nothing on.")]));
+  return [modes, head, grid, dayList];
+}
+
 async function renderCalendar(box, force = false) {
   if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select, textarea")) return;
   const from = new Date(); from.setHours(0, 0, 0, 0);
@@ -2360,7 +2425,9 @@ async function renderCalendar(box, force = false) {
       el("li", {}, el("strong", {}, "Android: "), "install DAVx5 (F-Droid or Play Store), add an account with URL ", el("code", {}, location.origin + "/dav/"), ", then switch on the calendar."),
       el("li", {}, el("strong", {}, "iPhone or Mac: "), "Settings → Calendar → Accounts → Add Account → Other → CalDAV, server ", el("code", {}, location.host), "."),
       el("li", {}, el("strong", {}, "Thunderbird: "), "New Calendar → On the network, location ", el("code", {}, location.origin + "/dav/"), ".")));
-  box.replaceChildren(...(agenda.length ? agenda : [el("p", { class: "muted" }, "Nothing on the calendar for the next few weeks.")]),
+  const views = await calendarViews(box, () => renderCalendar(box, true));
+  if (box.dataset.module !== "calendar") return;
+  box.replaceChildren(...views, ...(calMode !== "list" ? [] : agenda.length ? agenda : [el("p", { class: "muted" }, "Nothing on the calendar for the next few weeks.")]),
     ...(data.canEdit ? [el("h2", {}, "Add an event"), form] : []), ...outside.filter(Boolean), sync);
 }
 
@@ -2376,7 +2443,7 @@ async function renderRoutines(box) {
     return el("div", { class: "panel list-card" }, el("div", { class: "list-head" }, el("div", { class: "title" }, r.title),
       el("span", { class: "muted small" }, [r.who.length ? r.who.map(name).join(", ") : "Everyone", r.starts && "from " + r.starts, (r.days || []).join(" ")].filter(Boolean).join(" · "))),
       on.length ? el("p", { class: "small", style: "color:var(--secondary);margin:4px 6px" }, "On now for " + on.join(", ")) : null,
-      el("ul", { class: "list compact" }, ...r.items.map((i) => el("li", { class: i.done ? "done-item" : "" }, el("span", { class: "item-check" }, el("span", {}, (i.done ? "✓ " : "") + i.text))))));
+      el("ul", { class: "list compact" }, ...r.items.map((i) => el("li", { class: i.done ? "done-item" : "" }, el("span", { class: "item-check" }, el("span", {}, (i.done ? "✓ " : "") + (i.emoji ? i.emoji + " " : "") + i.text))))));
   });
   const title = el("input", { placeholder: "e.g. Bedtime", maxlength: "60" });
   const starts = el("input", { type: "time", value: "19:30" });

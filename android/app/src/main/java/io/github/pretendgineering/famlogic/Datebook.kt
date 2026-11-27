@@ -4,6 +4,10 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -117,14 +121,51 @@ fun CalendarScreen(prefs: Prefs) {
         }
     }
     val data = Datebook.data
+    // The view: the list (the next few weeks), or a calendar (3 days, work week, week, month).
+    var mode by rememberSaveable { mutableStateOf(CalMode.List) }
+    var anchor by rememberSaveable { mutableStateOf(Datebook.midnight()) }
+    var picked by rememberSaveable { mutableStateOf(Datebook.midnight()) }
+    var range by remember { mutableStateOf<List<CalOccurrence>>(emptyList()) }
+    LaunchedEffect(mode, anchor, data) {
+        if (mode != CalMode.List) {
+            val days = CalDays.days(mode, anchor)
+            runCatching { Api(prefs.serverUrl, prefs.token).events(days.first(), CalDays.addDays(days.last(), 1)) }.onSuccess { range = it.events }
+        }
+    }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(Access.name("calendar")) }) },
+        topBar = {
+            Column {
+                TopAppBar(title = { Text(Access.name("calendar")) })
+                androidx.compose.foundation.lazy.LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(CalMode.entries.toList()) { m -> FilterChip(selected = mode == m, onClick = { mode = m }, label = { Text(m.label) }) }
+                }
+            }
+        },
         floatingActionButton = {
             if (data?.canEdit == true) ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Add an event") })
         },
     ) { padding ->
         if (data == null) {
             Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) { Text("Loading…") }
+            return@Scaffold
+        }
+        if (mode != CalMode.List) {
+            val colors = CalColors(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary)
+            Column(Modifier.padding(padding).fillMaxSize().padding(horizontal = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { anchor = CalDays.step(mode, anchor, -1) }) { Text("‹", style = MaterialTheme.typography.titleLarge) }
+                    Text(CalDays.title(mode, anchor), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    TextButton(onClick = { anchor = CalDays.step(mode, anchor, 1) }) { Text("›", style = MaterialTheme.typography.titleLarge) }
+                    TextButton(onClick = { anchor = Datebook.midnight(); picked = anchor }) { Text("Today") }
+                }
+                val pick: @Composable (Long) -> Modifier = { d -> Modifier.clickable { picked = d } }
+                if (mode == CalMode.Month) {
+                    CalMonthGrid(anchor, range, colors, picked, Modifier.weight(1f), dayModifier = pick)
+                    CalDayList(picked, range, colors, Modifier.padding(vertical = 8.dp).heightIn(max = 220.dp).verticalScroll(rememberScrollState()))
+                } else {
+                    CalDayColumns(mode, anchor, range, colors, Modifier.weight(1f).padding(bottom = 88.dp))
+                }
+            }
             return@Scaffold
         }
         val byDay = data.events.groupBy { o -> ((maxOf(o.start, Datebook.midnight()) - Datebook.midnight()) / 86_400_000L).toInt() }

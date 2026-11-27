@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -117,7 +118,7 @@ fun RoutinesScreen(prefs: Prefs) {
                         val whose = r.list.who.mapNotNull { id -> people.find { it.id == id }?.name }.joinToString(", ").ifEmpty { "Everyone" }
                         Text(listOfNotNull(whose, r.starts.ifEmpty { null }?.let { "from $it" }, r.days.joinToString(" ").ifEmpty { null }).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        r.list.items.forEach { Text("• " + it.text, modifier = Modifier.padding(top = 2.dp)) }
+                        r.list.items.forEach { Text(it.emoji.ifEmpty { "•" } + " " + it.text, modifier = Modifier.padding(top = 2.dp)) }
                         // Who's on which routine now (for parents).
                         val onNow = data.now.filterValues { it == r.list.id }.keys.mapNotNull { id -> people.find { it.id == id }?.name }
                         if (onNow.isNotEmpty() && !Access.isChild) Text("On now for " + onNow.joinToString(", "), style = MaterialTheme.typography.labelMedium, color = Accent2, modifier = Modifier.padding(top = 4.dp))
@@ -140,6 +141,8 @@ private fun RoutineStep(prefs: Prefs, r: Routine, it: ListItem, big: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TickCircle(it.done, if (big) 40.dp else 28.dp)
+        // The step's picture, so younger children can follow without reading.
+        if (it.emoji.isNotEmpty()) Text(it.emoji, Modifier.padding(start = 12.dp), fontSize = if (big) 34.sp else 24.sp)
         Text(it.text, Modifier.padding(start = 14.dp), style = if (big) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
             textDecoration = if (it.done) TextDecoration.LineThrough else null)
     }

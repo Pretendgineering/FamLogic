@@ -177,13 +177,13 @@ private fun TvApp() {
     }
 }
 
-// ---- fitting the TV: everything is drawn on a 960 × 540 board, stretched to fill the screen
+// ---- fitting the TV: everything is drawn on a 1024 × 576 board, stretched to fill the screen
 
 /** How far in from the screen's edges to draw (percent), for TVs that cut the edges off. */
 private val LocalTvEdges = compositionLocalOf { 0 }
 
 /**
- * Draws [content] as if the screen were 960 × 540 dp, stretched (or shrunk) to fill it
+ * Draws [content] as if the screen were 1024 × 576 dp, stretched (or shrunk) to fill it
  * whatever the TV's resolution or display-size setting, and [edges] percent in from each side.
  */
 @Composable
@@ -191,7 +191,7 @@ private fun TvScale(edges: Int, content: @Composable () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.fillMaxSize().padding(horizontal = maxWidth * (edges / 100f), vertical = maxHeight * (edges / 100f))) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
-                val scale = minOf(constraints.maxWidth / 960f, constraints.maxHeight / 540f)
+                val scale = minOf(constraints.maxWidth / 1024f, constraints.maxHeight / 576f)
                 CompositionLocalProvider(LocalDensity provides Density(scale, 1f)) { content() }
             }
         }
@@ -255,6 +255,12 @@ private class TvConfig(context: Context) {
     var edges by mutableIntStateOf(sp.getInt("edges", 0).coerceIn(0, 10))
         private set
 
+    /** Apps hidden from the app drawer (shown again from Settings). */
+    var hidden by mutableStateOf(sp.getString("hidden", "").orEmpty().split(",").filter { it.isNotBlank() }.toSet())
+        private set
+
+    fun hide(pkg: String) { hidden = hidden + pkg; sp.edit().putString("hidden", hidden.joinToString(",")).apply() }
+    fun unhide(pkg: String) { hidden = hidden - pkg; sp.edit().putString("hidden", hidden.joinToString(",")).apply() }
     fun changeEdges(n: Int) { edges = n.coerceIn(0, 10); sp.edit().putInt("edges", edges).apply() }
     private fun save(list: List<String>) { apps = list; sp.edit().putString("apps", list.joinToString(",")).apply() }
     private fun shown() = (apps ?: emptyList()).take(slots).toMutableList().also { while (it.size < slots) it += "" }
@@ -444,7 +450,7 @@ private fun TvBoard(prefs: Prefs, config: TvConfig) {
                 if (problem.isNotEmpty()) Text(problem, color = look.soft, fontSize = 16.sp)
                 Spacer(Modifier.height(12.dp))
                 // Routines, Upkeep and the Docket: the family's day at a glance.
-                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     if (b != null) {
                         val routines = b.optJSONObject("routines")
                         val chores = b.optJSONObject("chores")
@@ -501,20 +507,161 @@ private class BoardNav {
     var view by mutableStateOf<String?>(null) // map, feed, steward, calendar, meals, apps, settings
     var pickFor by mutableStateOf<Int?>(null) // choosing an app for this empty tile
     var menuFor by mutableStateOf<String?>(null) // an app's long-press menu
+    var person by mutableStateOf<String?>(null) // the map zoomed to someone (from the feed)
 }
 
 @Composable
 private fun BoardViews(nav: BoardNav, prefs: Prefs, api: Api, config: TvConfig, installed: List<TvApp>, modules: Set<String>, board: JSONObject?, look: Look, reload: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pictures = objs(board?.optJSONArray("apps")).associate { it.optString("pkg") to it.optLong("image") }
+    // An app's own picture for its tile, chosen from a file on the TV (a file manager app opens).
+    var pictureFor by remember { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val pkg = pictureFor
+        pictureFor = null
+        if (uri != null && pkg != null) scope.launch {
+            runCatching { api.putBytes("/api/display/apps/$pkg/image", withContext(Dispatchers.IO) { shrinkPicture(context, uri) }, "image/jpeg") }
+                .onSuccess { Toast.makeText(context, "Picture changed", Toast.LENGTH_SHORT).show(); reload() }
+                .onFailure { Toast.makeText(context, it.message ?: "Couldn't use that picture", Toast.LENGTH_LONG).show() }
+        }
+    }
+    fun choosePicture(pkg: String) {
+        pictureFor = pkg
+        try { picker.launch("image/*") } catch (_: ActivityNotFoundException) {
+            Toast.makeText(context, "No file manager here: install one (such as FX File Explorer) to choose pictures", Toast.LENGTH_LONG).show()
+        }
+    }
     when (nav.view) {
-        "map" -> MapView(prefs, api, look) { nav.view = null }
-        "feed" -> ListView("Today", look, { nav.view = null }) { FeedLines(board?.optJSONObject("feed"), look, all = true) }
-        "calendar" -> ListView("Coming up", look, { nav.view = null }) { board?.optJSONObject("events")?.let { EventLines(it, look) } }
+        "map" -> MapView(prefs, api, look, nav.person) { nav.view = null; nav.person = null }
+        "feed" -> FeedView(board?.optJSONObject("feed"), look, onOpen = { e ->
+            when (e.optString("type")) {
+                "chore_done", "reward_spent" -> nav.view = "chores"
+                else -> if (e.optString("memberId").isNotEmpty() && "thereabouts" in modules) { nav.person = e.optString("memberId"); nav.view = "map" }
+            }
+        }) { nav.view = null }
+        "chores" -> ListView("Upkeep", look, { nav.view = null }) { board?.optJSONObject("chores")?.let { ChoreLines(it, emptyMap(), look) } }
+        "calendar" -> CalendarView(api, look) { nav.view = null }
         "meals" -> ListView("Meals", look, { nav.view = null }) { board?.optJSONObject("meals")?.let { MealLines(it, look) } }
         "steward" -> StewardView(prefs, api, look) { nav.view = null; reload() }
-        "apps" -> AppDrawer(installed, look, nav.pickFor, onPick = { pkg -> nav.pickFor?.let { config.setApp(it, pkg) }; nav.pickFor = null; nav.view = null }, onMenu = { nav.menuFor = it }) { nav.pickFor = null; nav.view = null }
+        "apps" -> AppDrawer(installed.filter { it.pkg !in config.hidden }, look, nav.pickFor, onPick = { pkg -> nav.pickFor?.let { config.setApp(it, pkg) }; nav.pickFor = null; nav.view = null }, onMenu = { nav.menuFor = it }) { nav.pickFor = null; nav.view = null }
         "settings" -> SettingsView(config, installed, modules, board, look) { nav.view = null }
     }
-    nav.menuFor?.let { pkg -> installed.find { it.pkg == pkg }?.let { app -> AppMenu(app, config, look) { nav.menuFor = null } } ?: run { nav.menuFor = null } }
+    nav.menuFor?.let { pkg ->
+        installed.find { it.pkg == pkg }?.let { app ->
+            AppMenu(app, config, look, hasPicture = (pictures[pkg] ?: 0L) > 0L, onPicture = { choosePicture(pkg) },
+                onOwnPicture = { scope.launch { runCatching { api.call("DELETE", "/api/display/apps/$pkg/image") }; reload() } }) { nav.menuFor = null }
+        } ?: run { nav.menuFor = null }
+    }
+}
+
+/** A picture from the TV's files, made a sensible size for a tile (at most 1280 wide, as a JPEG). */
+private fun shrinkPicture(context: Context, uri: Uri): ByteArray {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, bounds) }
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= 1280) sample *= 2
+    val bmp = context.contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
+        ?: throw IllegalArgumentException("That file isn't a picture")
+    val scaled = if (bmp.width > 1280) android.graphics.Bitmap.createScaledBitmap(bmp, 1280, bmp.height * 1280 / bmp.width, true) else bmp
+    return java.io.ByteArrayOutputStream().also { scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it) }.toByteArray()
+}
+
+/** What happened today, across the screen: choose an entry to open where it happened (the map, Upkeep). */
+@Composable
+private fun FeedView(feed: JSONObject?, look: Look, onOpen: (JSONObject) -> Unit, onBack: () -> Unit) {
+    val items = objs(feed?.optJSONArray("items")).reversed()
+    val first = remember { FocusRequester() }
+    ViewFrame("Today", look, onBack, start = if (items.isNotEmpty()) first else null) {
+        if (items.isEmpty()) { Empty("A quiet day so far.", look); return@ViewFrame }
+        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(8.dp)) {
+            itemsIndexed(items) { i, e ->
+                FeedRow(e, look, if (i == 0) Modifier.focusRequester(first) else Modifier) { onOpen(e) }
+            }
+        }
+    }
+}
+
+private fun feedWhat(e: JSONObject): String = when (e.optString("type")) {
+    "arrived" -> "got to ${e.optString("place", "a place")}"
+    "left" -> "left ${e.optString("place", "a place")}"
+    "checkin" -> "checked in" + e.optString("note").takeIf { it.isNotEmpty() }?.let { ": $it" }.orEmpty()
+    "chore_done" -> "did ${e.optString("title")}"
+    "reward_spent" -> "got ${e.optString("title")}"
+    "trip" -> "finished a trip"
+    "drive_start" -> "started driving"
+    "sos" -> "sent an SOS"
+    "sos_end" -> "is OK"
+    "battery_low" -> "is low on battery (${e.optInt("battery")}%)"
+    else -> e.optString("type").replace('_', ' ')
+}
+
+private fun feedEmoji(type: String) = when (type) {
+    "arrived" -> "📍"; "left" -> "👋"; "checkin" -> "✅"; "chore_done" -> "🧹"; "reward_spent" -> "⭐"; "trip" -> "🗺️"
+    "drive_start" -> "🚗"; "sos" -> "🆘"; "sos_end" -> "💚"; "battery_low" -> "🔋"; else -> "•"
+}
+
+@Composable
+private fun FeedRow(e: JSONObject, look: Look, modifier: Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val ink = if (focused) look.onAccent else look.ink
+    Row(
+        modifier.fillMaxWidth().tvFocus(look, look.card, 18.dp, grow = 1.015f, fill = true) { focused = it }.clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(feedEmoji(e.optString("type")), Modifier.width(40.dp), fontSize = 24.sp)
+        Column(Modifier.weight(1f)) {
+            Text("${e.optString("name")} ${feedWhat(e)}", color = ink, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(time(e.optLong("time")), color = if (focused) look.onAccent.copy(alpha = .8f) else look.soft, fontSize = 13.sp)
+        }
+        Text("›", color = ink, fontSize = 26.sp)
+    }
+}
+
+/** Datebook on the TV: the list, or the calendar (3 days, work week, week, month). */
+@Composable
+private fun CalendarView(api: Api, look: Look, onBack: () -> Unit) {
+    var mode by remember { mutableStateOf(CalMode.Week) }
+    var anchor by remember { mutableLongStateOf(CalDays.day(System.currentTimeMillis())) }
+    var picked by remember { mutableLongStateOf(anchor) }
+    val events by produceState(emptyList<CalOccurrence>(), mode, anchor) {
+        val days = CalDays.days(mode, anchor)
+        value = runCatching { api.events(days.first(), CalDays.addDays(days.last(), 1)).events }.getOrDefault(emptyList())
+    }
+    val colors = CalColors(look.card, look.ink, look.soft, look.accent, look.onAccent)
+    val first = remember { FocusRequester() }
+    ViewFrame("Datebook", look, onBack, start = first) {
+        Column(Modifier.fillMaxSize()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CalMode.entries.forEachIndexed { i, m ->
+                    TvButton(m.label, look, if (m == mode) Modifier.focusRequester(first) else Modifier, selected = m == mode) { mode = m; anchor = CalDays.day(System.currentTimeMillis()); picked = anchor }
+                }
+                Spacer(Modifier.weight(1f))
+                TvButton("‹", look) { anchor = CalDays.step(mode, anchor, -1) }
+                Text(CalDays.title(mode, anchor), color = look.ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                TvButton("›", look) { anchor = CalDays.step(mode, anchor, 1) }
+                TvButton("Today", look) { anchor = CalDays.day(System.currentTimeMillis()); picked = anchor }
+            }
+            Spacer(Modifier.height(12.dp))
+            val day: @Composable (Long) -> Modifier = { d ->
+                Modifier.onFocusChanged { if (it.isFocused) picked = d }.tvFocus(look, Color.Transparent, 14.dp, grow = 1.02f).focusable()
+            }
+            when (mode) {
+                CalMode.List -> {
+                    val days = CalDays.days(CalMode.List, anchor).filter { CalDays.on(events, it).isNotEmpty() }
+                    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(6.dp)) {
+                        if (days.isEmpty()) item { Empty("Nothing on the calendar for the next month.", look) }
+                        items(days) { d -> CalDayList(d, events, colors, Modifier.fillMaxWidth().then(day(d)).clip(RoundedCornerShape(14.dp)).background(look.card).padding(14.dp)) }
+                    }
+                }
+                CalMode.Month -> Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    CalMonthGrid(anchor, events, colors, picked, Modifier.weight(2.2f), dayModifier = day)
+                    CalDayList(picked, events, colors, Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp)).background(look.card).padding(14.dp))
+                }
+                else -> CalDayColumns(mode, anchor, events, colors, dayModifier = day)
+            }
+        }
+    }
 }
 
 /** Whether a side button can work here: its module is on (and Steward is set up for the TV). */
@@ -550,9 +697,11 @@ private fun FitColumn(modifier: Modifier, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Line(main: String, sub: String, look: Look, mark: String = "", markColor: Color = look.ink) {
-    Row(Modifier.padding(vertical = 3.dp)) {
+private fun Line(main: String, sub: String, look: Look, mark: String = "", markColor: Color = look.ink, pic: String = "") {
+    Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         if (mark.isNotEmpty()) Text(mark, Modifier.width(24.dp), color = markColor, fontSize = 17.sp)
+        // A routine step's picture, so younger children can follow it without reading.
+        if (pic.isNotEmpty()) Text(pic, Modifier.width(30.dp), fontSize = 20.sp)
         Column {
             Text(main, color = look.ink, fontSize = 17.sp, lineHeight = 21.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (sub.isNotEmpty()) Text(sub, color = look.soft, fontSize = 13.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -595,7 +744,7 @@ private fun RoutineLines(r: JSONObject, later: JSONArray?, names: Map<String, St
         objs(rt.optJSONArray("items")).forEach { i ->
             val done = i.optBoolean("done")
             Line(i.optString("text"), whoText(listOfNotNull(i.optString("who").takeIf { it.isNotEmpty() }), names), look,
-                mark = if (done) "✓" else "○", markColor = if (done) look.accent else look.soft)
+                mark = if (done) "✓" else "○", markColor = if (done) look.accent else look.soft, pic = i.optString("emoji"))
         }
     }
     // "Later today" and its first entry go together, so the heading is never left on its own.
@@ -729,10 +878,14 @@ private fun Modifier.tvFocus(look: Look, base: Color, radius: Dp, grow: Float = 
         .graphicsLayer { val k = 1f + (grow - 1f) * t; scaleX = k; scaleY = k }
         .drawWithContent {
             val r = radius.toPx()
-            drawRoundRect(if (fill) lerp(base, look.accent, t) else lerp(base, look.accent, .2f * t), cornerRadius = CornerRadius(r))
+            drawRoundRect(if (fill) lerp(base, look.accent, t) else lerp(base, look.accent, .34f * t), cornerRadius = CornerRadius(r))
             drawContent()
             if (t > 0f) {
-                val w = 4.dp.toPx()
+                // A soft halo outside, then a solid ring: easy to see from across the room.
+                val h = 9.dp.toPx()
+                drawRoundRect(ring.copy(alpha = .28f * t), topLeft = Offset(-h / 2, -h / 2), size = Size(size.width + h, size.height + h),
+                    cornerRadius = CornerRadius(r + h / 2), style = Stroke(h))
+                val w = 5.dp.toPx()
                 drawRoundRect(ring.copy(alpha = t), topLeft = Offset(w / 2, w / 2), size = Size(size.width - w, size.height - w),
                     cornerRadius = CornerRadius((r - w / 2).coerceAtLeast(0f)), style = Stroke(w))
             }
@@ -743,13 +896,13 @@ private fun Modifier.tvFocus(look: Look, base: Color, radius: Dp, grow: Float = 
 
 /** A button for the remote: outlined, filling with the accent when selected. */
 @Composable
-private fun TvButton(text: String, look: Look, modifier: Modifier = Modifier, icon: ImageVector? = null, enabled: Boolean = true, onClick: () -> Unit) {
+private fun TvButton(text: String, look: Look, modifier: Modifier = Modifier, icon: ImageVector? = null, enabled: Boolean = true, selected: Boolean = false, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val ink = when { !enabled -> look.soft.copy(alpha = .45f); focused -> look.onAccent; else -> look.ink }
+    val ink = when { !enabled -> look.soft.copy(alpha = .45f); focused -> look.onAccent; selected -> look.accent; else -> look.ink }
     val shape = RoundedCornerShape(24.dp)
     Row(
         modifier.tvFocus(look, look.bg, 24.dp, fill = true) { focused = it }
-            .border(1.5.dp, if (enabled) look.soft.copy(alpha = .5f) else look.soft.copy(alpha = .2f), shape)
+            .border(if (selected) 2.5.dp else 1.5.dp, when { selected -> look.accent; enabled -> look.soft.copy(alpha = .5f); else -> look.soft.copy(alpha = .2f) }, shape)
             .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 20.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -762,8 +915,16 @@ private fun TvButton(text: String, look: Look, modifier: Modifier = Modifier, ic
 @Composable
 private fun TvMenu(title: String, options: List<Pair<String, () -> Unit>>, look: Look, onDismiss: () -> Unit) {
     val focus = remember { FocusRequester() }
+    // The menu opens while OK is still held (that's how it was asked for): ignore OK until the
+    // remote lets go and presses it again, so the held press doesn't pick the first choice.
+    var armed by remember { mutableStateOf(false) }
     Overlay(onDismiss) {
-        Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(Color(0x99000000)).onPreviewKeyEvent { e ->
+            val k = e.nativeKeyEvent
+            val ok = k.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || k.keyCode == KeyEvent.KEYCODE_ENTER || k.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+            if (ok && k.action == KeyEvent.ACTION_DOWN && k.repeatCount == 0) armed = true
+            ok && !armed
+        }, contentAlignment = Alignment.Center) {
             Column(Modifier.widthIn(min = 360.dp, max = 520.dp).clip(RoundedCornerShape(28.dp)).background(look.bg).padding(24.dp)) {
                 Text(title, color = look.ink, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 26.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(12.dp))
@@ -845,40 +1006,60 @@ private fun ListView(title: String, look: Look, onBack: () -> Unit, content: @Co
 }
 
 @Composable
-private fun MapView(prefs: Prefs, api: Api, look: Look, onBack: () -> Unit) {
+private fun MapView(prefs: Prefs, api: Api, look: Look, focusOn: String? = null, onBack: () -> Unit) {
     val res by produceState<MembersResponse?>(null) {
         while (true) { value = runCatching { api.members(0) }.getOrDefault(value); delay(30_000) }
     }
-    ViewFrame("Where everyone is", look, onBack) {
+    // Who the map is zoomed to ("" = everyone), and a counter so choosing again re-centres.
+    var chosen by remember { mutableStateOf(focusOn.orEmpty()) }
+    var seq by remember { mutableIntStateOf(1) }
+    val first = remember { FocusRequester() }
+    ViewFrame("Where everyone is", look, onBack, start = first) {
         val r = res
         if (r == null) { Empty("Loading…", look); return@ViewFrame }
         val people = r.members.filter { it.access != "display" && it.role != "dependent" }
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            Column(Modifier.width(300.dp).fillMaxHeight().clip(RoundedCornerShape(28.dp)).background(look.card).padding(20.dp)) {
-                FitColumn(Modifier.weight(1f)) {
-                    people.forEach { p ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                            Box(Modifier.size(40.dp).clip(CircleShape).background(Color(parseColor(p.color))), contentAlignment = Alignment.Center) {
-                                Text(p.emoji.ifEmpty { initialOf(p.name) }, color = Color.White, fontSize = 18.sp)
-                            }
-                            Column(Modifier.padding(start = 12.dp)) {
-                                Text(p.name, color = look.ink, fontSize = 20.sp)
-                                Text(if (p.loc == null) "No location yet" else Seen.where(p), color = look.soft, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
+        val who = people.find { it.id == chosen }
+        val loc = who?.loc
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            LazyColumn(Modifier.width(230.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(6.dp)) {
+                item {
+                    PersonRow("Everyone", "${people.count { it.loc != null }} on the map", null, look, chosen.isEmpty(), if (chosen.isEmpty()) Modifier.focusRequester(first) else Modifier) { chosen = ""; seq++ }
+                }
+                items(people, key = { it.id }) { p ->
+                    PersonRow(p.name, if (p.loc == null) "No location yet" else Seen.where(p), p, look, p.id == chosen,
+                        if (p.id == chosen) Modifier.focusRequester(first) else Modifier) { chosen = p.id; seq++ }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(28.dp))) {
+            Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(24.dp))) {
                 OsmMap(
                     members = people.filter { it.loc != null && !it.paused },
                     tiles = MapStyles.resolve(prefs.mapStyle, LocalDarkTheme.current, r.server.tileUrl, r.server.tileUrlDark, r.server.tileAttribution, prefs.dimMap),
-                    camera = CameraCommand.FitAll(1),
+                    camera = if (loc != null) CameraCommand.Center(loc.lat, loc.lon, seq) else CameraCommand.FitAll(seq),
                     statusOf = { Seen.where(it) },
                     places = r.places,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+        }
+    }
+}
+
+/** A person in the map's list (or "Everyone"): choose one to zoom the map to them. */
+@Composable
+private fun PersonRow(name: String, sub: String, p: Member?, look: Look, chosen: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        modifier.fillMaxWidth().tvFocus(look, if (chosen) look.accent.copy(alpha = .22f) else look.card, 16.dp, grow = 1.03f, fill = true) { focused = it }
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(34.dp).clip(CircleShape).background(if (p != null) Color(parseColor(p.color)) else look.accent), contentAlignment = Alignment.Center) {
+            if (p != null) Text(p.emoji.ifEmpty { initialOf(p.name) }, color = Color.White, fontSize = 16.sp)
+            else Icon(Icons.Filled.LocationOn, null, tint = look.onAccent, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.padding(start = 10.dp)) {
+            Text(name, color = if (focused) look.onAccent else look.ink, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(sub, color = if (focused) look.onAccent.copy(alpha = .8f) else look.soft, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -969,6 +1150,12 @@ private fun SettingsView(config: TvConfig, installed: List<TvApp>, modules: Set<
             item { Heading("Buttons on the side", look) }
             items(SIDE_BUTTONS.filter { (id) -> available(id, modules, board) }, key = { it.first }) { (id, label) ->
                 SwitchRow(label, "", id in config.side, true, look) { config.toggleSide(id) }
+            }
+            if (config.hidden.isNotEmpty()) {
+                item { Heading("Hidden apps", look) }
+                items(installed.filter { it.pkg in config.hidden }, key = { "h" + it.pkg }) { app ->
+                    SettingRow(app.label, "Hidden from Apps.", look) { TvButton("Show", look) { config.unhide(app.pkg) } }
+                }
             }
             item { Heading("Home and remote", look) }
             item {
@@ -1095,7 +1282,7 @@ private fun DrawerTile(app: TvApp, look: Look, modifier: Modifier, onClick: () -
 
 /** Hold OK on an app (in the drawer or on the launcher): open, add or remove, move, app info, uninstall. */
 @Composable
-private fun AppMenu(app: TvApp, config: TvConfig, look: Look, onDone: () -> Unit) {
+private fun AppMenu(app: TvApp, config: TvConfig, look: Look, hasPicture: Boolean, onPicture: () -> Unit, onOwnPicture: () -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
     val shown = (config.apps ?: emptyList()).take(config.slots)
     val i = shown.indexOf(app.pkg)
@@ -1106,9 +1293,14 @@ private fun AppMenu(app: TvApp, config: TvConfig, look: Look, onDone: () -> Unit
             add("Remove from the launcher" to { config.removeApp(app.pkg) })
             if (i > 0) add("Move left" to { config.move(i, -1) })
             if (i < config.slots - 1) add("Move right" to { config.move(i, 1) })
-        } else add("Add to the launcher" to {
-            if (!config.addApp(app.pkg)) Toast.makeText(context, "The launcher is full: remove a tile first", Toast.LENGTH_LONG).show()
-        })
+            add("Change picture" to onPicture)
+            if (hasPicture) add("Use the app's own picture" to onOwnPicture)
+        } else {
+            add("Add to the launcher" to {
+                if (!config.addApp(app.pkg)) Toast.makeText(context, "The launcher is full: remove a tile first", Toast.LENGTH_LONG).show()
+            })
+            add("Hide from Apps" to { config.hide(app.pkg) })
+        }
         add("App info" to { start(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${app.pkg}"))) })
         add("Uninstall" to { start(Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.pkg}"))) })
     }
@@ -1204,11 +1396,12 @@ private fun Launcher(api: Api, config: TvConfig, installed: List<TvApp>, serverA
     val context = LocalContext.current
     val pictures = objs(serverApps).associate { it.optString("pkg") to it.optLong("image") }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val gap = 16.dp
+        val gap = 12.dp
         val n = config.slots
         // Tiles share the width, 16:9 like the apps' own banners, and no taller than 100dp.
         val w: Dp = minOf((maxWidth - gap * (n - 1)) / n, 100.dp * 16 / 9)
-        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+        // Centred as a group, however many tiles there are.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)) {
             for (i in 0 until n) {
                 val app = config.apps?.getOrNull(i)?.let { p -> installed.find { it.pkg == p } }
                 AppTile(api, app, pictures[app?.pkg] ?: 0L, w, look, onClick = { if (app != null) launch(context, app.pkg) else onEmpty(i) }, onLongClick = { if (app != null) onMenu(app.pkg) else onEmpty(i) })

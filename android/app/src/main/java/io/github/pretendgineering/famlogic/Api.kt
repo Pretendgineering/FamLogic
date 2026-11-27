@@ -356,6 +356,12 @@ class Api(private val baseUrl: String, private val token: String = "") {
     }
 
     /** Reading aloud on the family's server: text → WAV audio. */
+    /** Sends a file's bytes (a picture) with PUT. */
+    suspend fun putBytes(path: String, data: ByteArray, type: String) {
+        val (code, b) = raw("PUT", path, data, type)
+        if (code >= 400) throw ApiException(code, runCatching { org.json.JSONObject(String(b)).optString("error") }.getOrNull()?.ifEmpty { null } ?: "couldn't send it")
+    }
+
     /** A file's bytes, such as a picture. */
     suspend fun bytes(path: String): ByteArray {
         val (code, b) = raw("GET", path, null, null)
