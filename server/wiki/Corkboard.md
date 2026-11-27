@@ -9,7 +9,7 @@ when the sun rises and sets).
 
 Down the right side are buttons for the **Map** (where everyone is), the **Feed** (today so far),
 **Steward** (ask by talking into the remote), **Datebook** (what's coming up) and **Pantry**
-(meals), then **Apps** (every app on the TV) and **Settings**. Choose which buttons show in
+(meals) and **Meeting** ([Huddle](Huddle.md), family meetings), then **Apps** (every app on the TV) and **Settings**. Choose which buttons show in
 **Settings**.
 
 - **Map:** the family down the left; choose someone to zoom to them, or Everyone.

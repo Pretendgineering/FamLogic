@@ -91,6 +91,7 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.HomeRepairService
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material3.AlertDialog
@@ -144,6 +145,7 @@ fun HomeScreen(
 ) {
     if (Profiles.open) ProfilesDialog(prefs)
     if (Homestead.open) HomesteadDialog(prefs)
+    if (Huddle.open) HuddleDialog(prefs)
     if (Corkboard.open) CorkboardDialog(prefs)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -193,6 +195,7 @@ fun HomeScreen(
         "profiles" -> Modules.has(features, "profiles") && Access.can("profiles") && prefs.access != "dependent"
         "display" -> Modules.has(features, "display") && Corkboard.mayControl(prefs) && !Access.isDisplay
         "homestead" -> Modules.has(features, "homestead") && Access.can("homestead") && prefs.access != "dependent"
+        "meetings" -> Modules.has(features, "meetings") && Access.can("meetings") && prefs.access != "dependent"
         in SOON_TILES -> "soon:$t" in features
         "chores" -> Modules.has(features, Modules.CHORES) && Access.can("chores") && prefs.access != "dependent"
         "todos" -> Modules.has(features, Modules.TODOS) && Access.can("todos") && prefs.access != "dependent"
@@ -207,7 +210,7 @@ fun HomeScreen(
     // displays' homes are set by a parent, so they're left alone.
     LaunchedEffect(features, Access.home) {
         if (Access.isChild || Access.isDisplay || features.isEmpty()) return@LaunchedEffect
-        val moduleTiles = listOf("calendar", "todos", "chores", "routines", "meals", "steward", "profiles", "homestead", "display") + SOON_TILES
+        val moduleTiles = listOf("calendar", "todos", "chores", "routines", "meals", "steward", "profiles", "homestead", "meetings", "display") + SOON_TILES
         val placed = saved.map { it.id }.toSet()
         val seen = prefs.seenTiles ?: placed
         val fresh = moduleTiles.filter { usable(it) && it !in placed && it !in seen }
@@ -315,6 +318,11 @@ fun HomeScreen(
                         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
                         val next = Homestead.data?.jobs?.firstOrNull()
                         SimpleTile(Access.name("homestead"), next?.let { (if (it.due <= today) "Now: " else "Next: ") + it.title } ?: "Your home's upkeep", h, big, icon = tileIcon("homestead")) { Homestead.open = true }
+                    }
+                    "meetings" -> {
+                        LaunchedEffect(Unit) { Huddle.refresh(prefs) }
+                        val next = Huddle.data?.meetings?.firstOrNull()
+                        SimpleTile(Access.name("meetings"), next?.title ?: "Family meetings", h, big, icon = tileIcon("meetings")) { Huddle.open = true }
                     }
                     "profiles" -> SimpleTile(Access.name("profiles"), "Allergies, medicines, contacts", h, big, icon = tileIcon("profiles")) { Profiles.open = true }
                     in SOON_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) { if (Steward.available(prefs)) Steward.sheetOpen = true }
@@ -523,7 +531,7 @@ val PLACEHOLDER_TILES = listOf("nudges", "ride")
 val SOON_TILES = listOf("outings", "garage", "ledger", "pets", "contacts")
 
 /** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
-val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "steward", "profiles", "homestead", "display") + SOON_TILES + PLACEHOLDER_TILES
+val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "steward", "profiles", "homestead", "meetings", "display") + SOON_TILES + PLACEHOLDER_TILES
 
 private val DRAWER_HEIGHT = 132.dp
 
@@ -549,6 +557,7 @@ fun tileIcon(id: String): ImageVector = when (id) {
     "pets" -> Icons.Filled.Pets
     "profiles" -> Icons.Filled.Badge
     "homestead" -> Icons.Filled.HomeRepairService
+    "meetings" -> Icons.Filled.Groups
     "contacts" -> Icons.Filled.Contacts
     else -> Icons.Filled.Build
 }

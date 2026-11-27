@@ -36,6 +36,7 @@ type Server struct {
 	feedCache feedEvents // outside calendars' events, read once per download
 	restart   func()     // stops and starts the server again (restoring a backup); nil in tests
 	routines  *lists
+	meetings  *meetings
 	dav       davLogins
 	cfg       Config
 	store     *Store
@@ -61,6 +62,7 @@ func NewServer(cfg Config, store *Store, static fs.FS) *Server {
 		s.lists = newLists(s.vault)
 		s.cal = newCalendar(s.vault, filepath.Dir(store.path))
 		s.routines = newRoutines(s.vault)
+		s.meetings = newMeetings(s.vault)
 	}
 	s.voice = openVoice(env("VOICE_DIR", "/voice"), filepath.Join(filepath.Dir(store.path), "tmp"))
 	if s.chat = openChatNextTo(store.path); s.chat != nil {
@@ -182,6 +184,15 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/calendar/feeds/{id}", s.choreAuth(s.handleDeleteFeed))
 	mux.HandleFunc("POST /api/calendar/feeds/{id}/refresh", s.choreAuth(s.handleRefreshFeed))
 	mux.HandleFunc("GET /api/routines", s.choreAuth(s.handleRoutines))
+	mux.HandleFunc("GET /api/meetings", s.choreAuth(s.handleMeetings))
+	mux.HandleFunc("POST /api/meetings", s.choreAuth(s.handleCreateMeeting))
+	mux.HandleFunc("GET /api/meetings/{id}", s.choreAuth(s.handleMeeting))
+	mux.HandleFunc("PUT /api/meetings/{id}", s.choreAuth(s.handleSaveMeeting))
+	mux.HandleFunc("POST /api/meetings/{id}/delete", s.choreAuth(s.handleDeleteMeeting))
+	mux.HandleFunc("POST /api/meetings/{id}/send", s.choreAuth(s.handleMeetingSend))
+	mux.HandleFunc("POST /api/meetings/{id}/slides/{slide}/jobs", s.choreAuth(s.handleMeetingJob))
+	mux.HandleFunc("POST /api/meetings/{id}/slides/{slide}/jobs/{job}", s.choreAuth(s.handleMeetingJobWho))
+	mux.HandleFunc("POST /api/meetings/{id}/slides/{slide}/notes", s.choreAuth(s.handleMeetingNote))
 	mux.HandleFunc("POST /api/routines", s.choreAuth(s.handleCreateRoutine))
 	mux.HandleFunc("POST /api/routines/{id}/items/{item}", s.choreAuth(s.handleTickRoutine))
 	mux.HandleFunc("POST /api/routines/{id}/delete", s.choreAuth(s.handleArchiveRoutine))

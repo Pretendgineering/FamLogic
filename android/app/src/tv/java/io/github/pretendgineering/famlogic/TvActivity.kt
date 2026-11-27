@@ -1,6 +1,7 @@
 package io.github.pretendgineering.famlogic
 
 import android.content.ActivityNotFoundException
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.heightIn
@@ -309,6 +310,7 @@ private val SIDE_BUTTONS: List<Triple<String, String, ImageVector>> = listOf(
     Triple("steward", "Steward", Icons.Filled.Mic),
     Triple("calendar", "Datebook", Icons.Filled.DateRange),
     Triple("meals", "Pantry", Icons.Filled.Restaurant),
+    Triple("meetings", "Meeting", Icons.Filled.Groups),
 )
 
 // ---- the dashboard
@@ -468,13 +470,18 @@ private fun TvBoard(prefs: Prefs, config: TvConfig) {
             // Buttons down the right side, then the app drawer and Settings; Steward always
             // has its own round button at the bottom right.
             Column(Modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)) {
-                    SIDE_BUTTONS.filter { (id) -> id in config.side && available(id, modules, b) }.forEach { (id, label, icon) ->
-                        SideButton(label, icon, look) { nav.view = id }
+                // The buttons share the height: with many switched on they get shorter, then lose their labels.
+                BoxWithConstraints(Modifier.weight(1f)) {
+                    val shown = SIDE_BUTTONS.filter { (id) -> id in config.side && available(id, modules, b) }
+                    val n = shown.size + 2
+                    val each = ((maxHeight - 8.dp * (n - 1) - 2.dp) / n).coerceIn(34.dp, 58.dp)
+                    val compact = each < 52.dp
+                    Column(Modifier.fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)) {
+                        shown.forEach { (id, label, icon) -> SideButton(label, icon, look, each, compact) { nav.view = id } }
+                        Spacer(Modifier.height(2.dp))
+                        SideButton("Apps", Icons.Filled.Apps, look, each, compact) { nav.pickFor = null; nav.view = "apps" }
+                        SideButton("Settings", Icons.Filled.Settings, look, each, compact) { nav.view = "settings" }
                     }
-                    Spacer(Modifier.height(2.dp))
-                    SideButton("Apps", Icons.Filled.Apps, look) { nav.pickFor = null; nav.view = "apps" }
-                    SideButton("Settings", Icons.Filled.Settings, look) { nav.view = "settings" }
                 }
                 if (b?.optBoolean("steward") == true) {
                     Spacer(Modifier.height(10.dp))
@@ -544,6 +551,8 @@ private fun BoardViews(nav: BoardNav, prefs: Prefs, api: Api, config: TvConfig, 
         "calendar" -> CalendarView(api, look) { nav.view = null }
         "meals" -> ListView("Meals", look, { nav.view = null }) { board?.optJSONObject("meals")?.let { MealLines(it, look) } }
         "steward" -> StewardView(prefs, api, look) { nav.view = null; reload() }
+        "meetings" -> MeetingsView(api, look, objs(board?.optJSONObject("members")?.optJSONArray("members"))
+            .filter { it.optString("access") != "display" && it.optString("role") != "dependent" }) { nav.view = null }
         "apps" -> AppDrawer(installed.filter { it.pkg !in config.hidden }, look, nav.pickFor, onPick = { pkg -> nav.pickFor?.let { config.setApp(it, pkg) }; nav.pickFor = null; nav.view = null }, onMenu = { nav.menuFor = it }) { nav.pickFor = null; nav.view = null }
         "settings" -> SettingsView(config, installed, modules, board, look) { nav.view = null }
     }
@@ -553,6 +562,134 @@ private fun BoardViews(nav: BoardNav, prefs: Prefs, api: Api, config: TvConfig, 
                 onOwnPicture = { scope.launch { runCatching { api.call("DELETE", "/api/display/apps/$pkg/image") }; reload() } }) { nav.menuFor = null }
         } ?: run { nav.menuFor = null }
     }
+}
+
+// ---- Huddle: family meetings, clicked through together on the TV
+
+/** Someone who can take a job: id, name, colour. */
+private data class Person(val id: String, val name: String, val color: String)
+
+@Composable
+private fun MeetingsView(api: Api, look: Look, members: List<JSONObject>, onBack: () -> Unit) {
+    val people = remember(members) { members.map { Person(it.optString("id"), it.optString("name"), it.optString("color")) } }
+    var data by remember { mutableStateOf<MeetingsData?>(null) }
+    var open by remember { mutableStateOf<Meeting?>(null) }
+    var refresh by remember { mutableIntStateOf(0) }
+    LaunchedEffect(refresh) { data = runCatching { api.meetings() }.getOrDefault(data) }
+    open?.let { m -> MeetingTv(api, look, m, people, data?.canRun == true) { open = null; refresh++ }; return }
+    val first = remember { FocusRequester() }
+    val d = data
+    ViewFrame("Family meetings", look, onBack, start = if (d?.meetings?.isNotEmpty() == true) first else null) {
+        when {
+            d == null -> Empty("Loading…", look)
+            d.meetings.isEmpty() -> Empty("No meetings yet. A parent can make one in the app or the console, or ask Steward.", look)
+            else -> LazyColumn(Modifier.widthIn(max = 900.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(8.dp)) {
+                itemsIndexed(d.meetings) { i, m ->
+                    MenuRow("${m.title}   ·   ${listOfNotNull(m.date.ifEmpty { null }, "${m.slides.size} topics").joinToString(" · ")}", look,
+                        if (i == 0) Modifier.focusRequester(first) else Modifier) { open = m }
+                }
+            }
+        }
+    }
+}
+
+/** One meeting, a topic at a time: what it's about, its jobs (and who has them), and its notes. */
+@Composable
+private fun MeetingTv(api: Api, look: Look, start: Meeting, people: List<Person>, canRun: Boolean, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var m by remember { mutableStateOf(start) }
+    var at by remember { mutableIntStateOf(0) }
+    var jobMenu by remember { mutableStateOf<Int?>(null) }
+    var asking by remember { mutableStateOf<String?>(null) } // "job" or "note": typing or saying one
+    fun act(f: suspend Api.() -> Meeting) = scope.launch {
+        runCatching { api.f() }.onSuccess { m = it }.onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+    }
+    val next = remember { FocusRequester() }
+    ViewFrame(m.title, look, onBack, start = next) {
+        if (m.slides.isEmpty()) { Empty("This meeting has no topics yet.", look); return@ViewFrame }
+        val i = at.coerceIn(0, m.slides.size - 1)
+        val s = m.slides[i]
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                // The topic, big.
+                Column(Modifier.weight(1.5f).fillMaxHeight().clip(RoundedCornerShape(24.dp)).background(look.card).padding(28.dp)) {
+                    Text("${i + 1} of ${m.slides.size}", color = look.accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(s.title, color = look.ink, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 40.sp, lineHeight = 46.sp)
+                    Spacer(Modifier.height(12.dp))
+                    if (s.text.isNotEmpty()) Text(s.text, color = look.ink, fontSize = 22.sp, lineHeight = 30.sp)
+                }
+                // Its jobs and notes.
+                LazyColumn(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(6.dp)) {
+                    item { Heading("Jobs", look) }
+                    if (s.jobs.isEmpty()) item { Text("None yet.", color = look.soft, fontSize = 15.sp) }
+                    itemsIndexed(s.jobs) { k, j ->
+                        val who = people.find { it.id == j.who }
+                        MenuRow((if (j.sent) "📋  " else "") + j.text + "  —  " + (who?.name ?: "needs a volunteer"), look) { if (canRun) jobMenu = k }
+                    }
+                    if (canRun) item { TvButton("Add a job", look, icon = Icons.Filled.Add) { asking = "job" } }
+                    item { Heading("Notes", look) }
+                    if (s.notes.isEmpty()) item { Text("None yet.", color = look.soft, fontSize = 15.sp) }
+                    items(s.notes) { n -> Text("• $n", color = look.ink, fontSize = 16.sp) }
+                    if (canRun) item { TvButton("Add a note", look, icon = Icons.Filled.Add) { asking = "note" } }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                TvButton("‹ Back", look, enabled = i > 0) { at = i - 1 }
+                TvButton("Next ›", look, Modifier.focusRequester(next), enabled = i < m.slides.size - 1) { at = i + 1 }
+                Spacer(Modifier.weight(1f))
+                if (canRun) TvButton("Send jobs to the Docket", look) {
+                    scope.launch {
+                        runCatching { api.sendMeeting(m.id) }.onSuccess { (mm, n) ->
+                            m = mm
+                            Toast.makeText(context, if (n == 0) "Nothing new to send (jobs need someone first)" else "$n ${if (n == 1) "job" else "jobs"} on the Docket", Toast.LENGTH_LONG).show()
+                        }.onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                    }
+                }
+            }
+        }
+        jobMenu?.let { k ->
+            val opts = people.map { p -> "${p.name} will do it" to { act { setMeetingJob(m.id, i, k, p.id) }; Unit } } +
+                listOf<Pair<String, () -> Unit>>("Needs a volunteer" to { act { setMeetingJob(m.id, i, k, "") } }, "Remove the job" to { act { setMeetingJob(m.id, i, k, "", remove = true) } })
+            TvMenu(s.jobs.getOrNull(k)?.text ?: "Job", opts, look) { jobMenu = null }
+        }
+        asking?.let { what ->
+            TvTextEntry(if (what == "job") "A job" else "A note", look, onDone = { text ->
+                asking = null
+                if (text.isNotBlank()) act { if (what == "job") addMeetingJob(m.id, i, text.trim()) else addMeetingNote(m.id, i, text.trim()) }
+            })
+        }
+    }
+}
+
+/** Typing or saying a few words on the TV (the remote's microphone, or the TV's keyboard). */
+@Composable
+private fun TvTextEntry(title: String, look: Look, onDone: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val listen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { text = it }
+    }
+    val speak = remember { FocusRequester() }
+    Overlay({ onDone("") }) {
+        Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+            Column(Modifier.widthIn(min = 420.dp, max = 640.dp).clip(RoundedCornerShape(28.dp)).background(look.bg).padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(title, color = look.ink, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 26.sp)
+                OutlinedTextField(text, { text = it.take(200) }, modifier = Modifier.fillMaxWidth(), singleLine = false)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TvButton("Speak", look, Modifier.focusRequester(speak), icon = Icons.Filled.Mic) {
+                        runCatching {
+                            listen.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM))
+                        }
+                    }
+                    TvButton("Add", look, enabled = text.isNotBlank()) { onDone(text) }
+                    TvButton("Cancel", look) { onDone("") }
+                }
+            }
+        }
+    }
+    FocusWhenReady(speak, title)
 }
 
 /** A picture from the TV's files, made a sensible size for a tile (at most 1280 wide, as a JPEG). */
@@ -670,6 +807,7 @@ private fun available(id: String, modules: Set<String>, board: JSONObject?) = wh
     "map" -> "thereabouts" in modules
     "calendar" -> "calendar" in modules
     "meals" -> "meals" in modules
+    "meetings" -> "meetings" in modules
     "steward" -> board?.optBoolean("steward") == true
     else -> true
 }
@@ -843,15 +981,15 @@ private fun MealLines(m: JSONObject, look: Look) {
 }
 
 @Composable
-private fun SideButton(label: String, icon: ImageVector, look: Look, onClick: () -> Unit) {
+private fun SideButton(label: String, icon: ImageVector, look: Look, height: Dp = 58.dp, compact: Boolean = false, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val tint = if (focused) look.onAccent else look.ink
     Column(
-        Modifier.width(68.dp).tvFocus(look, look.card, 18.dp, fill = true) { focused = it }.clickable(onClick = onClick).padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        Modifier.width(68.dp).height(height).tvFocus(look, look.card, 18.dp, fill = true) { focused = it }.clickable(onClickLabel = label, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
-        Text(label, color = if (focused) look.onAccent else look.soft, fontSize = 11.sp, maxLines = 1)
+        Icon(icon, if (compact) label else null, tint = tint, modifier = Modifier.size(24.dp))
+        if (!compact) Text(label, color = if (focused) look.onAccent else look.soft, fontSize = 11.sp, maxLines = 1)
     }
 }
 

@@ -388,6 +388,32 @@ var stewardTools = []stewardTool{
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handleDisplayMessage, "POST", "/api/display/messages", nil, map[string]any{"text": argStr(a, "text")})
 		}},
+	{"list_meetings", "Family meetings (Huddle), newest first, with their slides.", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleMeetings, "GET", "/api/meetings", nil, nil)
+		}},
+	{"create_meeting", "Make a family meeting to click through together on the TV. Each slide is a topic: a short title, a line or two of text, and optionally jobs to hand out (who: a name, or empty to ask for a volunteer). Parents only.", obj(map[string]any{
+		"title": str("e.g. Sunday family meeting"),
+		"date":  str("YYYY-MM-DD; empty for today"),
+		"slides": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{
+			"title": str("The topic, short"),
+			"text":  str("A line or two about it"),
+			"jobs":  map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"text": str("The job"), "who": str("A name, or empty for a volunteer")}}},
+		}, "required": []string{"title"}}},
+	}, "title", "slides"),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleCreateMeeting, "POST", "/api/meetings", nil, a)
+		}},
+	{"update_meeting", "Change a family meeting: send the whole meeting back (read it first with list_meetings) with your changes. Parents only.", obj(map[string]any{
+		"id":     str("The meeting's id"),
+		"title":  str("Its title"),
+		"date":   str("YYYY-MM-DD"),
+		"slides": map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Every slide: {title, text, jobs: [{text, who}], notes: [text]}"},
+	}, "id", "title", "slides"),
+		func(s *Server, me *Member, a map[string]any) any {
+			id := argStr(a, "id")
+			return s.callAs(me, s.handleSaveMeeting, "PUT", "/api/meetings/"+url.PathEscape(id), map[string]string{"id": id}, a)
+		}},
 	{"read_feed", "What happened recently: arrivals, check-ins, trips, chores done.", obj(map[string]any{
 		"hours": map[string]any{"type": "integer", "description": "How far back (default 12, at most 48)"},
 	}),

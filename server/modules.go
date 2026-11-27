@@ -38,6 +38,7 @@ var allModules = []ModuleInfo{
 	{"ledger", "Ledger", "Budget", "Bills, spending, groceries and paying off debt.", false, false},
 	{"pets", "Menagerie", "Pets", "Feeding, walks, medicines and vet visits.", false, false},
 	{"profiles", "Who's Who", "Profiles", "Allergies, medicines, sleep, likes and emergency contacts; a page for sitters.", true, false},
+	{"meetings", "Huddle", "Meetings", "Family meetings: a short agenda to click through together on the TV, handing out jobs (or asking for volunteers) and keeping notes.", true, false},
 	{"homestead", "Homestead", "Home care", "What your home has, and the upkeep it needs: bin days, filters, alarms, gutters, as chores and on the calendar.", true, false},
 	{"contacts", "Rolodex", "Contacts", "The family's address book, synced with phones (CardDAV).", false, false},
 }

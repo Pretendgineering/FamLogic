@@ -10,5 +10,6 @@ A self-hosted family hub. These pages come with FamLogic and are replaced when i
 - [Chitchat](Chitchat.md): chat
 - [Pebble](Pebble.md): the watch
 - [Corkboard](Corkboard.md): FamLogic on the TV
+- [Huddle](Huddle.md): family meetings, clicked through together
 
 Source: https://github.com/Pretendgineering/FamLogic

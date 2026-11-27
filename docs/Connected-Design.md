@@ -49,3 +49,4 @@ Chores and calendar events support both today (`Chore.For/Source`, `CalEvent.Sou
 - Who's Who (people's profiles; 0.40).
 - Homestead (the home's profile → Upkeep chores and Datebook bin days; 0.42). The template for
   Garage and Menagerie.
+- Huddle (family meetings as notes; jobs handed out in the meeting go onto the Docket; 0.47).

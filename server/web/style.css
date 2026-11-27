@@ -1039,3 +1039,10 @@ dl.profile dd { margin: 0; white-space: pre-wrap; }
 .cal-bar { font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid var(--cal); background: color-mix(in srgb, var(--cal) 20%, transparent); border-radius: 3px; padding: 0 .25rem; }
 .cal-daylist { display: flex; flex-direction: column; gap: .35rem; margin-bottom: 1rem; }
 @media (max-width: 700px) { .cal-cols { grid-template-columns: 1fr; } .cal-cell { min-height: 3.6rem; } .cal-bar { font-size: 0; height: 6px; padding: 0; } }
+
+/* Huddle: a meeting's slide. */
+.slide { padding: 1.6rem 1.8rem; }
+.slide-title { font-family: var(--serif); font-size: 2.2rem; margin: .3rem 0 .6rem; }
+.slide-text { font-size: 1.15rem; white-space: pre-wrap; }
+.cal-cell .cal-num { align-self: flex-start; }
+.list li select.who { width: auto; flex: none; max-width: 14rem; }

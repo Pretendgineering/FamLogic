@@ -111,7 +111,7 @@ object Access {
         "steward" to ("Steward" to "AI"), "routines" to ("Rhythms" to "Routines"), "nudges" to ("Nudges" to "Nudges"),
         "ride" to ("Pickup" to "Pickup"), "convo.new" to ("Chat shortcut" to "Chat shortcut"),
         "outings" to ("Outings" to "Health & activity"), "garage" to ("Garage" to "Cars"), "ledger" to ("Ledger" to "Budget"),
-        "pets" to ("Menagerie" to "Pets"), "profiles" to ("Who's Who" to "Profiles"), "homestead" to ("Homestead" to "Home care"),
+        "pets" to ("Menagerie" to "Pets"), "profiles" to ("Who's Who" to "Profiles"), "homestead" to ("Homestead" to "Home care"), "meetings" to ("Huddle" to "Meetings"),
         "contacts" to ("Rolodex" to "Contacts"),
     )
 }

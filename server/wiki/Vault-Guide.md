@@ -42,6 +42,7 @@ Calendar/              one note per event: 2026-12-05 Dentist (Sam).md
 Meals/                 one note per week: 2026-W49.md
 Meals/Recipes/         one note per recipe: Lasagne.md
 Routines/              recurring checklists: Bedtime.md
+Meetings/              family meetings (Huddle): 2026-11-29 Sunday family meeting.md
 Rhythms/               which routine is current when: School days.md
 ```
 
@@ -210,6 +211,27 @@ week: 2026-W49
 Front matter may give `serves`, `time` (minutes) and `tags`. The body has
 `## Ingredients` (one per line, as tasks so they can be ticked off while shopping or
 cooking) and `## Method`.
+
+### `meeting`: Meetings/<YYYY-MM-DD> <Title>.md
+
+```markdown
+---
+type: meeting
+date: 2026-11-29
+---
+# Sunday family meeting
+
+## Weekend plans
+The park on Saturday, or the pool if it rains?
+
+- [ ] Pack the picnic @Sam
+- [ ] Bring the football
+> We'll go to the park if it's dry.
+```
+
+A family meeting (Huddle). Each `## ` heading is a topic (a slide), the lines under it are
+what it says, `- [ ]` lines are jobs (`@Name` when someone has it; without, it needs a
+volunteer) and `> ` lines are notes. A job sent to the Docket is marked 📋.
 
 ### `routine`: Routines/<Title>.md
 

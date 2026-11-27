@@ -63,6 +63,7 @@ var kidModules = []kidModule{
 	{"meals", "Pantry", "Meals", LevelView, LevelFull},
 	{"profiles", "Who's Who", "Profiles", LevelView, LevelFull},   // children edit only their own (older ones)
 	{"homestead", "Homestead", "Home care", LevelView, LevelView}, // parents set up the home
+	{"meetings", "Huddle", "Meetings", LevelView, LevelView},      // parents write the meetings
 }
 
 type kidSwitch struct {
@@ -92,7 +93,7 @@ var kidFeatures = []kidSwitch{
 // Each can carry a size: "chat:half", "map:big" (half, wide or big; the map is never half).
 // Home tiles. Some are placeholders for modules still being built (they show
 // "coming soon"); "convo.<id>" is a shortcut to one chat.
-var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward", "display",
+var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward", "display", "meetings",
 	"outings", "garage", "ledger", "pets", "profiles", "homestead", "contacts"}
 
 // "2x1@0": 2 columns, 1 row, in the first column.

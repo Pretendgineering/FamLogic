@@ -175,6 +175,10 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.47.0: Huddle, family meetings
+- **Huddle:** a parent writes a short agenda (or asks Steward to), and the family clicks through it together on the TV, a tablet or the console: hand out jobs or ask for volunteers, keep notes, then send the jobs to the Docket. Each meeting is a note in the vault's Meetings/ folder, so it's the minutes too.
+- On the TV, the side buttons share the height, so more of them fit.
+
 ### ✅ 0.46.0: Calendar views, routine pictures, and a roomier TV
 - **Calendar views** in the app, the console and on the TV: 3 days, the work week, the week and the month, each event in its person's (or outside calendar's) colour.
 - **Routine pictures:** each step gets a picture (🪥 Brush teeth, 🎒 Pack school bag), or one you choose by starting the step with an emoji.

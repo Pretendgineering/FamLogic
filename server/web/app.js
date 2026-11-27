@@ -976,7 +976,7 @@ document.querySelectorAll("[data-icon]").forEach((s) => { s.innerHTML = icon(s.d
 
 let modules = [];      // from /api/admin/modules: id, name, description, available, enabled
 let modulesLoaded = false;
-const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "upkeep", meals: "meal", display: "tv", agents: "spark", routines: "check", outings: "walk", garage: "car", ledger: "wallet", pets: "paw", profiles: "idcard", homestead: "house", contacts: "book" };
+const MODULE_ICONS = { thereabouts: "pin", chat: "chat", calendar: "calendar", todos: "check", chores: "upkeep", meals: "meal", display: "tv", agents: "spark", routines: "check", outings: "walk", garage: "car", ledger: "wallet", pets: "paw", profiles: "idcard", homestead: "house", meetings: "people", contacts: "book" };
 const moduleInfo = (id) => modules.find((m) => m.id === id);
 const moduleOn = (id) => !modulesLoaded || !!(moduleInfo(id) || {}).enabled;
 
@@ -1611,6 +1611,7 @@ function renderModulePage(id) {
   if (id === "meals" && m.available) { box.classList.remove("soon"); renderMeals(box); return; }
   if (id === "profiles" && m.available) { box.classList.remove("soon"); renderProfiles(box); return; }
   if (id === "homestead" && m.available) { box.classList.remove("soon"); renderHomestead(box); return; }
+  if (id === "meetings" && m.available) { box.classList.remove("soon"); renderMeetings(box); return; }
   if (id === "display" && m.available) { box.classList.remove("soon"); renderCorkboard(box); return; }
   box.classList.add("soon");
   box.replaceChildren(
@@ -2430,6 +2431,128 @@ async function renderCalendar(box, force = false) {
   box.replaceChildren(...views, ...(calMode !== "list" ? [] : agenda.length ? agenda : [el("p", { class: "muted" }, "Nothing on the calendar for the next few weeks.")]),
     ...(data.canEdit ? [el("h2", {}, "Add an event"), form] : []), ...outside.filter(Boolean), sync);
 }
+
+// Huddle: family meetings. Parents write a short agenda ("## Topic", lines about it,
+// "- Job @Name", "> note"); the family clicks through it, hands out jobs and keeps notes;
+// then the jobs go onto the Docket.
+let meetingOpen = null; // the meeting being presented: { m, at }
+function agendaToSlides(text) {
+  const slides = [];
+  let cur = null;
+  let body = [];
+  const flush = () => { if (cur) { cur.text = body.join("\n").trim(); slides.push(cur); } body = []; };
+  for (const raw of text.split("\n")) {
+    const l = raw.replace(/\s+$/, "");
+    if (l.startsWith("#")) { flush(); cur = { title: l.replace(/^#+/, "").trim(), jobs: [], notes: [] }; }
+    else if (!cur) { if (l.trim()) cur = { title: l.trim(), jobs: [], notes: [] }; }
+    else if (/^[-*] /.test(l)) {
+      let t = l.slice(2).replace(/^\[ \] /, "").trim();
+      const m = (" " + t).match(/\s@([\p{L}\p{N}_\-]+)/u);
+      const who = m ? m[1].replace(/_/g, " ") : "";
+      if (m) t = (" " + t).replace(m[0], "").trim();
+      if (t) cur.jobs.push({ text: t, who });
+    } else if (l.startsWith(">")) { const n = l.slice(1).trim(); if (n) cur.notes.push(n); }
+    else body.push(l);
+  }
+  flush();
+  return slides;
+}
+function slidesToAgenda(m, people) {
+  const name = (id) => (people.find((p) => p.id === id) || {}).name;
+  return m.slides.map((s) => ["## " + s.title, s.text, ...s.jobs.map((j) => "- " + j.text + (name(j.who) ? " @" + name(j.who).replace(/ /g, "_") : "")), ...s.notes.map((n) => "> " + n)].filter(Boolean).join("\n")).join("\n\n");
+}
+
+async function renderMeetings(box, editingId = null) {
+  if (box.contains(document.activeElement) && document.activeElement.matches("input, textarea, select")) return;
+  let d;
+  try { d = await api("GET", "/api/meetings"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "meetings") return;
+  const people = lastMembers.filter((p) => p.role !== "dependent" && p.access !== "display");
+  if (meetingOpen) { presentMeeting(box, d, people); return; }
+  const parts = [];
+  if (!d.meetings.length) parts.push(el("p", { class: "muted" }, d.canEdit ? "No meetings yet. Make one below, or ask Steward (\"set up a family meeting about the holidays and chores\")." : "No meetings yet."));
+  parts.push(el("ul", { class: "list" }, ...d.meetings.map((m) => {
+    const jobs = m.slides.reduce((n, s) => n + s.jobs.length, 0);
+    const start = el("button", { type: "button", class: "tonal" }, "Start");
+    start.addEventListener("click", () => { meetingOpen = { id: m.id, at: 0 }; renderMeetings(box); });
+    const edit = d.canEdit ? el("button", { type: "button", class: "secondary" }, "Edit") : null;
+    if (edit) edit.addEventListener("click", () => renderMeetings(box, m.id));
+    return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, m.title),
+      el("div", { class: "sub" }, [m.date, `${m.slides.length} ${m.slides.length === 1 ? "topic" : "topics"}`, jobs ? `${jobs} ${jobs === 1 ? "job" : "jobs"}` : null].filter(Boolean).join(" · ") + " — " + m.slides.map((s) => s.title).join(", "))), start, edit);
+  })));
+  if (d.canEdit) {
+    const editing = d.meetings.find((m) => m.id === editingId);
+    const title = el("input", { maxlength: "80", value: editing ? editing.title : "Family meeting" });
+    const date = el("input", { type: "date", value: editing ? editing.date : new Date().toISOString().slice(0, 10) });
+    const agenda = el("textarea", { rows: "12", placeholder: "## Weekend plans\nThe park on Saturday, or the pool?\n- Pack the picnic @Sam\n- Bring the football\n\n## Chores for the week\n- Hoover the stairs" });
+    agenda.value = editing ? slidesToAgenda(editing, people) : "";
+    const save = el("button", { type: "submit" }, editing ? "Save meeting" : "Make the meeting");
+    const form = el("form", { class: "upkeep-add" }, el("div", { class: "row" }, el("label", { class: "grow" }, "Title", title), el("label", {}, "Date", date)),
+      el("label", {}, "Topics", agenda),
+      el("p", { class: "muted small" }, "Each topic starts with ## and becomes a slide; lines under it are what it says. \"- Job @Name\" hands out a job (without @Name, it asks for a volunteer); \"> \" is a note. Names: " + people.map((p) => p.name.replace(/ /g, "_")).join(", ") + "."),
+      el("div", { class: "row" }, save, editing ? (() => { const c = el("button", { type: "button", class: "secondary" }, "Cancel"); c.addEventListener("click", () => renderMeetings(box)); return c; })() : null,
+        editing ? (() => { const r = el("button", { type: "button", class: "link danger" }, "Remove"); r.addEventListener("click", async () => { if (confirm(`Remove "${editing.title}"?`)) { await api("POST", `/api/meetings/${editing.id}/delete`).catch(() => {}); renderMeetings(box); } }); return r; })() : null));
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const body = { title: title.value.trim(), date: date.value, slides: agendaToSlides(agenda.value) };
+      try { await api(editing ? "PUT" : "POST", editing ? `/api/meetings/${editing.id}` : "/api/meetings", body); renderMeetings(box); } catch (err) { alert(err.message); }
+    });
+    parts.push(el("h2", {}, editing ? "Edit the meeting" : "New meeting"), form);
+  }
+  box.replaceChildren(...parts);
+}
+
+async function presentMeeting(box, d, people) {
+  let m = d.meetings.find((x) => x.id === meetingOpen.id);
+  if (!m) { meetingOpen = null; renderMeetings(box); return; }
+  const draw = () => {
+    const at = Math.min(meetingOpen.at, Math.max(0, m.slides.length - 1));
+    const s = m.slides[at];
+    const act = async (method, path, body) => { try { m = (await api(method, path, body)).meeting; draw(); } catch (err) { alert(err.message); } };
+    const back = el("button", { type: "button", class: "secondary" }, "Close");
+    back.addEventListener("click", () => { meetingOpen = null; renderMeetings(box); });
+    if (!s) { box.replaceChildren(el("p", {}, "This meeting has no topics yet."), back); return; }
+    const jobs = el("ul", { class: "list" }, ...s.jobs.map((j, k) => {
+      const pick = el("select", { class: "who" }, el("option", { value: "" }, "Needs a volunteer"), ...people.map((p) => el("option", { value: p.id }, p.name)));
+      pick.value = j.who || "";
+      pick.disabled = !d.canRun;
+      pick.addEventListener("change", () => act("POST", `/api/meetings/${m.id}/slides/${at}/jobs/${k}`, { who: pick.value }));
+      const rm = d.canRun ? el("button", { type: "button", class: "link danger" }, "Remove") : null;
+      if (rm) rm.addEventListener("click", () => act("POST", `/api/meetings/${m.id}/slides/${at}/jobs/${k}`, { remove: true }));
+      return el("li", {}, el("span", {}, j.sent ? "📋" : "○"), el("div", { class: "grow" }, el("div", { class: "title" }, j.text)), pick, rm);
+    }));
+    const add = (kind, placeholder) => {
+      const input = el("input", { placeholder, maxlength: kind === "jobs" ? "120" : "300" });
+      const f = el("form", { class: "row" }, el("label", { class: "grow" }, input), el("button", { type: "submit", class: "secondary" }, "Add"));
+      f.addEventListener("submit", (ev) => { ev.preventDefault(); if (input.value.trim()) act("POST", `/api/meetings/${m.id}/slides/${at}/${kind}`, { text: input.value.trim() }); });
+      return f;
+    };
+    const prev = el("button", { type: "button", class: "secondary" }, "‹ Back");
+    prev.disabled = at === 0;
+    prev.addEventListener("click", () => { meetingOpen.at = at - 1; draw(); });
+    const next = el("button", { type: "button" }, "Next ›");
+    next.disabled = at >= m.slides.length - 1;
+    next.addEventListener("click", () => { meetingOpen.at = at + 1; draw(); });
+    const send = d.canRun ? el("button", { type: "button", class: "tonal" }, "Send jobs to the Docket") : null;
+    if (send) send.addEventListener("click", async () => {
+      try { const r = await api("POST", `/api/meetings/${m.id}/send`); m = r.meeting; draw(); alert(r.sent ? `${r.sent} ${r.sent === 1 ? "job" : "jobs"} on the Docket` : "Nothing new to send (jobs need someone first)."); } catch (err) { alert(err.message); }
+    });
+    box.replaceChildren(
+      el("div", { class: "row" }, el("h2", { class: "grow" }, m.title), back),
+      el("div", { class: "panel slide" }, el("div", { class: "muted small" }, `${at + 1} of ${m.slides.length}`), el("h1", { class: "slide-title" }, s.title), s.text ? el("p", { class: "slide-text" }, s.text) : null),
+      el("h2", {}, "Jobs"), s.jobs.length ? jobs : el("p", { class: "muted small" }, "None yet."), d.canRun ? add("jobs", "Add a job") : null,
+      el("h2", {}, "Notes"), ...(s.notes.length ? s.notes.map((n) => el("p", {}, "• " + n)) : [el("p", { class: "muted small" }, "None yet.")]), d.canRun ? add("notes", "Add a note") : null,
+      el("div", { class: "row" }, prev, next, send));
+  };
+  draw();
+}
+document.addEventListener("keydown", (e) => {
+  if (!meetingOpen || viewFromHash() !== "meetings" || e.target.matches("input, textarea, select")) return;
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    const btn = [...document.querySelectorAll("main:not([hidden]) button")].find((b) => b.textContent === (e.key === "ArrowRight" ? "Next ›" : "‹ Back"));
+    if (btn && !btn.disabled) btn.click();
+  }
+});
 
 // Rhythms: routines, and who's on which now.
 async function renderRoutines(box) {
