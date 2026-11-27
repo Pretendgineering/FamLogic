@@ -624,9 +624,10 @@ private fun CalendarView(api: Api, look: Look, onBack: () -> Unit) {
     var mode by remember { mutableStateOf(CalMode.Week) }
     var anchor by remember { mutableLongStateOf(CalDays.day(System.currentTimeMillis())) }
     var picked by remember { mutableLongStateOf(anchor) }
-    val events by produceState(emptyList<CalOccurrence>(), mode, anchor) {
+    var events by remember { mutableStateOf(emptyList<CalOccurrence>()) }
+    LaunchedEffect(mode, anchor) {
         val days = CalDays.days(mode, anchor)
-        value = runCatching { api.events(days.first(), CalDays.addDays(days.last(), 1)).events }.getOrDefault(emptyList())
+        events = runCatching { api.events(days.first(), CalDays.addDays(days.last(), 1)).events }.getOrDefault(emptyList())
     }
     val colors = CalColors(look.card, look.ink, look.soft, look.accent, look.onAccent)
     val first = remember { FocusRequester() }
