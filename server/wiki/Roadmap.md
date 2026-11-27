@@ -175,6 +175,15 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.50.0: Steward on small computers, and Steward's own button
+- **A small prompt:** Steward now sends about 900 tokens with each request instead of about 4,500, opening the skill it needs (chores, calendar, lists...) as it goes, the way Hermes Agent does. The fixed part never changes, so model servers keep it cached. Answers are quicker and cheaper everywhere, and small models on small computers become practical.
+- **Built in:** Settings → AI checks this computer and offers small open models (Qwen3.5, Liquid LFM3, Phi-4 mini, Gemma 4) with download sizes, memory needs, licences and a guess at how quick each would be. Download one and Steward runs it right here, with nothing else to set up.
+- **Or a computer at home, or the cloud,** with a second model to hand over to when the first can't answer (it's down, too slow, or says a request is too much for it), never after it has changed something.
+- **Test it:** real family requests, run on a made-up family and checked, with times. `scripts/steward-bench.sh` compares models on a graphics card or a small CPU.
+- **Outside agents:** Hermes, Claude Desktop or any MCP client can use the same skills with a key (MCP address and a Hermes skill in Settings → AI).
+- **Steward's button** sits in the corner of every screen (only when Steward is set up), moving over beside a screen's own button, and above a chat's message box or the map's sheet. The Steward tile is gone.
+- **Home tiles** go up to 5 x 5, taller than wide too; one-button tiles are 1 x 1 (just the icon) or 2 x 1 (with its name); a corner handle resizes both ways at once.
+
 ### ✅ 0.49.0: Kids' polish, new names, and a Home of up to 5 across
 - **For younger children:** picture icons everywhere (Datebook, Docket, Rhythms and Pantry have theirs now); no settings at all, just a colour button with each theme as a bar in its own colour (a parent still gets in the secret way); the family feed beside Home only if a parent switches it on (console → Access); bigger faces in Chitchat, and on tablets the camera sits beside the talk bar, matching it.
 - **New names:** Who's Who is now **Dossier**, Outings is **Vitals**, and Garage is **Driveway** (plain label: Vehicles). The themes And Chill and Suspicious Orange are now **Spider-Man** and **Safety Cone**.

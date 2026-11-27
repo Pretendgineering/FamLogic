@@ -195,7 +195,7 @@ fun HomeScreen(
         // Modules still being built: "coming soon" tiles, so a layout can be planned.
         "nudges" -> Access.can("nudges") && "requests" in features && !Access.isDisplay && t !in Modules.hidden
         "ride" -> Access.can("requests") && "requests" in features && !Access.isDisplay && t !in Modules.hidden
-        "steward" -> Steward.available(prefs) && t !in Modules.hidden
+        "steward" -> false // the corner button does this now; old layouts with the tile just skip it
         "profiles" -> Modules.has(features, "profiles") && Access.can("profiles") && prefs.access != "dependent"
         "display" -> Modules.has(features, "display") && Corkboard.mayControl(prefs) && !Access.isDisplay
         "homestead" -> Modules.has(features, "homestead") && Access.can("homestead") && prefs.access != "dependent"
@@ -214,7 +214,7 @@ fun HomeScreen(
     // displays' homes are set by a parent, so they're left alone.
     LaunchedEffect(features, Access.home) {
         if (Access.isChild || Access.isDisplay || features.isEmpty()) return@LaunchedEffect
-        val moduleTiles = listOf("calendar", "todos", "chores", "routines", "meals", "steward", "profiles", "homestead", "meetings", "display") + SOON_TILES
+        val moduleTiles = listOf("calendar", "todos", "chores", "routines", "meals", "profiles", "homestead", "meetings", "display") + SOON_TILES
         val placed = saved.map { it.id }.toSet()
         val seen = prefs.seenTiles ?: placed
         val fresh = moduleTiles.filter { usable(it) && it !in placed && it !in seen }
@@ -583,7 +583,7 @@ val PLACEHOLDER_TILES = listOf("nudges", "ride")
 val SOON_TILES = listOf("outings", "garage", "ledger", "pets", "contacts")
 
 /** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
-val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "steward", "profiles", "homestead", "meetings", "display") + SOON_TILES + PLACEHOLDER_TILES
+val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "profiles", "homestead", "meetings", "display") + SOON_TILES + PLACEHOLDER_TILES
 
 private val DRAWER_HEIGHT = 132.dp
 
