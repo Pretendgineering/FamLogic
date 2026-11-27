@@ -68,7 +68,15 @@ import java.util.Locale
 private val muted @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
 
 @Composable
-private fun GlanceFrame(title: String, icon: ImageVector, height: Dp, wide: Int, big: Boolean, onClick: (() -> Unit)?, body: @Composable () -> Unit) {
+private fun GlanceFrame(title: String, icon: ImageVector, height: Dp, wide: Int, big: Boolean, onClick: (() -> Unit)?, tall: Int = 2, body: @Composable () -> Unit) {
+    if (wide == 1 && tall == 1) {
+        // One square: no room for a title, just the icon and the fact.
+        Column(Modifier.fillMaxWidth().height(height).then(if (onClick != null) Modifier.clickable(onClickLabel = title, onClick = onClick) else Modifier).padding(10.dp)) {
+            Icon(icon, contentDescription = title, tint = Accent2, modifier = Modifier.size(20.dp))
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomStart) { body() }
+        }
+        return
+    }
     Column(
         Modifier.fillMaxWidth().height(height).then(if (onClick != null) Modifier.clickable(onClickLabel = title, onClick = onClick) else Modifier).padding(14.dp),
     ) {
@@ -98,7 +106,7 @@ fun TodayTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onOp
     val now = System.currentTimeMillis()
     val tonight = Datebook.midnight(1)
     val events = Datebook.data?.events?.filter { it.end > now && it.start < tonight }.orEmpty()
-    GlanceFrame("Today", Icons.Filled.WbSunny, height, wide, big, onClick = null) {
+    GlanceFrame("Today", Icons.Filled.WbSunny, height, wide, big, onClick = null, tall = tall) {
         if (wide == 1 && tall == 1) {
             // One square: how much is left today, all told.
             val n = due.size + events.size + (routine?.list?.items?.count { !it.done } ?: 0)
@@ -144,7 +152,7 @@ fun FeedTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onOpe
         }
     }
     val latest = events.sortedByDescending { it.time }
-    GlanceFrame("Feed", Icons.Filled.Cloud, height, wide, big, onOpen) {
+    GlanceFrame("Feed", Icons.Filled.Cloud, height, wide, big, onOpen, tall = tall) {
         if (latest.isEmpty()) { Text("Nothing yet today.", color = muted); return@GlanceFrame }
         if (wide == 1 && tall == 1) {
             Column { BigFact("${latest.size}"); Text("today", color = muted, style = MaterialTheme.typography.bodySmall) }
@@ -172,12 +180,12 @@ fun FeedTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, onOpe
 fun WhosHomeTile(members: List<Member>, height: Dp, wide: Int, tall: Int, big: Boolean, onOpen: () -> Unit) {
     val people = members.filter { it.role != "dependent" }
     val home = people.filter { !it.paused && it.place.equals("Home", ignoreCase = true) }
-    GlanceFrame("Who's home", Icons.Filled.WbCloudy, height, wide, big, onOpen) {
+    GlanceFrame("Who's home", Icons.Filled.WbCloudy, height, wide, big, onOpen, tall = tall) {
         if (wide == 1 && tall == 1) {
             Column { BigFact("${home.size}/${people.size}"); Text("at home", color = muted, style = MaterialTheme.typography.bodySmall) }
             return@GlanceFrame
         }
-        val face = if (big || tall >= 2) 44 else 34
+        val face = if (tall >= 2) (if (big) 44 else 40) else 28
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             people.sortedBy { if (it in home) 0 else 1 }.forEach { m ->
                 val isHome = m in home
@@ -221,11 +229,15 @@ fun CountdownTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean, 
         }
     }.sortedBy { it.date.timeInMillis }
     fun days(c: Calendar) = ((c.timeInMillis - today.timeInMillis) / 86_400_000L).toInt()
-    GlanceFrame("Countdown", Icons.Filled.WbSunny, height, wide, big, onOpen) {
+    GlanceFrame("Countdown", Icons.Filled.WbSunny, height, wide, big, onOpen, tall = tall) {
         val next = items.firstOrNull()
         if (next == null) { Text("Add birthdays in Dossier, or all-day events in Datebook.", color = muted, style = MaterialTheme.typography.bodySmall); return@GlanceFrame }
+        val d = days(next.date)
+        if (wide == 1 && tall == 1) {
+            Column { BigFact(if (d == 0) "Today" else "${d}d", Accent2, max = 24); Text(next.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 10.sp, lineHeight = 11.sp, color = muted) }
+            return@GlanceFrame
+        }
         Column {
-            val d = days(next.date)
             BigFact(if (d == 0) "Today" else if (d == 1) "1 day" else "$d days", Accent2)
             Text(next.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
             if (tall >= 2) items.drop(1).take(tall * 2).forEach {
@@ -310,7 +322,7 @@ fun WeatherTile(prefs: Prefs, height: Dp, wide: Int, tall: Int, big: Boolean) {
     LaunchedEffect(Unit) {
         while (true) {
             runCatching { Api(prefs.serverUrl, prefs.token).call("GET", "/api/weather?unit=" + if (fahrenheit) "f" else "c") }
-                .onSuccess { wx = it; err = "" }.onFailure { if (wx == null) err = it.message ?: "No weather" }
+                .onSuccess { wx = it; err = "" }.onFailure { if (wx == null) err = (it.message ?: "No weather").replaceFirstChar { c -> c.uppercase() } }
             delay(15 * 60_000)
         }
     }

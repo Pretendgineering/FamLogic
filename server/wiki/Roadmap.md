@@ -175,6 +175,11 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.50.1: Home tiles that grow, and nine new ones
+- **Every tile shows more as it grows:** Upkeep gets a column per person at 4 or 5 wide; Datebook a column a day at 3 or more wide; Rhythms shows every routine on now side by side; Pantry shows today's meals, then the week; Dossier shows faces with allergy and medicine badges; Homestead the next jobs and bin days; Huddle the next meeting's topics; Corkboard quiet time and the TV's last message.
+- **New tiles:** Today (routines on now, chores due and what's on), Who's home, Weather (from Open-Meteo, free; only your home's position, rounded to about a kilometre, is sent), Clock, Countdown (birthdays and all-day events), Sticky note (one note the whole family shares), Feed, and the buttons Quick add (straight onto Shopping or your to-dos) and Quiet time (nap time on the TV in one tap).
+- Tab names stay on one line, shrinking to fit.
+
 ### ✅ 0.50.0: Steward on small computers, and Steward's own button
 - **A small prompt:** Steward now sends about 900 tokens with each request instead of about 4,500, opening the skill it needs (chores, calendar, lists...) as it goes, the way Hermes Agent does. The fixed part never changes, so model servers keep it cached. Answers are quicker and cheaper everywhere, and small models on small computers become practical.
 - **Built in:** Settings → AI checks this computer and offers small open models (Qwen3.5, Liquid LFM3, Phi-4 mini, Gemma 4) with download sizes, memory needs, licences and a guess at how quick each would be. Download one and Steward runs it right here, with nothing else to set up.

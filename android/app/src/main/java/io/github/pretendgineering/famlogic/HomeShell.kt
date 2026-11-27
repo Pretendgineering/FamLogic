@@ -127,11 +127,16 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
                         onClick = { if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); onTab(t) },
                         icon = { TabIcon(t, on, if (big) 36.dp else 24.dp) },
                         label = {
-                            Text(
-                                label,
-                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                                textDecoration = if (on) TextDecoration.Underline else null,
-                                fontSize = if (big) 16.sp else 12.sp,
+                            // One line, shrinking to fit ("Thereabouts" on a narrow phone).
+                            val size = if (big) 16.sp else 12.sp
+                            androidx.compose.foundation.text.BasicText(
+                                label, maxLines = 1,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                                    textDecoration = if (on) TextDecoration.Underline else null,
+                                    fontSize = size, color = androidx.compose.material3.LocalContentColor.current,
+                                ),
+                                autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = size, stepSize = 0.5.sp),
                             )
                         },
                         alwaysShowLabel = true,
@@ -163,11 +168,16 @@ fun HomeShell(prefs: Prefs, features: Set<String>, tab: Tab, onTab: (Tab) -> Uni
                         onClick = { if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); onTab(t) },
                         icon = { TabIcon(t, on, if (big) 32.dp else 24.dp) },
                         label = {
-                            Text(
-                                label,
-                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                                textDecoration = if (on) TextDecoration.Underline else null,
-                                fontSize = if (big) 15.sp else 12.sp,
+                            // One line, shrinking to fit ("Thereabouts" on a narrow phone).
+                            val size = if (big) 15.sp else 12.sp
+                            androidx.compose.foundation.text.BasicText(
+                                label, maxLines = 1,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                                    textDecoration = if (on) TextDecoration.Underline else null,
+                                    fontSize = size, color = androidx.compose.material3.LocalContentColor.current,
+                                ),
+                                autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = size, stepSize = 0.5.sp),
                             )
                         },
                         alwaysShowLabel = true,
