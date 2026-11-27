@@ -91,10 +91,21 @@ func loadConfig() (Config, error) {
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "check that a server on LISTEN is healthy, then exit (used by Docker)")
+	evalRun := flag.Bool("steward-eval", false, "run Steward's test set against a model, print the results, then exit")
+	evalURL := flag.String("url", "", "steward-eval: the model server's OpenAI-compatible address, e.g. http://localhost:8081/v1")
+	evalModel := flag.String("model", "", "steward-eval: the model's name on that server")
+	evalKey := flag.String("key", os.Getenv("STEWARD_EVAL_KEY"), "steward-eval: an API key, if the server needs one (or STEWARD_EVAL_KEY)")
+	evalMode := flag.String("mode", "skills", "steward-eval: skills (small prompt) or full (every action typed)")
+	evalSource := flag.String("source", "server", "steward-eval: server (a local model server) or cloud")
+	evalLevels := flag.String("levels", "", "steward-eval: which cases: quick, more, safety (comma-separated; empty for all)")
+	evalOut := flag.String("out", "", "steward-eval: also write the report as JSON to this file")
 	flag.Parse()
 
 	if *healthcheck {
 		os.Exit(runHealthcheck(env("LISTEN", ":8080")))
+	}
+	if *evalRun {
+		os.Exit(runEvalCommand(*evalURL, *evalModel, *evalKey, *evalMode, *evalSource, *evalLevels, *evalOut))
 	}
 
 	cfg, err := loadConfig()
@@ -143,6 +154,7 @@ func main() {
 	go app.KeepChoreReminders(bg)
 	go app.KeepCheckPlans(bg)
 	go app.KeepFeeds(bg)
+	app.startBrainIfChosen() // Steward's built-in model, if it uses one
 
 	go func() {
 		log.Printf("FamLogic %s listening on %s (data in %s, vault in %s, running as %d:%d)", version, cfg.Listen, cfg.DataDir, cfg.VaultDir, os.Getuid(), os.Getgid())
@@ -170,6 +182,7 @@ func main() {
 	defer cancel()
 	_ = srv.Shutdown(ctx)
 	stopBg()
+	app.stopBrain()
 	if app.chat != nil {
 		app.chat.Close()
 	}

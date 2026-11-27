@@ -5,6 +5,8 @@
 #            best instructions for the CPU it finds itself on (any x86-64 or ARM64);
 #            and famlogic-tts, a small helper that keeps the Kokoro voice loaded
 #            (sherpa-onnx's libraries, from its PyPI wheel for the target)
+#   brain    llama.cpp's llama-server, for Steward's built-in model (the model itself
+#            is downloaded later, into the data volume, when an admin chooses one)
 #   voice    the models (Whisper; Kokoro and its voices), downloaded once
 #   final    a minimal image with glibc and no shell. It starts as root only to hand
 #            its folders to PUID:PGID (65532 by default), then runs as that user.
@@ -46,6 +48,27 @@ RUN curl -fsSL -o /tmp/core.whl "https://files.pythonhosted.org/packages/py3/s/s
  && cp /sherpa/sherpa_onnx/lib/libsherpa-onnx-c-api.so /sherpa/sherpa_onnx/lib/libonnxruntime.so /out-tts/ \
  && cp -L /usr/lib/*-linux-gnu/libstdc++.so.6 /usr/lib/*-linux-gnu/libgcc_s.so.1 /out-tts/ && ls -la /out-tts
 
+# Steward's built-in brain: llama.cpp's llama-server, for any x86-64 or ARM64 CPU
+# (each variant picked at run time, like whisper.cpp above). FamLogic downloads a
+# model when an admin chooses one, and starts this with it. If it ever fails to
+# build, the image is made without it (the console then says so).
+FROM debian:bookworm-slim AS brain
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+ARG LLAMA_VERSION=b12808
+RUN git clone --depth 1 --branch ${LLAMA_VERSION} https://github.com/ggml-org/llama.cpp /l || mkdir -p /l
+ARG TARGETARCH
+RUN mkdir -p /out-brain && cd /l && build() { \
+      cmake -S . -B /b -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON "$@" -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+        -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TOOLS=ON -DLLAMA_BUILD_SERVER=ON \
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_INSTALL_RPATH='$ORIGIN' \
+      && cmake --build /b -j"$(nproc)" --target llama-server; } \
+ && (build -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON || (rm -rf /b && build)) \
+ && cp /b/bin/llama-server /out-brain/ && find /b -name '*.so*' -exec cp -P {} /out-brain/ \; \
+ && cp -L /usr/lib/*-linux-gnu/libstdc++.so.6 /usr/lib/*-linux-gnu/libgcc_s.so.1 /out-brain/ \
+ || (echo "llama-server didn't build: the image goes without the built-in brain" && rm -rf /out-brain && mkdir -p /out-brain)
+RUN ls -la /out-brain
+
 FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS voice
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates jq && rm -rf /var/lib/apt/lists/*
 # Whisper small (English, quantised: ~190 MB).
@@ -66,6 +89,7 @@ FROM gcr.io/distroless/cc-debian12
 COPY --from=voice /voice /voice
 COPY --from=whisper /out /voice/whisper
 COPY --from=whisper /out-tts /voice/tts
+COPY --from=brain /out-brain /brain
 COPY --from=build /famlogic /famlogic
 COPY --from=build --chown=65532:65532 /data /data
 VOLUME /data

@@ -1717,13 +1717,10 @@ const SETUP_STEPS = [
       stewardSettings().then((f) => { f.id = "setup-steward"; box.append(f); });
     },
     async save() {
-      const f = $("#setup-steward form");
-      if (!f) return;
-      const [enabled] = f.querySelectorAll("input[type=checkbox]");
-      const url = f.querySelector("input:not([type])");
-      if (!url || !url.value.trim()) return;
-      f.requestSubmit();
-      if (enabled && enabled.checked && !moduleOn("agents")) {
+      // The walkthrough saves as it goes; here, Steward's module comes on if it's set up.
+      let d;
+      try { d = await api("GET", "/api/admin/steward"); } catch (_) { return; }
+      if (d.config.enabled && d.config.model && !moduleOn("agents")) {
         const on = Object.fromEntries(modules.filter((m) => m.enabled).map((m) => [m.id, true]));
         on.agents = true;
         setModules(await api("PUT", "/api/admin/modules", { enabled: on, setupDone: true }));
@@ -2159,86 +2156,280 @@ async function renderUpkeep(box, force = false) {
     el("p", { class: "muted small" }, "Chores are Markdown notes in the vault's Chores folder: open it in Obsidian, or let your AI agent add and tick them off (Settings → AI & API)."));
 }
 
-// ---- Settings → AI & API: keys for agents (Steward) ----
+// ---- Settings → AI: Steward's model (built in, at home, or in the cloud, with a
+// fallback), its test, and keys for outside agents (Hermes, over MCP) ----
+
+// A short note at the bottom of the page that fades away ("Saved").
+function toast(text) {
+  const t = el("div", { class: "toast", role: "status" }, text);
+  document.body.append(t);
+  setTimeout(() => t.classList.add("gone"), 1800);
+  setTimeout(() => t.remove(), 2400);
+}
+
+const CLOUD_PRESETS = [
+  ["openrouter", "OpenRouter (many models, one key)", "https://openrouter.ai/api/v1", "qwen/qwen3.5-9b"],
+  ["openai", "OpenAI", "https://api.openai.com/v1", "gpt-5-mini"],
+  ["anthropic", "Anthropic", "https://api.anthropic.com/v1", "claude-haiku-5-5"],
+  ["other", "Another (any OpenAI-compatible address)", "", ""],
+];
+const secs = (s) => s < 1 ? "under a second" : s < 60 ? `about ${Math.round(s)} s` : `about ${Math.round(s / 60)} min`;
+const gb = (n) => `${n.toFixed(n < 10 ? 1 : 0)} GB`;
 
 async function renderKeys() {
   const box = $("#agents-panel");
   if (!box) return;
-  const on = (moduleInfo("agents") || {}).enabled;
-  let data;
-  try { data = await api("GET", "/api/admin/keys"); } catch (err) { box.replaceChildren(el("p", {}, err.message)); return; }
-  const name = el("input", { placeholder: "Who'll use it, e.g. Hermes on the NAS", maxlength: "40" });
-  const scopes = el("div", { class: "acc-opts" }, ...data.scopes.map((sc) => el("label", {}, el("input", { type: "checkbox", value: sc.id, ...(sc.id === "location" ? {} : { checked: "" }) }), el("span", {}, el("strong", {}, sc.id), " · ", sc.text))));
-  const shown = el("div");
-  const days = el("select", {}, ...[["0", "Never"], ["30", "In 30 days"], ["90", "In 90 days"], ["365", "In a year"]].map(([v, t]) => el("option", { value: v }, t)));
-  days.value = "90";
-  const form = el("form", {}, el("label", {}, "Name ", name), el("div", { class: "muted small" }, "It may:"), scopes,
-    el("div", { class: "row" }, el("label", {}, "Expires ", days), el("button", { type: "submit" }, "Make a key")));
-  form.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    try {
-      const res = await api("POST", "/api/admin/keys", { name: name.value.trim(), scopes: [...scopes.querySelectorAll("input:checked")].map((i) => i.value), days: Number(days.value) });
-      shown.replaceChildren(el("p", {}, el("strong", {}, "Copy this key now: "), "it won't be shown again."),
-        el("div", { class: "copy" }, el("input", { readonly: "", value: res.key }), el("button", { type: "button", onclick: (e) => { navigator.clipboard.writeText(res.key); e.target.textContent = "Copied"; } }, "Copy")));
-      renderKeysList(data = await api("GET", "/api/admin/keys"));
-    } catch (err) { alert(err.message); }
-  });
-  const list = el("ul", { class: "list" });
-  const log = el("ul", { class: "list compact" });
-  const renderKeysList = (d) => {
-    list.replaceChildren(...(d.keys.length ? d.keys.map((k) => {
-      const revoke = el("button", { type: "button", class: "secondary" }, "Revoke");
-      revoke.addEventListener("click", async () => { if (confirm(`Revoke "${k.name}"? It stops working at once.`)) { await api("DELETE", `/api/admin/keys/${k.id}`); renderKeys(); } });
-      return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, k.name, " ", el("code", {}, k.prefix + "…")),
-        el("div", { class: "sub" }, [k.scopes.join(", "), `made ${new Date(k.created).toLocaleDateString()}`,
-          k.expires ? (k.expires < Date.now() ? "expired" : `expires ${new Date(k.expires).toLocaleDateString()}`) : "never expires",
-          k.uses ? `used ${k.uses} times, last ${new Date(k.lastUsed).toLocaleString()}` : "not used yet"].join(" · "))), revoke);
-    }) : [el("li", { class: "muted" }, "No keys yet.")]));
-    const names = Object.fromEntries(d.keys.map((k) => [k.id, k.name]));
-    log.replaceChildren(...d.log.slice(-25).reverse().map((u) => el("li", { class: "small" }, `${new Date(u.time).toLocaleString()} · ${names[u.key] || "(revoked key)"} · ${u.method} ${u.path}`)));
-  };
-  renderKeysList(data);
-  box.replaceChildren(...[
-    el("p", {}, "Keys let an AI agent (a Hermes agent, an Ollama-driven tool, a script) work with your family's FamLogic: say \"tell Sam to unload the dishwasher\" and it adds the chore; Sam says \"done\" and it ticks it off. Each key can only do what you tick, every use is logged below, and you can revoke it any time."),
-    on ? null : el("p", { class: "banner" }, "Switch on ", el("strong", {}, "Steward"), " in Modules for keys to work."),
-    el("p", {}, "For the agent: the API is described at ", el("a", { href: "/api/v1/openapi.json", target: "_blank" }, "/api/v1/openapi.json"), " and the rules it should follow are in the ", el("a", { href: "/api/v1/vault/guide", target: "_blank" }, "vault guide"), " (also AGENTS.md in the vault)."),
-    el("h2", {}, "Steward in the app"), await stewardSettings(),
-    el("h2", {}, "Keys"), list, el("h2", {}, "Make a key"), form, shown, el("h2", {}, "Recent uses"), log].filter(Boolean));
+  box.replaceChildren(await stewardSettings(true));
 }
 
-// Steward in the app: the family talks to your own AI model (any OpenAI-compatible
-// address: Ollama, a Hermes server, a cloud provider) from Chitchat.
-async function stewardSettings() {
-  let d;
-  try { d = await api("GET", "/api/admin/steward"); } catch (err) { return el("p", {}, err.message); }
+// The whole AI page (full) or, in first-time setup, just the model part.
+async function stewardSettings(full = false) {
+  const wrap = el("div", { class: "ai" });
+  const draw = async () => {
+    let d;
+    try { d = await api("GET", "/api/admin/steward"); } catch (err) { wrap.replaceChildren(el("p", {}, err.message)); return; }
+    wrap.replaceChildren(...aiPage(d, full, draw).filter(Boolean));
+  };
+  await draw();
+  return wrap;
+}
+
+function aiSwitch(checked, text, sub) {
+  const input = el("input", { type: "checkbox", class: "switch", role: "switch", ...(checked ? { checked: "" } : {}) });
+  return [input, el("label", { class: "ai-switch" }, el("span", { class: "grow" }, el("span", { class: "title" }, text), sub ? el("span", { class: "sub" }, sub) : null), input)];
+}
+
+function aiPage(d, full, redraw) {
   const c = d.config;
-  const enabled = el("input", { type: "checkbox", class: "switch", role: "switch", ...(c.enabled ? { checked: "" } : {}) });
-  const everyone = el("input", { type: "checkbox", class: "switch", role: "switch", ...(c.everyone ? { checked: "" } : {}) });
-  const url = el("input", { placeholder: "http://ollama:11434/v1", value: c.url || "" });
-  const model = el("input", { placeholder: "e.g. hermes3 or llama3.1", value: c.model || "" });
-  const key = el("input", { type: "password", placeholder: d.hasKey ? "Saved (leave empty to keep it)" : "Only if the address needs one", autocomplete: "off" });
+  const save = async (patch, msg) => {
+    try { await api("PUT", "/api/admin/steward", { ...c, ...patch, key: patch.key || "" }); if (msg) toast(msg); redraw(); }
+    catch (err) { alert(err.message); }
+  };
+  const parts = [];
+  if (full) {
+    const on = (moduleInfo("agents") || {}).enabled;
+    if (!on) parts.push(el("p", { class: "banner" }, "Switch on ", el("strong", {}, "Steward"), " in Modules for any of this to work."));
+  }
+  // 1. On or off, and who.
+  const [en, enRow] = aiSwitch(c.enabled, "Let the family use Steward", "The round button in the corner of each page, in the app and here.");
+  const [ev, evRow] = aiSwitch(c.everyone, "Children too", "They can only do what they could with a tap.");
+  en.addEventListener("change", () => save({ enabled: en.checked }));
+  ev.addEventListener("change", () => save({ everyone: ev.checked }));
+  parts.push(el("section", { class: "ai-card" }, el("h2", {}, "Steward"), enRow, evRow));
+
+  // 2. Where it thinks.
+  const where = c.source || (c.url ? (/127\.0\.0\.1|localhost|:11434|:8080/.test(c.url) ? "server" : "cloud") : "builtin");
+  let shown = where;
+  const choices = [["builtin", "On this server", "Built in. Nothing else to set up; speed depends on this computer."],
+    ["server", "On a computer at home", "A model server on a stronger computer (a gaming PC's graphics card): Ollama, llama.cpp, LM Studio."],
+    ["cloud", "In the cloud", "A provider's model. Quickest and cleverest; needs an account and sends requests out."]];
+  const pane = el("div", { class: "ai-pane" });
+  const grid = el("div", { class: "ai-choices", role: "radiogroup" }, ...choices.map(([id, title, sub]) => {
+    const b = el("button", { type: "button", class: "ai-choice", role: "radio", "aria-checked": String(id === shown) },
+      el("span", { class: "title" }, title), el("span", { class: "sub" }, sub), id === where && c.model ? el("span", { class: "chip" }, "In use") : null);
+    b.addEventListener("click", () => { shown = id; grid.querySelectorAll(".ai-choice").forEach((x) => x.setAttribute("aria-checked", String(x === b))); pane.replaceChildren(...paneFor(id)); });
+    return b;
+  }));
+  const paneFor = (id) => id === "builtin" ? builtinPane(d, redraw) : id === "server" ? serverPane(d, save) : cloudPane(d, save, "main");
+  pane.replaceChildren(...paneFor(shown));
+  parts.push(el("section", { class: "ai-card" }, el("h2", {}, "Where Steward thinks"),
+    c.model ? el("p", { class: "muted small" }, "Now: ", el("strong", {}, c.model), " ", { builtin: "(built in)", server: "(on a model server)", cloud: "(in the cloud)" }[where] || "") : el("p", { class: "muted small" }, "Not chosen yet."),
+    grid, pane));
+  if (!full) return parts;
+
+  // 3. Fallback.
+  parts.push(fallbackCard(d, save));
+  // 4. Test.
+  parts.push(testCard(d, redraw));
+  // 5. Advanced.
+  const mode = el("div", { class: "seg", role: "radiogroup" }, ...[["skills", "Small prompt (skills)"], ["full", "Every action typed"]].map(([v, t]) => {
+    const r = el("input", { type: "radio", name: "ai-mode", value: v, ...((c.mode || "skills") === v ? { checked: "" } : {}) });
+    r.addEventListener("change", () => save({ mode: v }, "Saved"));
+    return el("label", {}, r, t);
+  }));
+  parts.push(el("section", { class: "ai-card" }, el("h2", {}, "How Steward talks to the model"),
+    el("p", { class: "muted small" }, "Small prompt: about 900 tokens, with the skill it needs opened as it goes. Best for local models, and cheaper for cloud ones. Every action typed: about 4,000 tokens each time; some big cloud models are a little surer with it."), mode));
+  // 6. Agents.
+  parts.push(agentsCard(d));
+  return parts;
+}
+
+function builtinPane(d, redraw) {
+  const sp = d.spec, st = d.brain || {};
+  const out = [];
+  const facts = [sp.cpu || sp.arch, `${sp.cores} cores${sp.avx512 ? ", AVX-512" : sp.avx2 ? ", AVX2" : ""}`, `${gb(sp.memGB)} memory (${gb(sp.freeMemGB)} free)`, `${gb(sp.diskFreeGB)} free disk`, sp.gpu || "no graphics card visible here"];
+  out.push(el("div", { class: "ai-spec" }, el("span", { class: "title" }, "This computer"), el("span", { class: "sub" }, facts.join(" · "))));
+  if (!sp.engine) out.push(el("p", { class: "banner" }, "This FamLogic doesn't have the built-in engine (it's in the published Docker image). Use a model server instead."));
+  if (sp.gpu === "NVIDIA graphics card") out.push(el("p", { class: "muted small" }, "There's a graphics card here: the built-in engine uses the CPU, so for speed run llama.cpp's CUDA image beside FamLogic (see \"On a computer at home\") and point Steward at it."));
+  if (st.downloadError) out.push(el("p", { class: "banner" }, "The download stopped: " + st.downloadError));
+  if (st.runError) out.push(el("p", { class: "banner" }, st.runError));
+  const installed = new Set(d.installed || []);
+  const inUse = d.config.source === "builtin" ? d.config.model : "";
+  const act = async (action, model) => { try { await api("POST", "/api/admin/steward/brain", { action, model }); redraw(); } catch (err) { alert(err.message); } };
+  const rows = d.models.map(({ model: m, estimate: e }) => {
+    const btns = [];
+    if (st.downloading === m.id) {
+      const pct = st.total ? Math.round(100 * st.got / st.total) : 0;
+      btns.push(el("div", { class: "ai-progress", title: `${pct}%` }, el("span", { style: `width:${pct}%` })), el("button", { type: "button", class: "secondary small", onclick: () => act("cancel", m.id) }, "Stop"));
+    } else if (installed.has(m.id)) {
+      if (inUse === m.id) btns.push(el("span", { class: "chip" }, st.ready ? "In use" : st.running ? "Starting…" : "Chosen"));
+      else btns.push(el("button", { type: "button", class: "small", onclick: () => act("use", m.id) }, "Use"));
+      if (inUse !== m.id) btns.push(el("button", { type: "button", class: "secondary small", onclick: () => confirm(`Delete ${m.name} (${gb(m.sizeGB)})?`) && act("delete", m.id) }, "Delete"));
+    } else if (sp.engine && e.fits) {
+      btns.push(el("button", { type: "button", class: "secondary small", disabled: st.downloading ? "" : null, onclick: () => act("download", m.id) }, `Download ${gb(m.sizeGB)}`));
+    }
+    const speed = e.fits ? el("span", { class: `ai-verdict v-${e.verdict.replace(" ", "-")}` }, `${secs(e.typicalS)} an answer`) : el("span", { class: "ai-verdict v-too-slow" }, "Too big here");
+    return el("li", { class: "ai-model" + (inUse === m.id ? " current" : "") },
+      el("div", { class: "grow" }, el("div", { class: "title" }, m.name, " ", speed),
+        el("div", { class: "sub" }, m.good), el("div", { class: "sub" }, [`${gb(m.sizeGB)} download`, `needs ${gb(m.ramGB)} memory`, m.licence].join(" · ")),
+        e.fits ? null : el("div", { class: "sub warn" }, e.why)),
+      el("div", { class: "ai-btns" }, ...btns));
+  });
+  out.push(el("ul", { class: "ai-models" }, ...rows),
+    el("p", { class: "muted small" }, "Times are rough guesses for a usual request on this computer; the first answer after starting takes longer. Run the test below for real numbers."));
+  if (st.downloading) setTimeout(() => { if (document.contains(out[0])) redraw(); }, 2000);
+  else if (st.running && !st.ready) setTimeout(() => { if (document.contains(out[0])) redraw(); }, 3000);
+  return out;
+}
+
+function snippet(text) {
+  const pre = el("pre", { class: "ai-snippet" }, text);
+  const b = el("button", { type: "button", class: "secondary small", onclick: () => { navigator.clipboard.writeText(text); b.textContent = "Copied"; } }, "Copy");
+  return el("div", { class: "ai-snippet-wrap" }, pre, b);
+}
+
+function serverPane(d, save) {
+  const c = d.config;
+  const url = el("input", { placeholder: "http://192.168.1.20:8081/v1", value: c.source === "server" ? c.url : "" });
+  const model = el("input", { placeholder: "e.g. qwen3.5-4b", value: c.source === "server" ? c.model : "", list: "ai-server-models" });
+  const opts = el("datalist", { id: "ai-server-models" });
   const status = el("p", { class: "muted small" });
-  const save = el("button", { type: "submit" }, "Save");
-  const test = el("button", { type: "button", class: "secondary" }, "Test");
-  const form = el("form", { class: "upkeep-add" },
-    el("label", { class: "switch-label" }, enabled, "Let the family use Steward (the button in the corner of each page, and in Chitchat)"),
-    el("label", {}, "Model address (OpenAI-compatible)", url),
+  const find = el("button", { type: "button", class: "secondary" }, "Find its models");
+  find.addEventListener("click", async () => {
+    status.textContent = "Asking it…";
+    try { const r = await api("GET", "/api/admin/steward/models?url=" + encodeURIComponent(url.value.trim())); opts.replaceChildren(...r.models.map((m) => el("option", { value: m }))); status.textContent = r.models.length ? `It has: ${r.models.join(", ")}` : "It answered, with no models."; if (r.models.length && !model.value) model.value = r.models[0]; }
+    catch (err) { status.textContent = err.message; }
+  });
+  const use = el("button", { type: "button" }, "Use it");
+  use.addEventListener("click", () => save({ source: "server", url: url.value.trim(), model: model.value.trim(), key: "", clearKey: true, enabled: true }, "Steward uses it now"));
+  return [
+    el("p", {}, "On the computer that'll run the model (a graphics card helps a lot), start a model server. Either of these works:"),
+    el("p", { class: "muted small" }, "llama.cpp in Docker, on an NVIDIA graphics card (drop --gpus all and use the \"server\" image for CPU only):"),
+    snippet("docker run -d --name steward-model --gpus all -p 8081:8080 --restart unless-stopped \\\n  -v steward-models:/root/.cache/llama.cpp ghcr.io/ggml-org/llama.cpp:server-cuda \\\n  -hf unsloth/Qwen3.5-4B-GGUF:Q4_K_M --jinja -c 12288 -ngl 99 --host 0.0.0.0 --port 8080"),
+    el("p", { class: "muted small" }, "Or Ollama (its address is then http://that-computer:11434/v1):"),
+    snippet("ollama pull qwen3.5:4b"),
+    el("p", { class: "muted small" }, "On a 12 GB graphics card, the 9B models fit easily and answer in a second or two; the 4B ones are quicker still."),
+    el("div", { class: "row" }, el("label", { class: "grow" }, "Its address", url), find), opts, status,
+    el("label", {}, "Model", model),
+    el("div", { class: "row" }, use)];
+}
+
+// The cloud form, for the main model (which = "main") or the fallback.
+function cloudPane(d, save, which) {
+  const c = d.config, cur = which === "main" ? (c.source === "cloud" ? c : {}) : (c.fallback || {});
+  const preset = el("select", {}, ...CLOUD_PRESETS.map(([id, t]) => el("option", { value: id }, t)));
+  const url = el("input", { placeholder: "https://…/v1", value: cur.url || "" });
+  const model = el("input", { placeholder: "model name", value: cur.model || "" });
+  const hasKey = which === "main" ? d.hasKey && c.source === "cloud" : d.hasFallbackKey;
+  const key = el("input", { type: "password", autocomplete: "off", placeholder: hasKey ? "Saved (leave empty to keep it)" : "The provider's API key" });
+  const match = CLOUD_PRESETS.find(([, , u]) => u && u === cur.url);
+  preset.value = match ? match[0] : (cur.url ? "other" : "openrouter");
+  const fill = () => { const p = CLOUD_PRESETS.find(([id]) => id === preset.value); if (p && p[2]) { url.value = p[2]; if (!model.value || CLOUD_PRESETS.some(([, , , m]) => m === model.value)) model.value = p[3]; } };
+  if (!cur.url) fill();
+  preset.addEventListener("change", fill);
+  const go = el("button", { type: "button" }, which === "main" ? "Use it" : "Save the fallback");
+  go.addEventListener("click", () => {
+    if (which === "main") save({ source: "cloud", url: url.value.trim(), model: model.value.trim(), key: key.value, enabled: true }, "Steward uses it now");
+    else save({ fallback: { url: url.value.trim(), model: model.value.trim(), key: key.value, source: "cloud" } }, "Saved");
+  });
+  return [el("label", {}, "Provider", preset), el("label", {}, "Address", url),
     el("div", { class: "row" }, el("label", { class: "grow" }, "Model", model), el("label", { class: "grow" }, "Key", key)),
-    el("label", { class: "switch-label" }, everyone, "Children too (they can only do what they could in the app)"),
-    el("div", { class: "row" }, save, test), status);
-  form.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    try {
-      await api("PUT", "/api/admin/steward", { enabled: enabled.checked, everyone: everyone.checked, url: url.value.trim(), model: model.value.trim(), key: key.value });
-      key.value = ""; status.textContent = "Saved.";
-    } catch (err) { status.textContent = err.message; }
-  });
-  test.addEventListener("click", async () => {
-    status.textContent = "Asking the model…";
-    try { const r = await api("POST", "/api/admin/steward/test"); status.textContent = `It said: "${r.reply}" (${r.ms} ms)`; }
-    catch (err) { status.textContent = "Couldn't reach it: " + err.message; }
-  });
-  return el("div", {}, el("p", { class: "muted small" }, "Steward answers as itself and acts as whoever is talking: everything it does goes through the same permissions as the app."), form);
+    which === "main" ? el("p", { class: "muted small" }, "What the family asks, and what Steward reads to answer it (lists, chores, the calendar), goes to the provider.") : null,
+    el("div", { class: "row" }, go)];
+}
+
+function fallbackCard(d, save) {
+  const c = d.config, has = !!(c.fallback && c.fallback.url);
+  const [on, onRow] = aiSwitch(has, "Hand over to a second model when the first can't answer", "When it's down, too slow, or (if you allow it) says a request is too much for it. Never after it's already changed something, so nothing happens twice.");
+  const body = el("div", { class: "ai-pane" });
+  const [ho, hoRow] = aiSwitch(!!c.handOff, "Let the first model hand over hard requests", "Small models can pass on long rambles and recipes they'd get wrong.");
+  ho.addEventListener("change", () => save({ handOff: ho.checked }, "Saved"));
+  const timeout = el("select", {}, ...[[30, "30 seconds"], [60, "1 minute"], [90, "90 seconds"], [180, "3 minutes"]].map(([v, t]) => el("option", { value: v }, t)));
+  timeout.value = String(c.timeout || 90);
+  timeout.addEventListener("change", () => save({ timeout: Number(timeout.value) }, "Saved"));
+  const fill = () => body.replaceChildren(...(on.checked ? [...cloudPane(d, save, "fallback"), hoRow, el("label", {}, "Wait for the first model at most", timeout)] : []));
+  on.addEventListener("change", () => { if (!on.checked && has) save({ fallback: null, handOff: false }, "No fallback"); fill(); });
+  fill();
+  return el("section", { class: "ai-card" }, el("h2", {}, "If it can't answer"), onRow, body);
+}
+
+function testCard(d, redraw) {
+  const ev = d.eval;
+  const run = async (levels) => { try { await api("POST", "/api/admin/steward/eval", { levels }); setTimeout(redraw, 1500); } catch (err) { alert(err.message); } };
+  const out = [el("h2", {}, "Test it"),
+    el("p", { class: "muted small" }, "Runs real family requests (\"add milk to the shopping list\", \"I unloaded the dishwasher\") on a made-up family, with the model Steward uses now, and checks each one actually worked. Your family's things aren't touched."),
+    el("div", { class: "row" }, el("button", { type: "button", onclick: () => run(["quick"]) }, "Quick test (8)"), el("button", { type: "button", class: "secondary", onclick: () => run(["quick", "more", "safety"]) }, "Everything (21)"))];
+  if (ev) {
+    const running = !ev.done;
+    out.push(el("p", {}, el("strong", {}, `${ev.passed} of ${ev.results ? ev.results.length : 0} right`), running ? ` (running, ${ev.results ? ev.results.length : 0} of ${ev.total})` : "",
+      ev.medianMs ? ` · ${secs(ev.medianMs / 1000)} a request` : "", ev.avgPromptTokens ? ` · ${ev.avgPromptTokens} prompt tokens an answer` : "", ` · ${ev.model}`));
+    out.push(el("ul", { class: "list compact ai-results" }, ...(ev.results || []).map((r) => el("li", {}, el("span", { class: r.pass ? "ok-dot" : "bad-dot" }), el("span", { class: "grow" }, r.id, r.why ? el("span", { class: "sub" }, " · " + r.why) : null), el("span", { class: "muted small" }, (r.ms / 1000).toFixed(1) + " s")))));
+    if (running) setTimeout(() => { if (document.contains(out[0])) redraw(); }, 2500);
+  }
+  if (d.turns && d.turns.length) {
+    out.push(el("h3", {}, "Recent answers"), el("ul", { class: "list compact" }, ...d.turns.slice(-8).reverse().map((t) => el("li", { class: "small" },
+      el("span", { class: t.ok ? "ok-dot" : "bad-dot" }), el("span", { class: "grow" }, `${new Date(t.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · ${t.model}${t.fallback ? " (fallback: " + t.why + ")" : ""}`, t.error ? el("span", { class: "sub" }, " · " + t.error) : null),
+      el("span", { class: "muted" }, `${(t.ms / 1000).toFixed(1)} s · ${t.prompt} read${t.cached ? ` (${t.cached} kept)` : ""} · ${t.completion} written`)))));
+  }
+  return el("section", { class: "ai-card" }, ...out);
+}
+
+function agentsCard(d) {
+  const box = el("div");
+  (async () => {
+    let data;
+    try { data = await api("GET", "/api/admin/keys"); } catch (err) { box.replaceChildren(el("p", {}, err.message)); return; }
+    const name = el("input", { placeholder: "Who'll use it, e.g. Hermes on the NAS", maxlength: "40" });
+    const scopes = el("div", { class: "ai-scopes" }, ...data.scopes.map((sc) => {
+      const i = el("input", { type: "checkbox", class: "switch", role: "switch", value: sc.id, ...(["location", "notes"].includes(sc.id) ? {} : { checked: "" }) });
+      return el("label", { class: "ai-switch" }, el("span", { class: "grow" }, el("span", { class: "title" }, sc.id.charAt(0).toUpperCase() + sc.id.slice(1)), el("span", { class: "sub" }, sc.text)), i);
+    }));
+    const shown = el("div");
+    const days = el("select", {}, ...[["0", "Never"], ["30", "In 30 days"], ["90", "In 90 days"], ["365", "In a year"]].map(([v, t]) => el("option", { value: v }, t)));
+    days.value = "90";
+    const make = el("button", { type: "submit" }, "Make a key");
+    const form = el("form", { class: "ai-form" }, el("label", {}, "Name", name), el("p", { class: "muted small" }, "It may:"), scopes,
+      el("div", { class: "row end" }, el("label", { class: "grow" }, "Expires", days), make));
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        const res = await api("POST", "/api/admin/keys", { name: name.value.trim(), scopes: [...scopes.querySelectorAll("input:checked")].map((i) => i.value), days: Number(days.value) });
+        shown.replaceChildren(el("p", {}, el("strong", {}, "Copy this key now: "), "it won't be shown again."),
+          el("div", { class: "copy" }, el("input", { readonly: "", value: res.key }), el("button", { type: "button", class: "secondary", onclick: (e) => { navigator.clipboard.writeText(res.key); e.target.textContent = "Copied"; } }, "Copy")));
+        name.value = "";
+        drawList(await api("GET", "/api/admin/keys"));
+      } catch (err) { alert(err.message); }
+    });
+    const list = el("ul", { class: "list" }), log = el("ul", { class: "list compact" });
+    const drawList = (dd) => {
+      list.replaceChildren(...(dd.keys.length ? dd.keys.map((k) => {
+        const revoke = el("button", { type: "button", class: "secondary small" }, "Revoke");
+        revoke.addEventListener("click", async () => { if (confirm(`Revoke "${k.name}"? It stops working at once.`)) { await api("DELETE", `/api/admin/keys/${k.id}`); drawList(await api("GET", "/api/admin/keys")); } });
+        return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, k.name, " ", el("code", {}, k.prefix + "…")),
+          el("div", { class: "sub" }, [k.scopes.join(", "), k.expires ? (k.expires < Date.now() ? "expired" : `expires ${new Date(k.expires).toLocaleDateString()}`) : "never expires",
+            k.uses ? `used ${k.uses} times, last ${new Date(k.lastUsed).toLocaleString()}` : "not used yet"].join(" · "))), revoke);
+      }) : [el("li", { class: "muted" }, "No keys yet.")]));
+      const names = Object.fromEntries(dd.keys.map((k) => [k.id, k.name]));
+      log.replaceChildren(...dd.log.slice(-20).reverse().map((u) => el("li", { class: "small" }, `${new Date(u.time).toLocaleString()} · ${names[u.key] || "(revoked key)"} · ${u.method} ${u.path}`)));
+    };
+    drawList(data);
+    box.replaceChildren(
+      el("p", {}, "An outside agent (Hermes, Claude Desktop, any MCP client) can look after the family's things too, with a key: it gets the same skills Steward has, opening only the ones it needs."),
+      el("label", {}, "MCP address", el("div", { class: "copy" }, el("input", { readonly: "", value: d.mcpURL }), el("button", { type: "button", class: "secondary", onclick: (e) => { navigator.clipboard.writeText(d.mcpURL); e.target.textContent = "Copied"; } }, "Copy"))),
+      el("p", { class: "muted small" }, "For Hermes, download ", el("a", { href: "/api/v1/agent-skill", download: "SKILL.md" }, "FamLogic's skill"), " into ~/.hermes/skills/famlogic/: it teaches Hermes FamLogic once, instead of with every request. Plain HTTP is described at ", el("a", { href: "/api/v1/openapi.json", target: "_blank" }, "/api/v1/openapi.json"), "."),
+      el("h3", {}, "Keys"), list, el("h3", {}, "Make a key"), form, shown, el("h3", {}, "Recent uses"), log);
+  })();
+  return el("section", { class: "ai-card" }, el("h2", {}, "Outside agents"), box);
 }
 
 // Docket: shared lists and to-dos (Markdown notes in the vault's Lists/ and To-dos/).

@@ -16,6 +16,7 @@ import (
 type testEnv struct {
 	t      *testing.T
 	srv    *httptest.Server
+	app    *Server // the server itself, for tests that look inside
 	cookie *http.Cookie
 	path   string // the data file
 }
@@ -32,9 +33,10 @@ func newEnv(t *testing.T) *testEnv {
 	static, _ := fs.Sub(webFS, "web")
 	cfg := Config{AdminPassword: "correct horse", FamilyName: "Test Family", TileURL: "https://tiles/{z}/{x}/{y}.png", InviteTTL: time.Hour,
 		VaultDir: filepath.Join(filepath.Dir(store.path), "vault")}
-	srv := httptest.NewServer(NewServer(cfg, store, static).Routes())
+	app := NewServer(cfg, store, static)
+	srv := httptest.NewServer(app.Routes())
 	t.Cleanup(srv.Close)
-	return &testEnv{t: t, srv: srv, path: store.path}
+	return &testEnv{t: t, srv: srv, app: app, path: store.path}
 }
 
 func (e *testEnv) do(method, path, auth string, body any) (*http.Response, map[string]any) {

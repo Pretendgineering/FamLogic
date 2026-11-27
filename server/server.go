@@ -232,6 +232,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/steward", s.admin(s.handleAdminSteward))
 	mux.HandleFunc("PUT /api/admin/steward", s.admin(s.handleAdminSetSteward))
 	mux.HandleFunc("POST /api/admin/steward/test", s.admin(s.handleAdminTestSteward))
+	mux.HandleFunc("POST /api/admin/steward/brain", s.admin(s.handleAdminBrain))
+	mux.HandleFunc("POST /api/admin/steward/eval", s.admin(s.handleAdminEval))
+	mux.HandleFunc("GET /api/admin/steward/models", s.admin(s.handleAdminServerModels))
 	mux.HandleFunc("POST /api/rewards", s.choreAuth(s.handleAddReward))
 	mux.HandleFunc("PATCH /api/rewards/{id}", s.choreAuth(s.handleUpdateReward))
 	mux.HandleFunc("DELETE /api/rewards/{id}", s.choreAuth(s.handleDeleteReward))
@@ -243,6 +246,8 @@ func (s *Server) Routes() http.Handler {
 	// Steward: AI agents' keys and what they can use.
 	mux.HandleFunc("GET /api/v1/people", s.device(s.handlePeople))
 	mux.HandleFunc("GET /api/v1/openapi.json", s.handleOpenAPI)
+	mux.HandleFunc("POST /mcp", s.handleMCP)
+	mux.HandleFunc("GET /api/v1/agent-skill", s.handleAgentSkill)
 	mux.HandleFunc("GET /api/admin/keys", s.admin(s.handleAdminKeys))
 	mux.HandleFunc("POST /api/admin/keys", s.admin(s.handleAdminCreateKey))
 	mux.HandleFunc("DELETE /api/admin/keys/{id}", s.admin(s.handleAdminRevokeKey))

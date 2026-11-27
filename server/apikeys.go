@@ -53,6 +53,12 @@ var keyScopes = []struct{ ID, Text string }{
 	{"lists", "See, add to and tick off lists and to-dos (Docket)"},
 	{"feed", "Read the family feed (who arrived where, who did which chore)"},
 	{"location", "See where everyone is (the map)"},
+	{"meals", "See and plan meals, and save recipes (Pantry)"},
+	{"profiles", "See and change people's profiles (Dossier: allergies, medicines, contacts)"},
+	{"home", "See and change the home's profile (Homestead)"},
+	{"tv", "Quiet time and messages on the TV (Corkboard)"},
+	{"meetings", "See and make family meetings (Huddle)"},
+	{"notes", "Read and write any note in the vault"},
 }
 
 const keyPrefix = "fl_"

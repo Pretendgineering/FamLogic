@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,13 +30,42 @@ import (
 	"unicode/utf8"
 )
 
-// StewardConfig is the model Steward talks through.
+// StewardConfig is how Steward thinks: a main model (URL/Model/Key, which may be the
+// one built into FamLogic) and, if set, a fallback it hands over to when the main one
+// can't answer (it's down, too slow, or says a request is beyond it).
 type StewardConfig struct {
 	Enabled  bool   `json:"enabled"`
 	URL      string `json:"url"`   // OpenAI-compatible base, e.g. http://ollama:11434/v1
-	Model    string `json:"model"` // e.g. hermes3, llama3.1
+	Model    string `json:"model"` // e.g. qwen3.5:4b
 	Key      string `json:"key,omitempty"`
 	Everyone bool   `json:"everyone"` // children too (otherwise grown-ups only)
+	// Source of the main model: "builtin" (FamLogic runs it), "server" (a model server
+	// on the network: Ollama, llama.cpp, LM Studio) or "cloud" (a provider).
+	Source string `json:"source,omitempty"`
+	// Mode: "skills" (small prompt, skills opened as needed; the default) or "full"
+	// (every action as its own typed tool, for big cloud models that like that).
+	Mode string `json:"mode,omitempty"`
+	// Timeout for the main model, in seconds, before the fallback takes over (0: 90).
+	Timeout  int              `json:"timeout,omitempty"`
+	Fallback *StewardEndpoint `json:"fallback,omitempty"`
+	// HandOff: the main model may pass a request it finds too hard to the fallback.
+	HandOff bool `json:"handOff,omitempty"`
+}
+
+// StewardEndpoint is one model to talk to.
+type StewardEndpoint struct {
+	URL    string `json:"url"`
+	Model  string `json:"model"`
+	Key    string `json:"key,omitempty"`
+	Source string `json:"source,omitempty"`
+}
+
+func (c StewardConfig) main() StewardEndpoint {
+	return StewardEndpoint{URL: c.URL, Model: c.Model, Key: c.Key, Source: c.Source}
+}
+
+func (c StewardConfig) hasFallback() bool {
+	return c.Fallback != nil && c.Fallback.URL != "" && c.Fallback.Model != ""
 }
 
 func (s *Store) Steward() StewardConfig {
@@ -446,96 +477,218 @@ type llmToolCall struct {
 	} `json:"function"`
 }
 
-func (s *Server) stewardSystem(me *Member, page string) string {
-	now := time.Now()
-	people := []string{}
-	for _, m := range s.store.Members() {
-		people = append(people, fmt.Sprintf("%s (%s, id %s)", m.Name, m.access(), m.ID))
-	}
-	return fmt.Sprintf(`You are Steward, the %s family's helper inside FamLogic, their self-hosted family app.
-You are talking with %s (%s). Now: %s.
-Family: %s.
-
-Keep replies short and plain: one or two sentences, no emoji, no markdown. Children may be listening.
-Use the tools to see and change things; never invent chores or say something was done unless a tool said so.
-Rules:
-- Only tick off a chore for the person who says they did it, or when a parent says so. Don't let a child tick off a sibling's chore.
-- Keep chore names short ("Unload the dishwasher"); put details in notes.
-- Only give stars when a parent asks. Never retire chores or change who they're for unless a parent asks.
-- If you're unsure who someone means, ask instead of guessing.
-- If a tool returns an error, say plainly what went wrong.
-- Things the family looks after (the home, cars, pets) have profiles; their upkeep is ordinary chores marked with what they're for and the rule that made them (source). When someone says they did one ("changed the furnace filter"), tick that chore with complete_chore; don't make a new one.
-- When someone rambles off everything they need to do ("today I need to..."), sort each thing where it belongs, without asking about each one: a regular household job that comes round again (dishes, bins, sweeping) is a chore (add_chore, with how often); anything at a set day or time is a calendar event (add_event); a one-off job, errand or project (replace the car's wiper blades, return a parcel) goes on the Docket, on that person's to-dos (find it with list_lists; make_list if there isn't one); things to buy go on the Shopping list. Then reply with a short summary of where each thing went.
-- Recipes: when someone reads or talks through a recipe, tidy it into a clean one and save it with add_recipe, then say its name and how many ingredients and steps it has.
-- Don't assume children go to school; families homeschool, unschool or keep their own hours.
-- Use the specific tools when one fits (chores, events, lists, meals, recipes). For anything else (pets, cars, the house, profiles, notes on anything), read the vault guide with read_vault_guide, then read and write notes with list_notes, read_note and write_note, keeping their formats exactly. Re-read a note before changing it, keep what you don't mean to change, and never delete what someone else wrote unless asked.
-- Modules switched on but still coming soon (%s) keep their notes in the vault already: one note per thing in a folder named after it (Pets/Biscuit.md, Cars/Sienna.md, Home/Air filter.md, Budget/Bills.md, Outings/2026-11-29 Park loop.md), front matter first. Logs go as dated lines in the note's body ("- 2026-11-25: 15 gal, $56.00, 84,210 mi").`+stewardPageLine(page),
-		s.familyName(), me.Name, me.access(), now.Format("Monday 2 January 2006, 15:04"), strings.Join(people, "; "), s.soonModules())
+// turnStats is how one answer went, for the console's AI page (speed, tokens, which model).
+type turnStats struct {
+	Time       int64  `json:"time"`
+	Model      string `json:"model"`
+	Fallback   bool   `json:"fallback,omitempty"`
+	Why        string `json:"why,omitempty"` // why the fallback answered
+	MS         int64  `json:"ms"`
+	Rounds     int    `json:"rounds"`
+	Prompt     int    `json:"prompt"`           // tokens the model read
+	Cached     int    `json:"cached,omitempty"` // ...of which it had kept from before
+	Completion int    `json:"completion"`       // tokens it wrote
+	Actions    []string `json:"actions,omitempty"`
+	OK         bool   `json:"ok"`
+	Error      string `json:"error,omitempty"`
 }
 
-var stewardClient = &http.Client{Timeout: 90 * time.Second}
+var (
+	recentTurns   []turnStats
+	recentTurnsMu sync.Mutex
+)
 
+func noteTurn(t turnStats) {
+	recentTurnsMu.Lock()
+	recentTurns = append(recentTurns, t)
+	if len(recentTurns) > 30 {
+		recentTurns = recentTurns[len(recentTurns)-30:]
+	}
+	recentTurnsMu.Unlock()
+}
+
+var stewardClient = &http.Client{Timeout: 5 * time.Minute}
+
+// errHandOff: the main model passed the request on.
+var errHandOff = errors.New("the main model handed this one on")
+
+var thinkRe = regexp.MustCompile(`(?s)<think>.*?</think>`)
+var toolCallRe = regexp.MustCompile(`(?s)<tool_call>\s*(\{.*?\})\s*</tool_call>`)
+
+// stewardReply answers: the main model first; if it can't (and nothing has been
+// changed yet, so nothing gets done twice), the fallback.
 func (s *Server) stewardReply(ctx context.Context, me *Member, history []StewardMsg, page string) (string, error) {
+	reply, _, err := s.stewardAnswer(ctx, me, history, page)
+	return reply, err
+}
+
+func (s *Server) stewardAnswer(ctx context.Context, me *Member, history []StewardMsg, page string) (string, turnStats, error) {
 	c := s.store.Steward()
-	msgs := []llmMsg{{Role: "system", Content: s.stewardSystem(me, page)}}
-	for _, h := range history {
-		msgs = append(msgs, llmMsg{Role: h.Role, Content: h.Text})
+	timeout := time.Duration(c.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 90 * time.Second
 	}
-	tools := []map[string]any{}
-	for _, t := range stewardTools {
-		tools = append(tools, map[string]any{"type": "function", "function": map[string]any{"name": t.name, "description": t.desc, "parameters": t.params}})
+	mainCtx := ctx
+	cancel := func() {}
+	if c.hasFallback() {
+		mainCtx, cancel = context.WithTimeout(ctx, timeout)
 	}
-	for round := 0; round < 6; round++ {
-		body, _ := json.Marshal(map[string]any{"model": c.Model, "messages": msgs, "tools": tools})
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.URL, "/")+"/chat/completions", bytes.NewReader(body))
+	reply, st, wrote, err := s.converse(mainCtx, c.main(), c.Mode, me, history, page, c.hasFallback() && c.HandOff)
+	cancel()
+	if err != nil && c.hasFallback() && !wrote && ctx.Err() == nil {
+		why := err.Error()
+		if errors.Is(err, errHandOff) {
+			why = "handed on"
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			why = "too slow"
+		}
+		reply, st, _, err = s.converse(ctx, *c.Fallback, c.Mode, me, history, page, false)
+		st.Fallback, st.Why = true, why
+	}
+	st.OK = err == nil
+	if err != nil {
+		st.Error = err.Error()
+	}
+	noteTurn(st)
+	return reply, st, err
+}
+
+// converse runs one conversation with one model: it calls actions until it answers.
+func (s *Server) converse(ctx context.Context, ep StewardEndpoint, mode string, me *Member, history []StewardMsg, page string, handOff bool) (reply string, st turnStats, wrote bool, err error) {
+	start := time.Now()
+	st = turnStats{Time: start.UnixMilli(), Model: ep.Model}
+	defer func() { st.MS = time.Since(start).Milliseconds() }()
+	full := mode == "full"
+	msgs := []llmMsg{{Role: "system", Content: s.stewardCore(full)}}
+	for i, h := range history {
+		text := h.Text
+		if i == len(history)-1 && h.Role == "user" {
+			open := []string{}
+			if !full {
+				open = guessSkills(text, page)
+			}
+			text = s.stewardNote(me, page, open) + "\n" + text
+		}
+		msgs = append(msgs, llmMsg{Role: h.Role, Content: text})
+	}
+	tools := skillTools()
+	if full {
+		tools = fullTools()
+	}
+	if handOff {
+		tools = append(tools, map[string]any{"type": "function", "function": map[string]any{
+			"name": "hand_off", "description": "Pass this request to a bigger model if it's too complicated for you. Only before you've changed anything.",
+			"parameters": obj(map[string]any{"reason": str("Why, in a few words")})}})
+	}
+	for round := 0; round < 8; round++ {
+		st.Rounds = round + 1
+		req := map[string]any{"model": ep.Model, "messages": msgs, "tools": tools, "temperature": 0.2}
+		if ep.Source == "builtin" || ep.Source == "server" {
+			// Local model servers: no long "thinking" before each answer (llama.cpp, Ollama).
+			req["chat_template_kwargs"] = map[string]any{"enable_thinking": false}
+			req["think"] = false
+			req["cache_prompt"] = true
+		}
+		var m llmMsg
+		m, err = s.callModel(ctx, ep, req, &st)
 		if err != nil {
-			return "", err
+			return "", st, wrote, err
 		}
-		req.Header.Set("Content-Type", "application/json")
-		if c.Key != "" {
-			req.Header.Set("Authorization", "Bearer "+c.Key)
-		}
-		res, err := stewardClient.Do(req)
-		if err != nil {
-			return "", err
-		}
-		raw, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
-		res.Body.Close()
-		if res.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("the model answered %d: %.200s", res.StatusCode, raw)
-		}
-		var out struct {
-			Choices []struct {
-				Message llmMsg `json:"message"`
-			} `json:"choices"`
-		}
-		if err := json.Unmarshal(raw, &out); err != nil || len(out.Choices) == 0 {
-			return "", fmt.Errorf("the model's answer didn't make sense")
-		}
-		m := out.Choices[0].Message
 		if len(m.ToolCalls) == 0 {
-			return strings.TrimSpace(m.Content), nil
+			return strings.TrimSpace(m.Content), st, wrote, nil
 		}
 		msgs = append(msgs, llmMsg{Role: "assistant", Content: m.Content, ToolCalls: m.ToolCalls})
 		for _, call := range m.ToolCalls {
-			var result any = map[string]any{"error": "no such tool"}
-			for _, t := range stewardTools {
-				if t.name == call.Function.Name {
-					args := map[string]any{}
-					_ = json.Unmarshal([]byte(call.Function.Arguments), &args)
-					journalLive(true)
-					result = t.run(s, me, args)
-					journalLive(false)
+			if call.Function.Name == "hand_off" && handOff && !wrote {
+				return "", st, false, errHandOff
+			}
+			result, action := s.runCall(me, call.Function.Name, call.Function.Arguments)
+			if action != "" {
+				st.Actions = append(st.Actions, action)
+				if isWrite(action) {
+					wrote = true
 				}
 			}
-			b, _ := json.Marshal(result)
-			if len(b) > 12000 {
-				b = b[:12000]
-			}
-			msgs = append(msgs, llmMsg{Role: "tool", ToolCallID: call.ID, Content: string(b)})
+			msgs = append(msgs, llmMsg{Role: "tool", ToolCallID: call.ID, Content: compactResult(result)})
 		}
 	}
-	return "", fmt.Errorf("the model kept calling tools without answering")
+	return "", st, wrote, fmt.Errorf("the model kept calling tools without answering")
+}
+
+// callModel sends one request and reads the answer (and how many tokens it took).
+func (s *Server) callModel(ctx context.Context, ep StewardEndpoint, req map[string]any, st *turnStats) (llmMsg, error) {
+	body, _ := json.Marshal(req)
+	hr, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(ep.URL, "/")+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return llmMsg{}, err
+	}
+	hr.Header.Set("Content-Type", "application/json")
+	if ep.Key != "" {
+		hr.Header.Set("Authorization", "Bearer "+ep.Key)
+	}
+	res, err := stewardClient.Do(hr)
+	if err != nil {
+		if ctx.Err() != nil {
+			return llmMsg{}, ctx.Err()
+		}
+		return llmMsg{}, err
+	}
+	raw, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return llmMsg{}, fmt.Errorf("the model answered %d: %.200s", res.StatusCode, raw)
+	}
+	var out struct {
+		Choices []struct {
+			Message llmMsg `json:"message"`
+		} `json:"choices"`
+		Usage struct {
+			Prompt     int `json:"prompt_tokens"`
+			Completion int `json:"completion_tokens"`
+			Details    struct {
+				Cached int `json:"cached_tokens"`
+			} `json:"prompt_tokens_details"`
+		} `json:"usage"`
+		Timings struct { // llama.cpp
+			CacheN int `json:"cache_n"`
+		} `json:"timings"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil || len(out.Choices) == 0 {
+		return llmMsg{}, fmt.Errorf("the model's answer didn't make sense")
+	}
+	st.Prompt += out.Usage.Prompt
+	st.Completion += out.Usage.Completion
+	st.Cached += max(out.Usage.Details.Cached, out.Timings.CacheN)
+	m := out.Choices[0].Message
+	m.Content = strings.TrimSpace(thinkRe.ReplaceAllString(m.Content, ""))
+	// Some servers leave Hermes-style tool calls in the text: pick them out.
+	if len(m.ToolCalls) == 0 {
+		for i, g := range toolCallRe.FindAllStringSubmatch(m.Content, -1) {
+			var tc struct {
+				Name      string `json:"name"`
+				Arguments any    `json:"arguments"`
+			}
+			if json.Unmarshal([]byte(g[1]), &tc) != nil || tc.Name == "" {
+				continue
+			}
+			args, _ := json.Marshal(tc.Arguments)
+			call := llmToolCall{ID: fmt.Sprintf("tc%d", i), Type: "function"}
+			call.Function.Name, call.Function.Arguments = tc.Name, string(args)
+			m.ToolCalls = append(m.ToolCalls, call)
+		}
+		if len(m.ToolCalls) > 0 {
+			m.Content = strings.TrimSpace(toolCallRe.ReplaceAllString(m.Content, ""))
+		}
+	}
+	for i := range m.ToolCalls {
+		if m.ToolCalls[i].ID == "" {
+			m.ToolCalls[i].ID = fmt.Sprintf("call%d", i)
+		}
+		if m.ToolCalls[i].Type == "" {
+			m.ToolCalls[i].Type = "function"
+		}
+	}
+	return m, nil
 }
 
 // ---- HTTP
@@ -569,7 +722,10 @@ func (s *Server) handleStewardSay(w http.ResponseWriter, r *http.Request, me *Me
 		return
 	}
 	hist := append(s.stewardHistory(me.ID), StewardMsg{Role: "user", Text: text, Time: time.Now().UnixMilli()})
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	// A small model on a small computer can take a while: give it time (and keep the
+	// connection open for it, past the server's usual 30 seconds).
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(6 * time.Minute))
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 	recent := hist
 	if len(recent) > 16 {
@@ -604,13 +760,24 @@ func (s *Server) handleAdminSteward(w http.ResponseWriter, r *http.Request) {
 	c := s.store.Steward()
 	hasKey := c.Key != ""
 	c.Key = ""
-	writeJSON(w, http.StatusOK, map[string]any{"config": c, "hasKey": hasKey})
+	hasFallbackKey := false
+	if c.Fallback != nil {
+		fb := *c.Fallback
+		hasFallbackKey = fb.Key != ""
+		fb.Key = ""
+		c.Fallback = &fb
+	}
+	out := s.brainStatus()
+	out["config"], out["hasKey"], out["hasFallbackKey"] = c, hasKey, hasFallbackKey
+	out["mcpURL"] = s.baseURL(r) + "/mcp"
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleAdminSetSteward(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		StewardConfig
-		ClearKey bool `json:"clearKey"`
+		ClearKey         bool `json:"clearKey"`
+		ClearFallbackKey bool `json:"clearFallbackKey"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -631,6 +798,29 @@ func (s *Server) handleAdminSetSteward(w http.ResponseWriter, r *http.Request) {
 	old := s.store.Steward()
 	if c.Key == "" && !body.ClearKey {
 		c.Key = old.Key // keep the saved one
+	}
+	if c.Mode != "" && c.Mode != "skills" && c.Mode != "full" {
+		writeError(w, http.StatusBadRequest, "mode is skills or full")
+		return
+	}
+	if c.Timeout < 0 || c.Timeout > 600 {
+		writeError(w, http.StatusBadRequest, "the timeout is 0 to 600 seconds")
+		return
+	}
+	if fb := c.Fallback; fb != nil {
+		fb.URL = strings.TrimSpace(fb.URL)
+		if fb.URL == "" {
+			c.Fallback = nil
+		} else if u, err := url.Parse(fb.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			writeError(w, http.StatusBadRequest, "the fallback's address starts with http:// or https://")
+			return
+		} else if fb.Key == "" && !body.ClearFallbackKey && old.Fallback != nil {
+			fb.Key = old.Fallback.Key
+		}
+	}
+	// Leaving the built-in model: it stops (and frees its memory).
+	if old.Source == "builtin" && c.Source != "builtin" {
+		s.stopBrain()
 	}
 	if err := s.store.SetSteward(c); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")

@@ -1054,3 +1054,57 @@ dl.profile dd { margin: 0; white-space: pre-wrap; }
 .photo { position: relative; aspect-ratio: 16 / 10; border-radius: 10px; overflow: hidden; background: var(--surface-2); }
 .photo img { width: 100%; height: 100%; object-fit: cover; }
 .photo-rm { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; padding: 0; }
+
+/* ---- Settings → AI: Steward's model, its fallback and test, and outside agents ---- */
+.ai { display: flex; flex-direction: column; gap: 16px; }
+.ai-card { background: var(--surface); border-radius: 22px; padding: 18px 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+.ai-card h2 { margin: 0 0 2px; }
+.ai-card h3 { margin: 10px 0 0; font-size: 1rem; }
+.ai-card p { margin: 0; }
+.ai-switch { display: flex; align-items: center; gap: 14px; padding: 10px 12px; margin: 0; border-radius: 14px; background: var(--surface-2); cursor: pointer; font-weight: 400; }
+.ai-switch .title { display: block; font-weight: 600; color: var(--text); }
+.ai-switch .sub { display: block; font-size: .85rem; color: var(--muted); margin-top: 2px; }
+.ai-switch input.switch { flex: none; margin: 0; }
+.ai-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.ai-choice { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 18px; background: var(--surface-2); cursor: pointer; border: 2px solid transparent; }
+.ai-choice .title { font-family: var(--serif); font-weight: 700; font-size: 1.05rem; color: var(--text); }
+.ai-choice .sub { font-size: .85rem; color: var(--muted); }
+.ai-choice .chip { align-self: flex-start; margin-top: 4px; }
+.ai-choice[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.ai-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ai-pane { display: flex; flex-direction: column; gap: 10px; }
+.ai-pane label, .ai-form label { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: .85rem; color: var(--muted); }
+.ai-pane .row, .ai-form .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.ai-pane .row.end, .ai-form .row.end { justify-content: flex-end; }
+.ai-spec { display: flex; flex-direction: column; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); }
+.ai-spec .title { font-weight: 600; }
+.ai-spec .sub { font-size: .85rem; color: var(--muted); }
+.ai-models { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ai-model { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); }
+.ai-model.current { box-shadow: inset 0 0 0 2px var(--accent); }
+.ai-model .title { font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ai-model .sub { font-size: .82rem; color: var(--muted); }
+.ai-model .sub.warn { color: var(--danger); }
+.ai-btns { display: flex; gap: 6px; align-items: center; flex: none; }
+.ai-verdict { font-size: .72rem; font-weight: 600; padding: .1rem .55rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent-soft-text); }
+.ai-verdict.v-slow { background: color-mix(in srgb, #e0a030 25%, transparent); color: var(--text); }
+.ai-verdict.v-too-slow { background: color-mix(in srgb, var(--danger) 22%, transparent); color: var(--text); }
+.ai-progress { width: 120px; height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.ai-progress span { display: block; height: 100%; background: var(--secondary); border-radius: 999px; transition: width .4s; }
+.ai-snippet-wrap { position: relative; }
+.ai-snippet { margin: 0; padding: 12px 14px; padding-right: 72px; border-radius: 14px; background: var(--surface-2); font-size: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-snippet-wrap button { position: absolute; top: 8px; right: 8px; }
+.ai-scopes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.ai-form { display: flex; flex-direction: column; gap: 10px; }
+.ai-results li, .ai .list.compact li { display: flex; gap: 8px; align-items: center; }
+.ok-dot, .bad-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #3dbe6a; }
+.bad-dot { background: var(--danger); }
+button.small { padding: .35rem .8rem; font-size: .85rem; border-radius: 999px; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 999px; box-shadow: var(--shadow-lg); z-index: 50; transition: opacity .5s; }
+.toast.gone { opacity: 0; }
+.ai-switch > .grow, .ai-model > .grow { flex: 1; min-width: 0; }
+/* Inside the settings panel, the sections sit flat, divided by a line, not as cards in a card. */
+.panel .ai-card { background: transparent; box-shadow: none; border-radius: 0; padding: 14px 6px 18px; border-bottom: 1px solid var(--line); }
+.panel .ai-card:last-child { border-bottom: 0; }
+.ai label.ai-switch { flex-direction: row; align-items: center; gap: 14px; font-size: inherit; color: var(--text); }
+.ai .seg { align-self: flex-start; }

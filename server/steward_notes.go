@@ -167,19 +167,3 @@ func (s *Server) soonModules() string {
 	}
 	return strings.Join(names, ", ")
 }
-
-func stewardPageLine(page string) string {
-	page = strings.TrimSpace(strings.ToLower(page))
-	if page == "" {
-		return ""
-	}
-	desc, ok := stewardPages[page]
-	if !ok {
-		if m, ok2 := moduleCatalogByID(page); ok2 {
-			desc = m.Name + " (coming soon: keep its notes in the vault as the guide says)"
-		} else {
-			return ""
-		}
-	}
-	return "\nThey're asking from " + desc + ", so \"this\" and \"here\" mean things on that page."
-}
