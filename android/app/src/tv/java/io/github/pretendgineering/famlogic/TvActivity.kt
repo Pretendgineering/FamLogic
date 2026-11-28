@@ -18,6 +18,10 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -410,6 +414,64 @@ private fun sunToday(board: JSONObject?): Pair<Long, Long> {
     return rise to c.timeInMillis
 }
 
+/*
+ * The sky in the bottom-left corner. A quarter sun creeps in from the corner after
+ * sunrise, is fully in at midday, and sinks back out before sunset; after a gap, a
+ * quarter moon does the same through the night (fully in at midnight). Each one's
+ * light spreads across the board as it rises: pale yellow by day, silver by night.
+ * It moves so slowly you only notice it hours apart; the sun's rays turn gently.
+ */
+private fun skyRise(now: Long, from: Long, to: Long): Float {
+    if (to <= from || now <= from || now >= to) return 0f
+    val t = (now - from).toFloat() / (to - from)
+    return kotlin.math.sin(t * Math.PI).toFloat() // 0 at the edges, 1 halfway
+}
+
+@Composable
+private fun SkyCorner(now: Long, rise: Long, set: Long) {
+    val m = 60_000L
+    val sun = skyRise(now, rise + 20 * m, set - 20 * m)
+    // The moon: from a while after sunset until a while before tomorrow's sunrise (or
+    // from yesterday's sunset, early in the morning).
+    val day = 86_400_000L
+    val moon = maxOf(skyRise(now, set + 50 * m, rise + day - 50 * m), skyRise(now, set - day + 50 * m, rise - 50 * m))
+    val spin = rememberInfiniteTransition(label = "sky")
+    val turn by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(240_000, easing = LinearEasing)), label = "turn")
+    Box(Modifier.fillMaxSize()) {
+        // The light, spreading from the corner as it rises.
+        Canvas(Modifier.fillMaxSize()) {
+            val corner = Offset(0f, size.height)
+            val reach = size.maxDimension * (0.35f + 0.85f * maxOf(sun, moon))
+            if (sun > 0f) {
+                drawRect(Color(0xFFFFF6D6).copy(alpha = .35f * sun)) // the pale yellow day
+                drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = .75f * sun), Color(0xFFFFF1B8).copy(alpha = .35f * sun), Color.Transparent), center = corner, radius = reach))
+            }
+            if (moon > 0f) drawRect(Brush.radialGradient(listOf(Color(0xFFCFD8F0).copy(alpha = .22f * moon), Color(0xFF8A94C8).copy(alpha = .08f * moon), Color.Transparent), center = corner, radius = reach))
+        }
+        val r = 190.dp
+        // The sun: a quarter in the corner, coming in along the diagonal; its rays turn slowly.
+        if (sun > 0f) Canvas(
+            Modifier.align(Alignment.BottomStart).size(r * 2).offset(x = -r - r * (1f - sun), y = r + r * (1f - sun))
+                .graphicsLayer { rotationZ = turn },
+        ) {
+            val c = Offset(size.width / 2, size.height / 2)
+            val rad = size.minDimension / 2
+            for (i in 0 until 16) rotate(i * 22.5f, c) {
+                drawLine(Color(0xFFFFC94D).copy(alpha = .55f), Offset(c.x, c.y - rad * .72f), Offset(c.x, c.y - rad * .98f), strokeWidth = rad * .05f, cap = StrokeCap.Round)
+            }
+            drawCircle(Brush.radialGradient(listOf(Color(0xFFFFF4C2), Color(0xFFFFD45E)), center = c, radius = rad * .62f), rad * .62f, c)
+        }
+        // The moon: a soft crescent quarter.
+        if (moon > 0f) Canvas(Modifier.align(Alignment.BottomStart).size(r * 2).offset(x = -r - r * (1f - moon), y = r + r * (1f - moon))) {
+            val c = Offset(size.width / 2, size.height / 2)
+            val rad = size.minDimension / 2 * .62f
+            drawCircle(Color(0xFFE9EDF8).copy(alpha = .9f), rad, c)
+            drawCircle(Color(0xFFCBD3EA).copy(alpha = .8f), rad * .16f, Offset(c.x + rad * .35f, c.y - rad * .3f))
+            drawCircle(Color(0xFFCBD3EA).copy(alpha = .7f), rad * .1f, Offset(c.x + rad * .55f, c.y - rad * .62f))
+        }
+    }
+}
+
 private fun greeting(now: Long): String = when (Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.HOUR_OF_DAY)) {
     in 5..11 -> "Good morning"
     in 12..16 -> "Good afternoon"
@@ -511,6 +573,7 @@ private fun TvBoard(prefs: Prefs, config: TvConfig) {
         .filter { it.optString("access") != "display" && it.optString("role") != "dependent" }.associate { it.optString("id") to it.optString("name") }
 
     Box(Modifier.fillMaxSize().background(bg)) {
+        SkyCorner(now, rise, set)
         Row(Modifier.fillMaxSize().padding(start = 40.dp, end = 24.dp, top = 24.dp, bottom = 24.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 // A greeting for the time of day, the family and the date, and the time.
