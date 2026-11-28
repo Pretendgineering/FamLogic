@@ -127,6 +127,8 @@ type Member struct {
 	// person's home screen (nil = the app's default).
 	Kid  *KidSettings `json:"kid,omitempty"`
 	Home []string     `json:"home,omitempty"`
+	// WebHome is their web console home: tiles as "id:WxH", in order (empty: the default).
+	WebHome []string `json:"webHome,omitempty"`
 	// Larger buttons and text, and picture icons (nil = the default for their role).
 	Big      *bool `json:"big,omitempty"`
 	Pictures *bool `json:"pictures,omitempty"`
@@ -162,6 +164,8 @@ type data struct {
 	// The family displays\' quiet time and messages (see display.go).
 	Display *DisplayState      `json:"display,omitempty"`
 	Fridge  *FridgeNote        `json:"fridge,omitempty"` // the family's sticky note
+	// OwnerWebHome is the web home of whoever logs in with the admin password.
+	OwnerWebHome []string `json:"ownerWebHome,omitempty"`
 	KeyLog  []KeyUse           `json:"keyLog,omitempty"`
 	Members map[string]*Member `json:"members"`
 	Invites map[string]*Invite `json:"invites"`

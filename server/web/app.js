@@ -5,6 +5,8 @@ const $ = (sel) => document.querySelector(sel);
 
 // ---- appearance: this browser's palette and light/dark (the same palettes as the app) ----
 const THEMES = [["dracula", "Default"], ["hannah", "Hannah's Theme"], ["forest", "Hobbit Door"], ["ocean", "Boring Blue"], ["paper", "Lofi Cabin"], ["noir", "Logic Noir"], ["orange", "Safety Cone"], ["chill", "Spider-Man"], ["nightshift", "Night Shift"], ["gamer", "Gamer Mode"], ["couch", "Grandma's Couch"], ["contrast", "High contrast"]];
+// Each theme's little story and its look in three colours (dark background, main, second), for the picker.
+const THEME_INFO = {"dracula": {"d": "Soft dusky purples with gentle pink, cyan and green.", "c": ["#302d3c", "#b8a3e3", "#e3a3c8"]}, "hannah": {"d": "Sea glass, somewhere between blue and green, with tasteful gold.", "c": ["#182b2e", "#6cc5c9", "#d9b45a"]}, "forest": {"d": "Deep round-door green with a brass knob.", "c": ["#16271a", "#5faf6e", "#d4a64a"]}, "ocean": {"d": "Cool, calm, perfectly sensible blues.", "c": ["#202c37", "#7fb8e0", "#8fd3c0"]}, "paper": {"d": "Cream, wood and a deep red: beats to relax to.", "c": ["#30251f", "#d98c7a", "#c9b27c"]}, "noir": {"d": "Black, white and greys. Only what needs colour keeps it.", "c": ["#121212", "#e0e0e0", "#bdbdbd"]}, "orange": {"d": "Dark grey and a bright traffic-cone orange.", "c": ["#271d10", "#ff9000", "#ffb347"]}, "chill": {"d": "Near-black and a web-slinging red.", "c": ["#271314", "#e50914", "#b3b3b3"]}, "nightshift": {"d": "Warm amber on deep brown, easy on the eyes at 2 am.", "c": ["#2f2215", "#ffb347", "#e08a5a"]}, "gamer": {"d": "Black with magenta and cyan: RGB keyboard energy.", "c": ["#200d24", "#ff2bd6", "#00e5ff"]}, "couch": {"d": "Dusty rose and olive on cream, like a floral sofa.", "c": ["#342829", "#e0a3b2", "#b8c27a"]}, "contrast": {"d": "Black and white with strong accents, for bright rooms and easier reading.", "c": ["#000000", "#ffd400", "#7fe0ff"]}};
 // The modules' own names (Thereabouts, Chitchat…) or plain ones (Map, Chat…), per browser.
 let plainNames = false;
 try { plainNames = localStorage.getItem("plainNames") === "1"; } catch (_) {}
@@ -422,14 +424,13 @@ async function refresh(periodic = false) {
     renderPlaces();
     renderMembers(visibleMembers());
     renderInvites(invites);
-    setCount("#count-people", lastMembers.length, sos.length > 0);
+    setCount("#count-people", visibleMembers().length, sos.length > 0);
     setCount("#count-fences", places.length);
-    setCount("#count-groups", circles.length > 1 ? circles.length : 0);
     if ((moduleInfo("chat") || {}).enabled && (moduleInfo("chat") || {}).available && view !== "chat") await loadChats();
     // The 10-second refresh redraws a page only if something on it changed: pages
     // you fill in (Access & Control, Family) were being rebuilt under your hands.
     if (view && view !== "thereabouts") {
-      const formPage = view === "access" || view === "family";
+      const formPage = view === "family";
       const typing = document.activeElement && document.activeElement.closest(".page") && document.activeElement.matches("input, select, textarea");
       if (!(periodic && formPage && (drawnSig[view] === peopleSig() || typing))) renderView();
     }
@@ -442,7 +443,8 @@ async function refresh(periodic = false) {
 
 function visibleMembers() {
   if (!circles.some((c) => c.id === circleFilter)) circleFilter = "";
-  const users = lastMembers.filter((m) => m.role !== "dependent"); // non-users aren't on the map
+  // Non-users and family displays aren't on the map (and never warn about location or battery).
+  const users = lastMembers.filter((m) => m.role !== "dependent" && m.access !== "display");
   return circleFilter ? users.filter((m) => (m.circles || []).includes(circleFilter)) : users;
 }
 
@@ -970,8 +972,10 @@ const ICONS = {
   people: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 20c0-3.6 2.7-6.2 6-6.2s6 2.6 6 6.2"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.8 14.3c2.9.1 5.2 2.3 5.2 5.7"/>',
   device: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
   camera: '<path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3v11H4z"/><circle cx="12" cy="13.5" r="3.3"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  note: '<path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.7-8.7M16.5 6.5l2.5 2.5M14 9l2 2"/>',
-  gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  gear: '<path d="M19.21 10.34 L21.70 10.64 L21.70 13.36 L19.21 13.66 L18.28 15.92 L19.83 17.90 L17.90 19.83 L15.92 18.28 L13.66 19.21 L13.36 21.70 L10.64 21.70 L10.34 19.21 L8.08 18.28 L6.10 19.83 L4.17 17.90 L5.72 15.92 L4.79 13.66 L2.30 13.36 L2.30 10.64 L4.79 10.34 L5.72 8.08 L4.17 6.10 L6.10 4.17 L8.08 5.72 L10.34 4.79 L10.64 2.30 L13.36 2.30 L13.66 4.79 L15.92 5.72 L17.90 4.17 L19.83 6.10 L18.28 8.08Z" stroke-linejoin="round"/><circle cx="12" cy="12" r="3"/>',
 };
 const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 document.querySelectorAll("[data-icon]").forEach((s) => { s.innerHTML = icon(s.dataset.icon); });
@@ -993,14 +997,17 @@ const MODULE_PLANS = {
   contacts: ["The family's address book as notes, synced with phones over CardDAV.", "Linked to people, pets, cars and the home (the vet, the mechanic, the plumber)."],
 };
 
+const accessOpen = new Set();   // whose Family panels are open
 let view = "";
 function viewFromHash() { return location.hash.replace(/^#\/?/, "").split("/")[0]; }
 
 function showView(name) {
   if (!name) { try { name = localStorage.getItem("view") || ""; } catch (_) {} }
   if (!name) name = "home";
-  if (!isAdmin() && (name === "devices" || name === "settings")) name = "home";
-  const known = ["home", "family", "access", "devices", "settings"].includes(name) || !!moduleInfo(name) || name === "thereabouts";
+  // Access & Control is part of Family now (old links still open the person).
+  if (name === "access") { const id = location.hash.split("/")[2]; if (id) accessOpen.add(id); name = "family"; }
+  if (!isAdmin() && name === "devices") name = "home";
+  const known = ["home", "family", "devices", "settings"].includes(name) || !!moduleInfo(name) || name === "thereabouts";
   if (!known || ((moduleInfo(name) || name === "thereabouts") && !moduleOn(name))) name = "home";
   view = name;
   try { localStorage.setItem("view", name); } catch (_) {}
@@ -1019,6 +1026,58 @@ function showView(name) {
 }
 window.addEventListener("hashchange", () => showView(viewFromHash()));
 
+// The rail's module sections in this browser's order (Settings → Look), Home first.
+const DEFAULT_NAV = [...document.querySelectorAll(".rail a[data-module]")].map((a) => a.dataset.view);
+function navOrder() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem("navOrder") || "[]"); } catch (_) {}
+  return saved.filter((v) => DEFAULT_NAV.includes(v)).concat(DEFAULT_NAV.filter((v) => !saved.includes(v)));
+}
+function applyNavOrder() {
+  const rail = $("#rail"), sep = rail.querySelector(".rail-sep");
+  for (const v of navOrder()) { const a = rail.querySelector(`a[data-view="${v}"]`); if (a) rail.insertBefore(a, sep); }
+}
+function saveNavOrder(order) {
+  try { order ? localStorage.setItem("navOrder", JSON.stringify(order)) : localStorage.removeItem("navOrder"); } catch (_) {}
+  applyNavOrder(); drawNavOrder();
+}
+function drawNavOrder() {
+  const list = $("#nav-order");
+  let dragging = null;
+  list.replaceChildren(...navOrder().filter((v) => { const m = moduleInfo(v); return !m || m.enabled; }).map((v) => {
+    const a = $("#rail").querySelector(`a[data-view="${v}"]`);
+    const li = el("li", { draggable: "true", class: "nav-row", "data-view": v },
+      el("span", { class: "handle", "aria-hidden": "true" }, "☰"),
+      el("span", { class: "ri", "data-icon": a.querySelector(".ri").dataset.icon }),
+      el("span", { class: "grow title" }, a.querySelector("span:last-child").textContent),
+      el("button", { type: "button", class: "icon-btn", "aria-label": "Move up", onclick: () => move(v, -1) }, "↑"),
+      el("button", { type: "button", class: "icon-btn", "aria-label": "Move down", onclick: () => move(v, 1) }, "↓"));
+    li.addEventListener("dragstart", () => { dragging = v; li.classList.add("dragging"); });
+    li.addEventListener("dragend", () => { li.classList.remove("dragging"); dragging = null; });
+    li.addEventListener("dragover", (e) => e.preventDefault());
+    li.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (!dragging || dragging === v) return;
+      const order = navOrder().filter((x) => x !== dragging);
+      order.splice(order.indexOf(v), 0, dragging);
+      saveNavOrder(order);
+    });
+    return li;
+  }));
+  list.querySelectorAll("[data-icon]").forEach((x) => { x.innerHTML = icon(x.dataset.icon); });
+  function move(v, d) {
+    const order = navOrder(), i = order.indexOf(v);
+    // Step over sections that are switched off, so a press always visibly moves it.
+    let j = i + d;
+    while (j >= 0 && j < order.length && moduleInfo(order[j]) && !moduleInfo(order[j]).enabled) j += d;
+    if (j < 0 || j >= order.length) return;
+    order.splice(i, 1); order.splice(j, 0, v);
+    saveNavOrder(order);
+  }
+}
+$("#nav-order-reset").addEventListener("click", () => saveNavOrder(null));
+applyNavOrder();
+
 function renderRail() {
   document.querySelectorAll(".rail a[data-module]").forEach((a) => {
     const m = moduleInfo(a.dataset.module);
@@ -1033,7 +1092,6 @@ function renderRail() {
 function renderView() {
   if (view === "home") renderHome();
   else if (view === "family") renderFamily();
-  else if (view === "access") renderAccess();
   else if (view === "devices") renderDevices();
   else if (view === "settings") renderSettings();
   else if (view === "chat" && (moduleInfo("chat") || {}).available) renderChat();
@@ -1044,6 +1102,7 @@ function renderView() {
 // chores, lists, meals, routines, chats, devices); each panel opens its page.
 let homeDrawn = "";
 async function renderHome() {
+  if (!homeLayout) await loadHomeLayout();
   $("#home-title").textContent = $("#family-name").textContent || "FamLogic";
   const people = lastMembers.filter((m) => m.role !== "dependent" && m.access !== "display");
   $("#home-sub").textContent = lastMembers.length ? `${people.length} ${people.length === 1 ? "person" : "people"}` : "Nobody has joined yet: invite your family from the Family page.";
@@ -1057,8 +1116,11 @@ async function renderHome() {
     get(on("profiles"), "/api/profiles"), get(on("homestead"), "/api/home"),
   ]);
   if (view !== "home") return;
-  const sig = JSON.stringify([lastMembers.map((m) => [m.id, describe(m), m.sosSince]), feed, events, chores, lists, meals, routines, profiles, home, chatConvs.map((c) => [c.id, c.unread, c.last && c.last.id]), places.length]);
-  if (sig === homeDrawn && $("#home-dash").childElementCount) return;
+  let sig = JSON.stringify([lastMembers.map((m) => [m.id, describe(m), m.sosSince]), feed, events, chores, lists, meals, routines, profiles, home, chatConvs.map((c) => [c.id, c.unread, c.last && c.last.id]), places.length]);
+  const extra = await homeGlance();
+  if (view !== "home") return;
+  sig += JSON.stringify([extra, homeLayout, homeEditing]);
+  if (sig === homeDrawn && $("#home-grid").childElementCount) return;
   homeDrawn = sig;
   const name = (id) => (personById(id) || {}).name || "?";
   const time = (ms) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -1071,11 +1133,13 @@ async function renderHome() {
   };
   const rows = (items, empty) => items.length ? el("ul", { class: "dash-list" }, ...items) : el("p", { class: "muted small" }, empty);
   const li = (main, sub, extra) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "dash-main" }, main), sub ? el("div", { class: "dash-sub" }, sub) : null), extra || null);
-  const out = [];
-  const top = [];
+  // Each tile's content, by tile id; the grid puts them in this person's order.
+  const out = {};
   if (moduleOn("thereabouts")) {
+    const mapTile = el("div", { class: "dash-panel dash-map" }, homeMapBox, el("a", { class: "dash-map-open", href: "#/thereabouts" }, "Open the map"));
+    out.map = mapTile;
     const sos = people.filter((m) => m.sosSince);
-    out.push(panel("#/thereabouts", sos.length ? "sos" : "pin", sos.length ? "SOS" : "Who's where",
+    out.people = (panel("#/thereabouts", sos.length ? "sos" : "pin", sos.length ? "SOS" : "Who's where",
       rows(people.map((m) => el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "dash-main" }, m.name), el("div", { class: "dash-sub" }, describe(m))))), "Nobody's sharing yet."),
       sos.length ? "sos" : "dash-people"));
   }
@@ -1084,32 +1148,32 @@ async function renderHome() {
     const label = { arrived: (e) => `got to ${at(e)}`, left: (e) => `left ${at(e)}`, checkin: (e) => "checked in" + (e.note ? `: ${e.note}` : ""),
       sos: () => "sent an SOS", sos_end: () => "is OK", drive_start: () => "started driving", trip: () => "finished a trip",
       chore_done: (e) => `did "${e.title}"`, reward_spent: (e) => `got "${e.title}"` };
-    top.push(panel("#/thereabouts", "people", "Today", rows(feed.items.slice(0, 14).map((e) => li(`${e.name} ${(label[e.type] || (() => e.type))(e)}`, time(e.time))), "Nothing yet today.")));
+    out.today = (panel("#/thereabouts", "people", "Today", rows(feed.items.slice(0, 14).map((e) => li(`${e.name} ${(label[e.type] || (() => e.type))(e)}`, time(e.time))), "Nothing yet today.")));
   }
-  if (events) out.push(panel("#/calendar", "calendar", displayName(moduleInfo("calendar")),
+  if (events) out.calendar = (panel("#/calendar", "calendar", displayName(moduleInfo("calendar")),
     rows(events.events.slice(0, 8).map((e) => li(e.title, (new Date(e.start) < new Date(midnight.getTime() + 86400000) ? "Today" : new Date(e.start).toLocaleDateString([], { weekday: "short", day: "numeric" })) + " · " + (e.allDay ? "all day" : time(e.start)) + (e.where ? " · " + e.where : ""))), "Nothing in the next week.")));
   if (chores) {
     const due = chores.chores.filter((c) => !c.finished && (!c.due || c.due <= chores.today));
-    out.push(panel("#/chores", "upkeep", displayName(moduleInfo("chores")),
+    out.chores = (panel("#/chores", "upkeep", displayName(moduleInfo("chores")),
       el("div", {}, rows(due.slice(0, 8).map((c) => li(c.title, c.who.length ? c.who.map(name).join(", ") : "Anyone", c.stars ? el("span", { class: "badge" }, "★ " + c.stars) : null)), "Nothing due."),
         Object.keys(chores.stars || {}).length ? el("p", { class: "dash-sub" }, "Stars: " + Object.entries(chores.stars).map(([id, n]) => `${name(id)} ${n}`).join(" · ")) : null)));
   }
-  if (lists) out.push(panel("#/todos", "check", displayName(moduleInfo("todos")),
+  if (lists) out.todos = (panel("#/todos", "check", displayName(moduleInfo("todos")),
     rows(lists.lists.slice(0, 6).map((l) => { const open = l.items.filter((i) => !i.done); return li(l.title, open.length ? open.slice(0, 4).map((i) => i.text).join(", ") + (open.length > 4 ? ` +${open.length - 4}` : "") : "all done", el("span", { class: "badge" }, String(open.length))); }), "No lists yet.")));
   if (routines) {
     const nowRows = Object.entries(routines.now || {}).map(([who, id]) => { const r = routines.routines.find((x) => x.id === id); return r ? li(`${name(who)}: ${r.title}`, `${r.items.filter((i) => i.done).length} of ${r.items.length} done`) : null; }).filter(Boolean);
-    out.push(panel("#/routines", "check", displayName(moduleInfo("routines")), rows(nowRows, "No routine on right now.")));
+    out.routines = (panel("#/routines", "check", displayName(moduleInfo("routines")), rows(nowRows, "No routine on right now.")));
   }
   if (meals) {
     const n = new Date(), today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-    out.push(panel("#/meals", "meal", displayName(moduleInfo("meals")),
+    out.meals = (panel("#/meals", "meal", displayName(moduleInfo("meals")),
       rows(meals.days.filter((d) => d.date >= today).map((d) => el("li", {}, el("span", { class: "dash-day" }, new Date(d.date + "T12:00").toLocaleDateString([], { weekday: "short" })),
         el("div", { class: "grow dash-main" + (Object.keys(d.meals).length ? "" : " muted") }, Object.entries(d.meals).map(([k, v]) => `${k}: ${v}`).join(" · ") || "Not planned"))), "This week's done.")));
   }
   // Homestead: the home's upkeep coming up.
   if (home) {
     const soon = home.jobs.slice().sort((a, b) => (a.due || "").localeCompare(b.due || "")).slice(0, 6);
-    out.push(panel("#/homestead", "house", displayName(moduleInfo("homestead")),
+    out.homestead = (panel("#/homestead", "house", displayName(moduleInfo("homestead")),
       rows(soon.map((c) => li(c.title, (c.due && c.due <= new Date().toISOString().slice(0, 10) ? "Due now" : "Next " + c.due) + " · " + EVERY_TEXT(c.every))), "Set up your home to see its upkeep here.")));
   }
   // Dossier: allergies at a glance, and whose birthday is next.
@@ -1121,27 +1185,144 @@ async function renderHome() {
       const allergy = (p.profile.Allergies || "").split("\n").map((l) => l.replace(/^[-*]\s*/, "").trim()).filter(Boolean).join(", ");
       return li(p.name, [allergy && "Allergies: " + allergy, b && "Birthday " + b.toLocaleDateString([], { day: "numeric", month: "short" })].filter(Boolean).join(" · "));
     });
-    out.push(panel("#/profiles", "idcard", displayName(moduleInfo("profiles")), rows(rowsP, "No profiles filled in yet.")));
+    out.profiles = (panel("#/profiles", "idcard", displayName(moduleInfo("profiles")), rows(rowsP, "No profiles filled in yet.")));
   }
-  if (moduleOn("chat") && chatConvs.length) out.push(panel("#/chat", "chat", displayName(moduleInfo("chat")),
-    rows(chatConvs.filter((c) => c.last).slice(0, 6).map((c) => li(c.title + (c.unread ? ` (${c.unread} new)` : ""), (c.last.text || "Photo").slice(0, 80))), "No messages yet.")));
+  if (moduleOn("chat")) out.chat = (panel("#/chat", "chat", displayName(moduleInfo("chat")),
+    rows(chatConvs.filter((c) => c.last).slice(0, 8).map((c) => li(c.title + (c.unread ? ` (${c.unread} new)` : ""), (c.last.text || "Photo").slice(0, 80))), "No messages yet.")));
   if (isAdmin()) {
     const quiet = lastMembers.filter((m) => m.silent || (m.issues || []).length);
-    out.push(panel("#/devices", "device", "Devices", rows(quiet.map((m) => li(m.name, m.silent ? "Not heard from in a while" : (m.issues || []).join(", "))), "All phones look fine.")));
+    out.devices = (panel("#/devices", "device", "Devices", rows(quiet.map((m) => li(m.name, m.silent ? "Not heard from in a while" : (m.issues || []).join(", "))), "All phones look fine.")));
   }
-  // Who's where sits beside the map, under the feed.
-  const peoplePanel = out.find((p) => p.classList.contains("dash-people") || p.classList.contains("sos"));
-  if (peoplePanel) { out.splice(out.indexOf(peoplePanel), 1); top.push(peoplePanel); }
-  $("#home-feed").replaceChildren(...top);
-  $("#home-top").hidden = !moduleOn("thereabouts") && !feed;
-  $("#home-dash").replaceChildren(...out);
+  Object.assign(out, glanceTiles(extra));
+  drawHomeGrid(out);
   homeMapDraw();
 }
+
+
+// ---- the web home: tiles each person arranges (Arrange), like the app's home screen
+const homeMapBox = el("div", { id: "home-map" });
+const HOME_TILES = {
+  map: { name: () => "Map", size: "4x3", ok: () => moduleOn("thereabouts") },
+  people: { name: () => "Who's where", size: "2x3", ok: () => moduleOn("thereabouts") },
+  today: { name: () => "Today", size: "2x2", ok: () => true },
+  calendar: { name: () => modName("calendar"), size: "2x2", ok: () => moduleOn("calendar") },
+  chores: { name: () => modName("chores"), size: "2x2", ok: () => moduleOn("chores") },
+  todos: { name: () => modName("todos"), size: "2x2", ok: () => moduleOn("todos") },
+  chat: { name: () => modName("chat"), size: "2x2", ok: () => moduleOn("chat") },
+  meals: { name: () => modName("meals"), size: "2x2", ok: () => moduleOn("meals") },
+  routines: { name: () => modName("routines"), size: "2x2", ok: () => moduleOn("routines") },
+  homestead: { name: () => modName("homestead"), size: "2x2", ok: () => moduleOn("homestead") },
+  profiles: { name: () => modName("profiles"), size: "2x2", ok: () => moduleOn("profiles") },
+  devices: { name: () => "Devices", size: "2x2", ok: () => isAdmin() },
+  weather: { name: () => "Weather", size: "2x1", ok: () => !!me.member },
+  note: { name: () => "Sticky note", size: "2x1", ok: () => !!me.member },
+  clock: { name: () => "Clock", size: "1x1", ok: () => true },
+};
+const HOME_DEFAULT = ["map", "people", "today", "calendar", "chores", "todos", "chat", "meals", "routines", "homestead", "profiles", "devices", "weather", "note"];
+function modName(id) { const m = moduleInfo(id); return m ? displayName(m) : id; }
+let homeLayout = null, homeEditing = false;
+const homeDefault = () => HOME_DEFAULT.map((id) => ({ id, w: +HOME_TILES[id].size[0], h: +HOME_TILES[id].size[2] }));
+async function loadHomeLayout() {
+  try {
+    const { tiles } = await api("GET", "/api/console/home");
+    homeLayout = tiles.length ? tiles.map((t) => { const [id, sz] = t.split(":"); return { id, w: +sz[0], h: +sz[2] }; }).filter((t) => HOME_TILES[t.id]) : homeDefault();
+  } catch (_) { homeLayout = homeDefault(); }
+}
+async function saveHomeLayout(reset = false) {
+  try { await api("PUT", "/api/console/home", { tiles: reset ? [] : homeLayout.map((t) => `${t.id}:${t.w}x${t.h}`) }); }
+  catch (err) { toast(err.message); }
+  if (reset) homeLayout = homeDefault();
+  homeDrawn = ""; renderHome();
+}
+// Weather, the sticky note and the clock: small tiles that need a little data of their own.
+async function homeGlance() {
+  const want = (id) => homeLayout && homeLayout.some((t) => t.id === id) && HOME_TILES[id].ok();
+  const [weather, note] = await Promise.all([
+    want("weather") ? api("GET", "/api/weather?unit=" + (navigator.language === "en-US" ? "f" : "c")).catch((e) => ({ error: e.message })) : null,
+    want("note") ? api("GET", "/api/fridge").catch(() => null) : null,
+  ]);
+  return { weather, note, minute: Math.floor(Date.now() / 60000) };
+}
+function glanceTiles(x) {
+  const t = {};
+  const head = (ic, title) => { const h = el("div", { class: "dash-head" }); h.innerHTML = `<span class="ri">${icon(ic)}</span>`; h.append(el("span", { class: "dash-title" }, title)); return h; };
+  if (x.weather) t.weather = el("div", { class: "dash-panel glance" }, head("sun", "Weather"), x.weather.error
+    ? el("p", { class: "muted small" }, x.weather.error)
+    : el("div", { class: "glance-big" }, `${Math.round(x.weather.temp)}${x.weather.unit}`, el("span", { class: "dash-sub" }, ` ${x.weather.text} · ${Math.round(x.weather.high)}° / ${Math.round(x.weather.low)}°` + (x.weather.rain ? ` · rain ${x.weather.rain}%` : ""))));
+  if (x.note) {
+    const box = el("div", { class: "dash-panel glance note-tile", title: "Change the note", onclick: async () => {
+      if (homeEditing) return;
+      const text = prompt("The family's sticky note (empty to clear):", x.note.text || "");
+      if (text === null) return;
+      try { await api("PUT", "/api/fridge", { text }); homeDrawn = ""; renderHome(); } catch (err) { alert(err.message); }
+    } }, head("note", "Sticky note"), el("div", { class: "glance-note" }, x.note.text || "Tap to leave the family a note."),
+      x.note.by ? el("div", { class: "dash-sub" }, "— " + x.note.by) : null);
+    t.note = box;
+  }
+  const now = new Date();
+  t.clock = el("div", { class: "dash-panel glance clock-tile" }, el("div", { class: "glance-big" }, now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })),
+    el("div", { class: "dash-sub" }, now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })));
+  return t;
+}
+function drawHomeGrid(content) {
+  if (!homeLayout) homeLayout = homeDefault();
+  const grid = $("#home-grid");
+  grid.classList.toggle("editing", homeEditing);
+  let dragging = null;
+  const tiles = homeLayout.filter((t) => HOME_TILES[t.id].ok() && content[t.id]).map((t) => {
+    const box = content[t.id];
+    box.classList.add("home-tile");
+    box.style.setProperty("--w", t.w); box.style.setProperty("--h", t.h);
+    box.dataset.tile = t.id;
+    if (homeEditing) {
+      box.setAttribute("draggable", "true");
+      const change = (dw, dh) => { t.w = Math.min(6, Math.max(1, t.w + dw)); t.h = Math.min(4, Math.max(1, t.h + dh)); saveHomeLayout(); };
+      const bar = el("div", { class: "tile-tools" },
+        el("span", { class: "handle", title: "Drag to move" }, "☰"),
+        el("button", { type: "button", title: "Narrower", onclick: (e) => { e.preventDefault(); change(-1, 0); } }, "←"),
+        el("button", { type: "button", title: "Wider", onclick: (e) => { e.preventDefault(); change(1, 0); } }, "→"),
+        el("button", { type: "button", title: "Shorter", onclick: (e) => { e.preventDefault(); change(0, -1); } }, "↑"),
+        el("button", { type: "button", title: "Taller", onclick: (e) => { e.preventDefault(); change(0, 1); } }, "↓"),
+        el("span", { class: "size" }, `${t.w} × ${t.h}`),
+        el("button", { type: "button", class: "remove", title: "Take it off", onclick: (e) => { e.preventDefault(); homeLayout = homeLayout.filter((x) => x !== t); saveHomeLayout(); } }, "✕"));
+      box.append(bar);
+      box.addEventListener("click", (e) => { if (!e.target.closest(".tile-tools")) e.preventDefault(); }, true);
+      box.addEventListener("dragstart", () => { dragging = t; box.classList.add("dragging"); });
+      box.addEventListener("dragend", () => { box.classList.remove("dragging"); });
+      box.addEventListener("dragover", (e) => e.preventDefault());
+      box.addEventListener("drop", (e) => {
+        e.preventDefault();
+        if (!dragging || dragging === t) return;
+        homeLayout.splice(homeLayout.indexOf(dragging), 1);
+        homeLayout.splice(homeLayout.indexOf(t), 0, dragging);
+        saveHomeLayout();
+      });
+    }
+    return box;
+  });
+  grid.replaceChildren(...tiles);
+  if (!tiles.length) grid.append(el("p", { class: "muted" }, "No tiles. Press Arrange to add some."));
+  // The drawer: tiles not on the home yet.
+  $("#home-drawer").hidden = !homeEditing;
+  if (homeEditing) {
+    const missing = Object.keys(HOME_TILES).filter((id) => HOME_TILES[id].ok() && !homeLayout.some((t) => t.id === id));
+    $("#home-drawer-list").replaceChildren(...missing.map((id) => el("li", {},
+      el("div", { class: "grow title" }, HOME_TILES[id].name()),
+      el("button", { type: "button", class: "tonal", onclick: () => { const [w, , h] = HOME_TILES[id].size; homeLayout.push({ id, w: +w, h: +h }); saveHomeLayout(); } }, "Add"))));
+    if (!missing.length) $("#home-drawer-list").replaceChildren(el("li", { class: "muted" }, "Every tile is on your home."));
+  }
+}
+$("#home-arrange").addEventListener("click", () => {
+  homeEditing = !homeEditing;
+  $("#home-arrange").textContent = homeEditing ? "Done" : "Arrange";
+  homeDrawn = ""; renderHome();
+});
+$("#home-reset").addEventListener("click", () => { if (confirm("Put your home back to the usual tiles?")) saveHomeLayout(true); });
 
 // The home map: everyone sharing, fitted to them, a click away from the full map.
 let homeMap = null, homeTiles = "", homeMarkers = [], homeFitFor = "";
 function homeMapDraw() {
-  const box = $("#home-map");
+  const box = homeMapBox;
   if (!box || !moduleOn("thereabouts") || typeof L === "undefined") return;
   if (!homeMap) {
     homeMap = L.map(box, { zoomControl: false, attributionControl: true, scrollWheelZoom: false }).setView([20, 0], 2);
@@ -1179,10 +1360,17 @@ function avatarOf(m) {
 const ACCESS_LABELS = { display: "Family display", admin: "Admin", parent: "Parent", grandparent: "Grandparent", older_child: "Older child", younger_child: "Younger child", dependent: "Doesn't use the app" };
 const displayName = (m) => plainNames ? (m.plain || m.name) : m.name;
 
+// Family: everyone, each opening up to what they can use (what was Access & Control),
+// then who's still to join, the paired displays (not people) and the groups.
 function renderFamily() {
   drawnSig.family = peopleSig();
+  const focus = location.hash.split("/")[2];
+  if (focus && !accessOpen.has(focus)) { accessOpen.add(focus); history.replaceState(null, "", "#/family"); }
+  if (isAdmin()) loadPIN();
   const roles = serverFeatures.includes("roles");
-  $("#family-list").replaceChildren(...lastMembers.map((m) => {
+  const canSetUp = isAdmin() || (me.member && me.member.role === "parent");
+  const people = lastMembers.filter((m) => m.access !== "display");
+  $("#family-list").replaceChildren(...people.map((m) => {
     const access = m.access || (m.role === "child" ? "younger_child" : m.role === "dependent" ? "dependent" : "parent");
     let control;
     if (!roles || !isAdmin() || access === "dependent") {
@@ -1204,22 +1392,55 @@ function renderFamily() {
     const sub = access === "dependent" ? "Part of the family; doesn't use the app"
       : access === "younger_child" ? "Signs in with a join code from a parent (no password)"
       : isAdmin() ? account(m) : "";
-    return el("li", {},
+    const opens = canSetUp && access !== "dependent";
+    // The cue: a child's settings are a parent's to set; adults just see a note.
+    const cue = access === "younger_child" || access === "older_child" ? el("span", { class: "acc-cue" }, "Set what they can use") : null;
+    const head = el("div", { class: "acc-head" + (opens ? " opens" : ""), role: opens ? "button" : null, tabindex: opens ? "0" : null, "aria-expanded": opens ? String(accessOpen.has(m.id)) : null },
       avatarOf(m),
       el("div", { class: "grow" },
-        el("div", { class: "title" }, m.name),
+        el("div", { class: "title" }, m.name, cue),
         sub ? el("div", { class: "sub" }, sub) : null),
       control,
-      !isAdmin() ? (m.role !== "dependent" && me.member && me.member.role === "parent" ? moreButton(`Options for ${m.name}`, [["Access & Control…", () => { location.hash = "#/access/" + m.id; }]]) : null) : moreButton(`Options for ${m.name}`, [
-        ...(m.role !== "dependent" ? [["Access & Control…", () => { location.hash = "#/access/" + m.id; }], "-"] : []),
+      isAdmin() ? moreButton(`Options for ${m.name}`, [
         ["Rename…", () => rename(m)],
         ["Icon and colour…", () => openIconPicker(m)],
         ...(access === "dependent" ? [] : [[access === "younger_child" ? "New join code…" : "Reset sign-in…", () => resetSignIn(m)]]),
         "-",
         ["Remove from server…", () => removeMember(m), "danger"],
-      ]));
+      ]) : null);
+    if (opens) head.insertAdjacentHTML("beforeend", caret);
+    const body = el("div", { class: "acc-body", id: "acc-" + m.id });
+    body.hidden = !(opens && accessOpen.has(m.id));
+    if (opens) {
+      const toggle = (e) => {
+        if (e.target.closest("select, button, .more, a")) return;
+        if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        const open = !accessOpen.has(m.id);
+        open ? accessOpen.add(m.id) : accessOpen.delete(m.id);
+        head.setAttribute("aria-expanded", String(open));
+        body.hidden = !open;
+        if (open) fillAccess(m, body);
+      };
+      head.addEventListener("click", toggle);
+      head.addEventListener("keydown", toggle);
+      if (accessOpen.has(m.id)) fillAccess(m, body);
+    }
+    return el("li", { class: "acc" }, head, body);
   }));
-  if (!lastMembers.length) $("#family-list").append(el("li", { class: "muted" }, "Nobody yet. Invite the first person."));
+  if (!people.length) $("#family-list").append(el("li", { class: "muted" }, "Nobody yet. Invite the first person."));
+  // Paired displays, apart from the people.
+  const displays = lastMembers.filter((m) => m.access === "display");
+  $("#displays-block").hidden = !displays.length;
+  $("#display-list").replaceChildren(...displays.map((m) => el("li", {},
+    avatarOf(m),
+    el("div", { class: "grow" }, el("div", { class: "title" }, m.name), el("div", { class: "sub" }, "Family display")),
+    isAdmin() ? moreButton(`Options for ${m.name}`, [
+      ["Rename…", () => rename(m)],
+      ["See it under Devices", () => { location.hash = "#/devices"; }],
+      "-",
+      ["Remove…", () => removeMember(m), "danger"],
+    ]) : null)));
 }
 
 // ---- the parent PIN (admins)
@@ -1253,7 +1474,6 @@ const LEVEL_NAMES = { off: "Off", view: "View only", add: "Can add", full: "Full
 const SIZE_NAMES = { "1x1": "1 column", "2x1": "2 columns", "3x1": "3 columns", "1x2": "1 column, tall", "2x2": "2 columns, tall", "3x2": "3 columns, tall" };
 // Older sizes, shown as their new names.
 const OLD_SIZES = { half: "1x1", wide: "3x1", big: "3x2" };
-const accessOpen = new Set();   // whose panels are open
 const accessData = new Map();   // id -> their settings from the server
 const caret = '<svg class="acc-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
@@ -1269,33 +1489,6 @@ function familyInitial() {
   const word = ($("#family-name").textContent || "").split(/[\s\-_]+/).find((w) => w && !skip.has(w.toLowerCase()));
   const ch = word && [...word].find((x) => /\p{L}/u.test(x));
   return ch ? ch.toUpperCase() : null;
-}
-
-function renderAccess() {
-  drawnSig.access = peopleSig();
-  const focus = location.hash.split("/")[2];
-  if (focus && !accessOpen.has(focus)) { accessOpen.add(focus); history.replaceState(null, "", "#/access"); }
-  if (isAdmin()) loadPIN();
-  const people = lastMembers.filter((m) => m.role !== "dependent");
-  $("#access-list").replaceChildren(...people.map((m) => {
-    const access = m.access || "parent";
-    const head = el("button", { type: "button", class: "acc-head", "aria-expanded": String(accessOpen.has(m.id)) },
-      avatarOf(m),
-      el("div", {}, el("div", { class: "title" }, m.name), el("div", { class: "sub" }, ACCESS_LABELS[access] || access)));
-    head.insertAdjacentHTML("beforeend", caret);
-    const body = el("div", { class: "acc-body", id: "acc-" + m.id });
-    body.hidden = !accessOpen.has(m.id);
-    head.addEventListener("click", () => {
-      const open = !accessOpen.has(m.id);
-      open ? accessOpen.add(m.id) : accessOpen.delete(m.id);
-      head.setAttribute("aria-expanded", String(open));
-      body.hidden = !open;
-      if (open) fillAccess(m, body);
-    });
-    if (accessOpen.has(m.id)) fillAccess(m, body);
-    return el("li", { class: "acc" }, head, body);
-  }));
-  if (!people.length) $("#access-list").append(el("li", { class: "muted" }, "Nobody yet. Invite your family from the Family page."));
 }
 
 async function fillAccess(m, body) {
@@ -1353,7 +1546,7 @@ function drawAccess(m, body) {
         el("div", { class: "name" }, plainNames ? mod.plain : mod.name, note ? el("small", {}, note) : null),
         seg,
         feats.length && lvl !== "off" ? el("div", { class: "acc-feats" }, ...feats.map((f) => {
-          const box = el("input", { type: "checkbox" });
+          const box = el("input", { type: "checkbox", class: "switch", role: "switch" });
           box.checked = !!s.features[f.id];
           box.addEventListener("change", () => saveAccess(m, body, { features: { [f.id]: box.checked } }));
           return el("label", {}, box, f.name);
@@ -1364,7 +1557,7 @@ function drawAccess(m, body) {
     if (general.length) parts.push(el("div", { class: "acc-mod" },
       el("div", { class: "name" }, "Home"),
       el("div", { class: "acc-feats" }, ...general.map((f) => {
-        const box = el("input", { type: "checkbox" });
+        const box = el("input", { type: "checkbox", class: "switch", role: "switch" });
         box.checked = !!s.features[f.id];
         box.addEventListener("change", () => saveAccess(m, body, { features: { [f.id]: box.checked } }));
         return el("label", {}, box, f.name);
@@ -1376,7 +1569,7 @@ function drawAccess(m, body) {
   }
   // Look
   const opt = (key, text) => {
-    const box = el("input", { type: "checkbox" });
+    const box = el("input", { type: "checkbox", class: "switch", role: "switch" });
     box.checked = !!d[key];
     box.addEventListener("change", () => saveAccess(m, body, { [key]: box.checked }));
     return el("label", {}, box, text);
@@ -1453,8 +1646,26 @@ $("#family-dependent").addEventListener("click", async () => {
   catch (err) { alert(err.message); }
 });
 $("#logout-btn3").addEventListener("click", () => $("#logout-btn").click());
-$("#theme-select").replaceChildren(...THEMES.map(([id, name]) => el("option", { value: id }, name)));
-$("#theme-select").value = document.documentElement.dataset.theme;
+// Settings → Look → Colours: the current theme; open it to see them all, each with its story.
+function themeSwatch(id) {
+  const [bg, a, b] = (THEME_INFO[id] || THEME_INFO.dracula).c;
+  return el("span", { class: "theme-swatch", style: `background:${bg}` }, el("i", { style: `background:${a}` }), el("i", { style: `background:${b}` }));
+}
+let themeOpen = false;
+function drawThemePicker() {
+  const cur = THEMES.find(([id]) => id === themeId) || THEMES[0];
+  const head = el("button", { type: "button", class: "theme-current", "aria-expanded": String(themeOpen), onclick: () => { themeOpen = !themeOpen; drawThemePicker(); } },
+    themeSwatch(cur[0]),
+    el("span", { class: "grow" }, el("span", { class: "title" }, cur[1]), el("span", { class: "sub" }, themeOpen ? "Pick one: the whole console changes at once." : THEME_INFO[cur[0]].d)));
+  head.insertAdjacentHTML("beforeend", caret);
+  const list = themeOpen ? el("ul", { class: "theme-list", role: "listbox" }, ...THEMES.map(([id, name]) => el("li", {},
+    el("button", { type: "button", role: "option", "aria-selected": String(id === themeId), onclick: () => {
+      themeId = id; try { localStorage.setItem("theme", themeId); } catch (_) {}
+      themeOpen = false; applyAppearance(); drawThemePicker();
+    } }, themeSwatch(id), el("span", { class: "grow" }, el("span", { class: "title" }, name), el("span", { class: "sub" }, THEME_INFO[id].d)))))) : null;
+  $("#theme-picker").replaceChildren(head, ...(list ? [list] : []));
+}
+drawThemePicker();
 $("#mode-select").value = themeMode;
 $("#plain-names").checked = plainNames;
 $("#plain-names").addEventListener("change", (e) => {
@@ -1463,9 +1674,7 @@ $("#plain-names").addEventListener("change", (e) => {
   renderRail();
   renderView();
 });
-$("#theme-select").addEventListener("change", (e) => { themeId = e.target.value; try { localStorage.setItem("theme", themeId); } catch (_) {} applyAppearance(); });
 $("#mode-select").addEventListener("change", (e) => { themeMode = e.target.value; try { localStorage.setItem("themeMode", themeMode); } catch (_) {} applyAppearance(); });
-$("#family-invite").addEventListener("click", () => $("#invite-btn").click());
 
 function renderDevices() {
   const list = $("#device-list");
@@ -1497,8 +1706,8 @@ function renderDevices() {
   if (!rows.length) list.append(el("li", { class: "muted" }, "No devices yet."));
 }
 
-// Settings: Modules, Server, AI & API.
-let settingsTab = "modules";
+// Settings: Look (everyone), Modules, Server and backup, AI & API (admins).
+let settingsTab = "look";
 document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.addEventListener("click", () => {
   settingsTab = b.dataset.sub;
   if (settingsTab === "agents") $("#agents-panel").replaceChildren(); // fresh each time it's opened
@@ -1549,6 +1758,8 @@ let modulesDirty = false; // ticked by hand (or by suggestions) and not saved ye
 const chosenModules = (target) => Object.fromEntries([...target.querySelectorAll("input[data-module]")].map((b) => [b.dataset.module, b.checked]));
 
 function renderSettings() {
+  if (!isAdmin() && settingsTab !== "look") settingsTab = "look";
+  if (settingsTab === "look") drawNavOrder();
   document.querySelectorAll("#settings-tabs [data-sub]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.sub === settingsTab)));
   document.querySelectorAll("[data-sub-panel]").forEach((p) => { p.hidden = p.dataset.subPanel !== settingsTab; });
   if (settingsTab === "modules" && !modulesDirty && !$("#module-list").contains(document.activeElement)) moduleRows($("#module-list"), (m) => m.enabled);

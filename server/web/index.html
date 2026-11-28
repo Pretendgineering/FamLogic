@@ -45,50 +45,55 @@
       <a href="#/contacts" data-view="contacts" data-module="contacts" hidden><span class="ri" data-icon="book"></span><span>Contacts</span></a>
       <span class="rail-sep"></span>
       <a href="#/family" data-view="family"><span class="ri" data-icon="people"></span><span>Family</span></a>
-      <a href="#/access" data-view="access"><span class="ri" data-icon="key"></span><span>Access</span></a>
       <a href="#/devices" data-view="devices" class="admin-only"><span class="ri" data-icon="device"></span><span>Devices</span></a>
-      <a href="#/settings" data-view="settings" class="admin-only"><span class="ri" data-icon="gear"></span><span>Settings</span></a>
+      <a href="#/settings" data-view="settings"><span class="ri" data-icon="gear"></span><span>Settings</span></a>
     </nav>
 
     <main class="page" data-page="home" hidden>
       <header class="page-head"><h1 id="home-title">FamLogic</h1><p class="muted" id="home-sub"></p>
         <p class="muted small"><span id="whoami"></span> · <button type="button" class="link" id="logout-btn3">Log out</button></p>
-        <div class="appearance muted small">Look:
-          <select id="theme-select" aria-label="Colours"></select>
-          <select id="mode-select" aria-label="Light or dark"><option value="system">Same as this device</option><option value="light">Light</option><option value="dark">Dark</option></select>
-          <label class="switch-label" title="Map, Chat, Calendar… instead of Thereabouts, Chitchat, Datebook…"><input type="checkbox" class="switch" id="plain-names" role="switch"> Plain Labels</label>
-        </div></header>
-      <div class="dash-top" id="home-top">
-        <div class="dash-panel dash-map"><div id="home-map"></div><a class="dash-map-open" href="#/thereabouts">Open the map</a></div>
-        <div id="home-feed"></div>
+</header>
+      <div class="home-tools"><button type="button" class="secondary" id="home-arrange">Arrange</button></div>
+      <div class="home-wrap">
+        <div class="home-grid" id="home-grid"></div>
+        <aside class="home-drawer" id="home-drawer" hidden>
+          <h2>Tiles</h2>
+          <p class="muted small">Add a tile, then drag it into place. Use the arrows on a tile to make it wider or taller.</p>
+          <ul class="list" id="home-drawer-list"></ul>
+          <button type="button" class="link" id="home-reset">Back to the usual home</button>
+        </aside>
       </div>
-      <div class="dash" id="home-dash"></div>
     </main>
 
     <main class="page" data-page="family" hidden>
       <header class="page-head">
         <h1>Family</h1>
-        <p class="muted">Everyone in your family's FamLogic. <strong>Parents</strong> look after the family and can read their children's chats; <strong>children</strong> use the app without family settings, and younger ones sign in with a join code instead of a password.</p>
+        <p class="muted">Everyone in your family's FamLogic, and what each person can use. Open someone to set it up; changes save straight away and reach their device within a minute.</p>
       </header>
       <div class="panel wide-panel">
-        <div class="panel-actions admin-only"><button id="family-invite" class="tonal">+ Invite someone</button><button id="family-dependent" class="secondary">+ Someone who doesn't use the app</button></div>
-        <p class="muted small admin-only">Roles: <strong>Admin</strong> (a parent who can use these admin pages; only the main admin can make admins), <strong>Parent</strong>, <strong>Older child</strong> (may use a password), <strong>Younger child</strong> (joins with a code from you, no password), and family members who <strong>don't use the app</strong> (such as a baby), so events and reminders can include them.</p>
-        <ul class="list" id="family-list"></ul>
-      </div>
-    </main>
-
-    <main class="page" data-page="access" hidden>
-      <header class="page-head">
-        <h1>Access &amp; Control</h1>
-        <p class="muted">What each person can use, see and do. Open someone to set it up; changes save straight away and reach their device within a minute. Parents can use everything; children start from a preset you can change bit by bit.</p>
-      </header>
-      <div class="panel wide-panel">
+        <div class="panel-actions admin-only"><button id="invite-btn" class="tonal">+ Invite someone</button><button id="family-dependent" class="secondary">+ Someone who doesn't use the app</button></div>
         <div class="pin-row admin-only" id="pin-row">
           <div class="grow"><div class="title">Parent PIN</div><div class="sub" id="pin-status">Unlocks settings on children's devices and family displays.</div></div>
           <button type="button" class="secondary" id="pin-set">Set PIN…</button>
           <button type="button" class="link" id="pin-clear" hidden>Remove</button>
         </div>
-        <ul class="acc-list" id="access-list"></ul>
+        <ul class="acc-list" id="family-list"></ul>
+        <p class="muted small admin-only">Roles: <strong>Admin</strong> (a parent who can use the admin pages; only the main admin can make admins), <strong>Parent</strong>, <strong>Grandparent</strong>, <strong>Older child</strong> (may use a password), <strong>Younger child</strong> (joins with a code from you), and family members who <strong>don't use the app</strong> (such as a baby), so events and reminders can include them.</p>
+        <div id="invites-block" hidden>
+          <h2>Waiting to join</h2>
+          <ul id="invites" class="list"></ul>
+        </div>
+      </div>
+      <div class="panel wide-panel" id="displays-block" hidden>
+        <h2>Paired displays</h2>
+        <p class="muted small">TVs and wall tablets showing the family's day. They aren't people: no location, and they can't post. Pair a new one under Devices.</p>
+        <ul class="list" id="display-list"></ul>
+      </div>
+      <div class="panel wide-panel">
+        <h2>Groups</h2>
+        <p class="muted small">People who see each other, such as Family or Grandparents. Everyone only sees people they share a group with.</p>
+        <button id="new-circle-btn" class="tonal admin-only">+ New group</button>
+        <ul id="circles" class="list"></ul>
       </div>
     </main>
 
@@ -111,11 +116,25 @@
     <main class="page" data-page="settings" hidden>
       <header class="page-head"><h1>Settings</h1></header>
       <nav class="tabs subtabs" role="tablist" id="settings-tabs">
-        <button role="tab" data-sub="modules">Modules</button>
-        <button role="tab" data-sub="server">Server</button>
-        <button role="tab" data-sub="agents">AI &amp; API</button>
+        <button role="tab" data-sub="look">Look</button>
+        <button role="tab" data-sub="modules" class="admin-only">Modules</button>
+        <button role="tab" data-sub="server" class="admin-only">Server and backup</button>
+        <button role="tab" data-sub="agents" class="admin-only">AI &amp; API</button>
       </nav>
-      <section class="panel wide-panel" data-sub-panel="modules">
+      <section class="panel wide-panel" data-sub-panel="look" hidden>
+        <p class="muted">How the console looks in this browser. Each person's phone has its own choice.</p>
+        <h2>Colours</h2>
+        <div id="theme-picker"></div>
+        <h2>Light or dark</h2>
+        <select id="mode-select" aria-label="Light or dark"><option value="system">Same as this device</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        <h2>Labels</h2>
+        <label class="switch-label" title="Map, Chat, Calendar… instead of Thereabouts, Chitchat, Datebook…"><input type="checkbox" class="switch" id="plain-names" role="switch"> Plain Labels: Map, Chat and Calendar instead of Thereabouts, Chitchat and Datebook</label>
+        <h2>The bar on the left</h2>
+        <p class="muted small">Drag to put the sections in your order. This browser only.</p>
+        <ul class="list nav-order" id="nav-order"></ul>
+        <button type="button" class="link" id="nav-order-reset">Back to the usual order</button>
+      </section>
+      <section class="panel wide-panel admin-only" data-sub-panel="modules">
         <p class="muted">Switch parts of FamLogic on or off for your whole family. Modules marked <em>coming soon</em> can be chosen now and switch on when they arrive.</p>
         <button type="button" class="secondary" id="modules-help">Help me choose</button>
         <div id="modules-quiz" class="quiz-box" hidden>
@@ -126,7 +145,7 @@
         <ul class="list modules" id="module-list"></ul>
         <div class="row"><button id="modules-save">Save</button><span class="muted small" id="modules-msg"></span></div>
       </section>
-      <section class="panel wide-panel" data-sub-panel="server" hidden>
+      <section class="panel wide-panel admin-only" data-sub-panel="server" hidden>
         <dl class="facts" id="server-facts"></dl>
         <div class="row">
           <button type="button" class="secondary" id="rerun-setup">Run setup again</button>
@@ -147,7 +166,7 @@
         <p class="muted small">Family name, admin password and other server options are set in <code>docker-compose.yml</code> (see the README).</p>
         <p class="muted small">FamLogic is free software under the <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPLv3</a>. <a href="https://github.com/Pretendgineering/FamLogic">Source code</a>.</p>
       </section>
-      <section class="panel wide-panel" data-sub-panel="agents" hidden>
+      <section class="panel wide-panel admin-only" data-sub-panel="agents" hidden>
         <div id="agents-panel"></div>
       </section>
     </main>
@@ -195,17 +214,11 @@
         <nav class="tabs" role="tablist">
           <button role="tab" data-tab="people">People <span class="count" id="count-people"></span></button>
           <button role="tab" data-tab="fences">Fences <span class="count" id="count-fences"></span></button>
-          <button role="tab" data-tab="groups">Groups <span class="count" id="count-groups"></span></button>
         </nav>
 
         <section class="panel" data-panel="people">
-          <button id="invite-btn" class="tonal wide admin-only">+ Invite someone</button>
           <ul id="members" class="list"></ul>
-          <p id="no-members" class="muted" hidden>Nobody has joined yet. Use <strong>Invite someone</strong> to add the first phone.</p>
-          <div id="invites-block" hidden>
-            <h2>Waiting to join</h2>
-            <ul id="invites" class="list"></ul>
-          </div>
+          <p id="no-members" class="muted" hidden>Nobody has joined yet. Invite your family from the Family page.</p>
         </section>
 
         <section class="panel" data-panel="fences" hidden>
@@ -215,18 +228,11 @@
           <p id="no-places" class="muted" hidden>No fences yet.</p>
         </section>
 
-        <section class="panel" data-panel="groups" hidden>
-          <button id="new-circle-btn" class="tonal wide admin-only">+ New group</button>
-          <p class="muted small">People who see each other, such as Family or Grandparents. Everyone only sees people they share a group with.</p>
-          <ul id="circles" class="list"></ul>
-        </section>
-
         <div class="aside-foot">
           <label class="filter">Map style
             <select id="map-style"></select>
           </label>
           <label class="filter check-row switch-label"><input type="checkbox" class="switch" role="switch" id="dim-map"> Soften the map in dark mode</label>
-          <a class="button secondary wide admin-only" id="backup-btn" href="/api/admin/backup" download title="Everything, as one zip. It holds password hashes: keep it somewhere safe.">Download backup</a>
           <button id="logout-btn" class="secondary wide">Log out</button>
         </div>
       </aside>

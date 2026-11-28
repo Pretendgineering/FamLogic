@@ -783,7 +783,11 @@ button.danger { background: var(--danger); color: #fff; }
 .acc { border-bottom: 1px solid var(--line); }
 .acc:last-child { border-bottom: 0; }
 .acc-head { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: 0; color: var(--text); padding: 12px 4px; cursor: pointer; text-align: left; font: inherit; box-shadow: none; border-radius: 12px; }
-.acc-head:hover { background: var(--surface-2); }
+.acc-head:not(.opens) { cursor: default; }
+.acc-head.opens:hover { background: var(--surface-2); }
+.acc-head .grow { flex: 1; min-width: 0; }
+.acc-head .acc-caret { margin-left: 0; }
+.acc-cue { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-family: inherit; font-weight: 600; font-size: .72rem; vertical-align: middle; background: color-mix(in srgb, var(--secondary) 18%, transparent); color: var(--secondary); }
 .acc-head .title { font-family: var(--serif); font-weight: 700; font-size: 1.05rem; }
 .acc-head .sub { color: var(--muted); font-size: .85rem; }
 .acc-caret { margin-left: auto; width: 22px; height: 22px; color: var(--muted); transition: transform .2s; }
@@ -1110,3 +1114,50 @@ button.small { padding: .35rem .8rem; font-size: .85rem; border-radius: 999px; }
 .ai .seg { align-self: flex-start; }
 .ai-spec .row { display: flex; align-items: center; gap: 10px; }
 .ai-spec .row .grow { flex: 1; }
+
+/* Settings → Look: the theme picker, like the app's */
+.theme-current, .theme-list button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: inherit; color: var(--text); border: 0; box-shadow: none; padding: 12px; border-radius: 14px; cursor: pointer; }
+.theme-current { background: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
+.theme-current[aria-expanded="true"] .acc-caret { transform: rotate(180deg); }
+.theme-current .grow, .theme-list .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.theme-current .title, .theme-list .title { font-family: var(--serif); font-weight: 700; }
+.theme-current .sub, .theme-list .sub { color: var(--muted); font-size: .85rem; }
+.theme-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+.theme-list button { background: var(--surface-2); }
+.theme-list button:hover { background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+.theme-list button[aria-selected="true"] { outline: 2px solid var(--accent); }
+.theme-swatch { flex: none; width: 40px; height: 40px; border-radius: 12px; position: relative; overflow: hidden; border: 1px solid var(--line); }
+.theme-swatch i { position: absolute; width: 16px; height: 16px; border-radius: 50%; }
+.theme-swatch i:first-child { left: 6px; top: 6px; }
+.theme-swatch i:last-child { right: 6px; bottom: 6px; }
+/* Settings → Look: the rail's order */
+.nav-order .nav-row { display: flex; align-items: center; gap: 10px; cursor: grab; }
+.nav-order .nav-row.dragging { opacity: .4; }
+.nav-order .handle { color: var(--muted); }
+.nav-order .ri svg { width: 20px; height: 20px; color: var(--secondary); }
+.nav-order .icon-btn { background: none; border: 0; box-shadow: none; color: var(--muted); padding: 4px 8px; }
+
+/* The web home: a grid of tiles each person arranges */
+.home-tools { display: flex; justify-content: flex-end; margin: -8px 0 10px; }
+.home-wrap { display: flex; gap: 16px; align-items: flex-start; }
+.home-grid { --cols: 6; flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-auto-rows: 120px; grid-auto-flow: dense; gap: 14px; }
+@media (max-width: 1300px) { .home-grid { --cols: 4; } }
+@media (max-width: 800px) { .home-grid { --cols: 2; } .home-wrap { flex-direction: column-reverse; } .home-drawer { width: 100% !important; } }
+.home-grid .home-tile { grid-column: span min(var(--w), var(--cols)); grid-row: span var(--h); min-height: 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.home-grid .home-tile .dash-list { overflow-y: auto; min-height: 0; }
+.home-grid .dash-map { padding: 0; }
+.home-grid #home-map { position: absolute; inset: 0; }
+.home-grid.editing .home-tile { outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -2px; cursor: grab; }
+.home-grid.editing .home-tile.dragging { opacity: .4; }
+.home-grid.editing .home-tile > *:not(.tile-tools) { pointer-events: none; }
+.tile-tools { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 500; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+.tile-tools button { padding: 2px 9px; min-height: 0; background: var(--surface-2); color: var(--text); border: 0; box-shadow: none; border-radius: 8px; }
+.tile-tools .handle { cursor: grab; color: var(--muted); padding: 0 4px; }
+.tile-tools .size { color: var(--muted); font-size: .8rem; margin-left: 4px; }
+.tile-tools .remove { margin-left: auto; color: var(--danger); }
+.home-drawer { width: 280px; flex: none; position: sticky; top: 12px; padding: 14px; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+.home-drawer h2 { margin-top: 0; }
+.glance-big { font-family: var(--serif); font-size: 2rem; font-weight: 700; line-height: 1.1; }
+.glance-note { font-size: 1.05rem; white-space: pre-wrap; flex: 1; overflow: hidden; }
+.note-tile { background: color-mix(in srgb, #ffe07a 40%, var(--surface)); cursor: pointer; }
+.clock-tile { justify-content: center; text-align: center; }
