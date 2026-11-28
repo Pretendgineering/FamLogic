@@ -175,6 +175,14 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.52.0: Points, trades, and modules in two panes
+- **Points** (stars are now called points). Children see a points card at the top of Upkeep: how many they have, the jobs they did this week, and how far to the next reward. Rewards can be for chosen children.
+- **Trading chores:** a child offers one of their jobs to a brother or sister for some of their points. If the other says yes, the job is theirs (its next time, if it repeats), and the points move when it's done. It all shows in the family feed, and a parent can undo a trade in the console.
+- **Steward per child:** on for older children and off for younger ones to start (console → Family → open the child). Children can only do what they could with a tap; for anything bigger, Steward asks a parent for them, and the parents get the request.
+- **Chitchat:** your chats, and a **Watched** tab with your children's chats (console and app).
+- **Console, in two panes:** Datebook (add an event on the left, the calendar on the right, outside calendars and phone sync behind a button), Upkeep (chores on the left; points, trades and rewards on the right), and Docket (shared lists and to-dos side by side, each saying what it's for, and who a list is for).
+- **Everyone:** tagging an event, chore, list or reward has an Everyone choice (the whole family, family displays included), which greys out the rest. Family displays are no longer listed as people to tag.
+
 ### ✅ 0.51.0: Pictures, colour, and a console that fits together
 - **Picture icons** for every module and tile (Settings → Look and Feel → Picture icons): Chitchat is an envelope with a pencil, Upkeep a broom sweeping up dust, Homestead a cosy house, and new pictures for Dossier, Driveway, Vitals, Ledger, Huddle, Corkboard, Steward, pets, contacts and the glance tiles.
 - **Themes you can see:** the whole background, cards and lines take a soft wash of the theme's colour, in the app and the console. The SOS bar's tint follows the theme; its words, picture and alarm stay red.

@@ -9,6 +9,8 @@ they couldn't do with a tap. After an answer, **Undo** puts back whatever it cha
 
 Steward is optional. With it switched off, or not set up, there's no button anywhere.
 
+**Children:** switch **Children too** on in Settings → AI, then each child's own switch (console → Family → open the child): older children start with it on, younger ones off. A child can only do what they could with a tap; when they ask for more ("can I have a friend over?"), Steward sends their parents the request.
+
 ## Where Steward thinks
 
 Set it up in the web console: **Settings → AI**. There are three choices.
