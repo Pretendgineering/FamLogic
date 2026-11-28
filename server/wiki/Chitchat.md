@@ -27,3 +27,9 @@ How it's built: [Architecture](Architecture.md#chat-built-in-0160).
 ## Younger children's chats
 
 A younger child's chat list already has everyone they share a group with, so a chat with anyone is one tap away (FamLogic starts it then). Times and dates are hidden in their chats unless a parent switches **Show times and dates in chats** on (console → Family → open the child → Chitchat). Parents can switch the ready-made list off there too.
+
+## Times, talking and reading aloud
+
+Messages don't show their times: swipe a message sideways to see when it was sent. After a quiet spell (an hour or more) a time marker shows between messages.
+
+Talking and reading aloud are for children and for **Easy viewing** (bigger buttons and text). Children hold the talk button and let go, or tap it once to start and again to stop; their message sends when they're done.

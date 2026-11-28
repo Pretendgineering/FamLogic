@@ -49,3 +49,7 @@ the meeting.
 Each meeting is a note in the vault's `Meetings/` folder, in the same format as above, so it's
 also the minutes: open it in Obsidian (or any editor) to read or change it. A job that's gone to
 the Docket is marked 📋.
+
+## Building a meeting
+
+Press the buttons to add sections, in any order: **Wins and thank-yous** (each person's is added during the meeting), **Coming up** (next week's events from the Datebook, filled in for you), **Jobs to hand out** (give each to someone, or ask for a volunteer), **A vote** (choices everyone taps; on the TV, pick a choice and then who's voting) and **A topic**. Move sections up or down, or remove them. It's all still a note in the vault.

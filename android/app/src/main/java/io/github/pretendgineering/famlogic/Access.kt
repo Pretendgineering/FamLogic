@@ -114,7 +114,7 @@ object Access {
         "outings" to ("Vitals" to "Health & activity"), "garage" to ("Driveway" to "Vehicles"), "ledger" to ("Ledger" to "Budget"),
         "pets" to ("Menagerie" to "Pets"), "profiles" to ("Dossier" to "Profiles"), "homestead" to ("Homestead" to "Home care"), "meetings" to ("Huddle" to "Meetings"),
         "today" to ("Today" to "Today"), "feed" to ("Feed" to "Feed"), "whoshome" to ("Who's home" to "Who's home"), "countdown" to ("Countdown" to "Countdown"),
-        "clock" to ("Clock" to "Clock"), "note" to ("Sticky note" to "Sticky note"), "quickadd" to ("Quick add" to "Quick add"), "quiet" to ("Quiet time" to "Quiet time"), "startroutine" to ("Start a routine" to "Start a routine"),
+        "clock" to ("Clock" to "Clock"), "note" to ("Sticky note" to "Sticky note"), "quickadd" to ("Quick add" to "Quick add"), "quiet" to ("Quiet time" to "Quiet time"), "startroutine" to ("Start a routine" to "Start a routine"), "frame" to ("Picture frame" to "Picture frame"),
         "weather" to ("Weather" to "Weather"),
         "contacts" to ("Rolodex" to "Contacts"),
     )

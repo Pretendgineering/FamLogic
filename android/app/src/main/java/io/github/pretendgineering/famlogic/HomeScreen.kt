@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Favorite
@@ -220,6 +221,7 @@ fun HomeScreen(
         "whoshome", "weather" -> locationOn && Access.can("map")
         "quickadd" -> Modules.has(features, "todos") && Access.can("todos") && !Access.isDisplay
         "quiet" -> Modules.has(features, "display") && Corkboard.mayControl(prefs) && !Access.isDisplay
+        "frame" -> !Access.isDisplay
         "startroutine" -> Modules.has(features, "routines") && Access.can("routines") && !Access.isChild && !Access.isDisplay
         "chores" -> Modules.has(features, Modules.CHORES) && Access.can("chores") && prefs.access != "dependent"
         "todos" -> Modules.has(features, Modules.TODOS) && Access.can("todos") && prefs.access != "dependent"
@@ -389,6 +391,7 @@ fun HomeScreen(
                     "ride" -> ButtonTile(if (Access.pictures) "Pick me up" else Access.name("ride"), h, big, picture = { Pictures.Pickup(it) }, icon = tileIcon("ride")) { shortcut = "ride" }
                     "quickadd" -> ButtonTile(Access.name("quickadd"), h, big, icon = tileIcon("quickadd")) { shortcut = "quickadd" }
                     "quiet" -> ButtonTile(Access.name("quiet"), h, big, icon = tileIcon("quiet")) { shortcut = "quiet" }
+                    "frame" -> PictureFrameTile(prefs, h)
                     "startroutine" -> ButtonTile(Access.name("startroutine"), h, big, icon = tileIcon("startroutine")) { shortcut = "startroutine" }
                     "today" -> TodayTile(prefs, h, t.w(cols), t.h(), big, onOpen)
                     "feed" -> FeedTile(prefs, h, t.w(cols), t.h(), big) { onOpen(Tab.Home) }
@@ -525,7 +528,7 @@ fun maxH(id: String) = if (isButtonTile(id)) 1 else 5
  * taller than wide if you like.
  */
 fun isButtonTile(id: String) = id in BUTTON_TILES || id.startsWith("convo.")
-val BUTTON_TILES = setOf("sos", "checkin", "ride", "nudges", "steward", "quickadd", "quiet", "startroutine")
+val BUTTON_TILES = setOf("sos", "checkin", "ride", "nudges", "steward", "quickadd", "quiet", "startroutine", "frame")
 fun maxW(id: String, cols: Int) = if (isButtonTile(id)) minOf(2, cols) else cols
 
 /** The width of the tile being drawn (for tiles that turn into just an icon when narrow). */
@@ -631,7 +634,7 @@ val PLACEHOLDER_TILES = listOf("nudges", "ride")
 val SOON_TILES = listOf("outings", "garage", "ledger", "pets", "contacts")
 
 /** Glance tiles: at-a-glance things that aren't a module of their own. */
-val GLANCE_TILES = listOf("today", "whoshome", "weather", "clock", "countdown", "note", "feed", "quickadd", "quiet", "startroutine")
+val GLANCE_TILES = listOf("today", "whoshome", "weather", "clock", "countdown", "note", "feed", "quickadd", "quiet", "startroutine", "frame")
 
 /** Every kind of tile, in the order the drawer shows them. "convo.new" becomes a shortcut to one chat. */
 val ALL_TILES = listOf("map", "chat", "convo.new", "sos", "checkin", "chores", "todos", "calendar", "routines", "meals", "profiles", "homestead", "meetings", "display") + GLANCE_TILES + SOON_TILES + PLACEHOLDER_TILES
@@ -664,6 +667,7 @@ fun tileIcon(id: String): ImageVector = when (id) {
     "quickadd" -> Icons.Filled.AddTask
     "quiet" -> Icons.Filled.Bedtime
     "startroutine" -> Icons.Filled.PlaylistPlay
+    "frame" -> Icons.Filled.PhotoLibrary
     "outings" -> Icons.AutoMirrored.Filled.DirectionsWalk
     "garage" -> Icons.Filled.DirectionsCar
     "ledger" -> Icons.Filled.AccountBalanceWallet

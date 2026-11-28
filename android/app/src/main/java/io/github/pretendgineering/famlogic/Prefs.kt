@@ -9,6 +9,11 @@ class Prefs(context: Context) {
     private val sp: SharedPreferences =
         context.applicationContext.getSharedPreferences("famlogic", Context.MODE_PRIVATE)
 
+    /** The picture frame tile's photos on this device: "photos:uri|uri…", "immich:<shared link>" or "family". */
+    var frameSource: String
+        get() = sp.getString("frame_source", "") ?: ""
+        set(v) = sp.edit { putString("frame_source", v) }
+
     var serverUrl: String
         get() = sp.getString("server", "") ?: ""
         set(v) = sp.edit { putString("server", v) }

@@ -175,6 +175,14 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.54.0: A cleaner chat, a meeting builder, the TV's sky, and a picture frame
+- **Chat, cleaner:** times and dates stay out of the way: swipe a message sideways to see when it was sent, and a time marker shows after a quiet spell of an hour or more. Grown-ups get no microphones or speakers (they're part of Easy viewing now, with children's). Reading aloud is calmer and slower for everyone.
+- **Talking, for children:** hold the talk button and let go, or tap it once to start and tap again to stop; either way the message sends when they're done.
+- **Steward** is a round orb in the theme's two colours, so it's never mistaken for a microphone or a page's own button.
+- **Huddle's builder:** add sections with buttons (wins and thank-yous, coming up from the Datebook, jobs to hand out, a vote, a topic), fill them in by tapping, and move them around; no Markdown. Votes work on the TV, in the app and in the console.
+- **The TV's sky:** a quarter sun creeps in from the bottom-left corner after sunrise, is fully in at midday and sinks away before sunset; after a gap, a quarter moon does the same through the night. Their light spreads slowly across the board, pale yellow by day and silver by night, following the real sunrise and sunset at home.
+- **Picture frame tile:** a slow slideshow on the home screen. Each device picks its own photos: some from the phone, an Immich shared-album link, or the family album.
+
 ### ✅ 0.53.0: Driveway, Rhythms you build, and a recipe book
 - **Driveway (vehicles):** a tab per vehicle with its fill-ups, economy (mpg, or L/100 km), fuel spend and services side by side. Log a fill-up in the console, the app, or by telling Steward ("filled up the Sienna, 15 gallons, $56"). A service that comes round again (an oil change every 6 months) becomes a reminder in Upkeep. Units follow your region until a parent picks them. Each vehicle is a note in the vault's Vehicles folder.
 - **Rhythms:** build a routine on the left (steps you can drag into order, with pictures), and keep them in the bank on the right: on a timetable, or saved for when you need them. Start any routine now for someone (or put it up on the TV), stop it, change it or delete it. Two routines can be on at once. Steward starts them too, and a **Start a routine** home tile does it in two taps.
