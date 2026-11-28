@@ -34,7 +34,7 @@ var allModules = []ModuleInfo{
 	// Coming soon: they can be switched on now (a placeholder, and Steward can keep
 	// their notes in the vault already) and fill in as each is built.
 	{"outings", "Vitals", "Health & activity", "Walks, runs and rides, steps, meals and macros, and health data from phones and watches.", false, false},
-	{"garage", "Driveway", "Vehicles", "Fuel, mileage and maintenance for each vehicle, with reminders.", false, false},
+	{"garage", "Driveway", "Vehicles", "Fuel, mileage and maintenance for each vehicle, with reminders.", true, false},
 	{"ledger", "Ledger", "Budget", "Bills, spending, groceries and paying off debt.", false, false},
 	{"profiles", "Dossier", "Profiles", "Everyone's allergies, medicines, sleep, likes and emergency contacts, the pets, and the family's address book; a page for sitters.", true, false},
 	{"meetings", "Huddle", "Meetings", "Family meetings: a short agenda to click through together on the TV, handing out jobs (or asking for volunteers) and keeping notes.", true, false},

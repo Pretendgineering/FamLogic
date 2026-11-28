@@ -164,6 +164,8 @@ type data struct {
 	// The family displays\' quiet time and messages (see display.go).
 	Display *DisplayState `json:"display,omitempty"`
 	Fridge  *FridgeNote   `json:"fridge,omitempty"` // the family's sticky note
+	// DrivewayUnits: "mi" (miles and gallons) or "km" (km and litres); "" = each device's region.
+	DrivewayUnits string `json:"drivewayUnits,omitempty"`
 	// Barters: children trading chores for points (Upkeep).
 	Barters []*Barter `json:"barters,omitempty"`
 	// OwnerMember is the main admin's own place in the family (set at first setup). They

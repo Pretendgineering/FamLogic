@@ -37,7 +37,7 @@ var wikiFS embed.FS
 const wikiFolder = "_FamLogic"
 
 // vaultFolders are made when the vault is opened, so people can see where things go.
-var vaultFolders = []string{"People", "Pets", "Contacts", "Lists", "To-dos", "Chores", "Calendar", "Meals", "Meals/Recipes", "Routines", "Rhythms"}
+var vaultFolders = []string{"People", "Pets", "Contacts", "Vehicles", "Lists", "To-dos", "Chores", "Calendar", "Meals", "Meals/Recipes", "Routines", "Rhythms"}
 
 type Vault struct {
 	dir string

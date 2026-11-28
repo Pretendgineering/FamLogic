@@ -222,6 +222,31 @@ var stewardTools = []stewardTool{
 			s.store.ChoreEvents(to, Event{Type: EventAskParent, MemberID: me.ID, Name: me.Name, Title: text})
 			return map[string]any{"ok": true, "sentTo": len(to)}
 		}},
+	{"list_vehicles", "The family's vehicles: id, name, odometer, average economy, recent fill-ups and services.", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleVehicles, "GET", "/api/vehicles", nil, nil)
+		}},
+	{"log_fuel", "Log a fill-up.", obj(map[string]any{
+		"vehicle":  str("The vehicle's id"),
+		"amount":   map[string]any{"type": "number", "description": "Gallons or litres"},
+		"cost":     map[string]any{"type": "number", "description": "What it cost"},
+		"odometer": map[string]any{"type": "number", "description": "The odometer reading, if said"},
+		"date":     str("YYYY-MM-DD if not today"),
+	}, "vehicle", "amount"),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleAddFuel, "POST", "/api/vehicles/{id}/fuel", map[string]string{"id": argStr(a, "vehicle")}, a)
+		}},
+	{"log_service", "Log a service or repair (oil change, tyres); every makes it a reminder.", obj(map[string]any{
+		"vehicle":  str("The vehicle's id"),
+		"what":     str("e.g. Oil change"),
+		"cost":     map[string]any{"type": "number"},
+		"odometer": map[string]any{"type": "number"},
+		"every":    str("How often it comes round, e.g. 6 months; empty if it doesn't"),
+		"date":     str("YYYY-MM-DD if not today"),
+	}, "vehicle", "what"),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleAddService, "POST", "/api/vehicles/{id}/service", map[string]string{"id": argStr(a, "vehicle")}, a)
+		}},
 	{"list_people", "Everyone in the family: id, name, role, stars.", obj(map[string]any{}),
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handlePeople, "GET", "/api/v1/people", nil, nil)

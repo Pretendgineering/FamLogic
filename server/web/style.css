@@ -1197,3 +1197,14 @@ dialog.quick-add h2 { margin-top: 0; }
 
 .points-big { margin-left: 8px; font-family: var(--serif); color: var(--secondary); }
 #module-soon:has(.upkeep-panes) { max-width: 1500px; background: transparent; box-shadow: none; padding: 0; }
+
+/* Driveway: fuel, the vehicle, and maintenance in three columns */
+.driveway { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; margin-top: 12px; }
+@media (max-width: 1100px) { .driveway { grid-template-columns: 1fr; } }
+#module-soon:has(.driveway) { max-width: 1600px; background: transparent; box-shadow: none; padding: 0; }
+.driveway-top { align-items: center; }
+.driveway-top select { width: auto; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+.stat { background: var(--surface-2); border-radius: 14px; padding: 10px 12px; }
+.stat-big { font-family: var(--serif); font-size: 1.5rem; font-weight: 700; color: var(--secondary); }
+.econ-chart svg { width: 100%; height: auto; background: var(--surface-2); border-radius: 14px; }

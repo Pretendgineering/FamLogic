@@ -55,6 +55,7 @@ var keyScopes = []struct{ ID, Text string }{
 	{"location", "See where everyone is (the map)"},
 	{"meals", "See and plan meals, and save recipes (Pantry)"},
 	{"profiles", "See and change people's profiles (Dossier: allergies, medicines, contacts)"},
+	{"vehicles", "See the vehicles and log fill-ups and services (Driveway)"},
 	{"home", "See and change the home's profile (Homestead)"},
 	{"tv", "Quiet time and messages on the TV (Corkboard)"},
 	{"meetings", "See and make family meetings (Huddle)"},

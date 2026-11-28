@@ -1839,6 +1839,7 @@ function renderModulePage(id) {
   if (id === "routines" && m.available) { box.classList.remove("soon"); renderRoutines(box); return; }
   if (id === "meals" && m.available) { box.classList.remove("soon"); renderMeals(box); return; }
   if (id === "profiles" && m.available) { box.classList.remove("soon"); renderProfiles(box); return; }
+  if (id === "garage" && m.available) { box.classList.remove("soon"); renderDriveway(box); return; }
   if (id === "homestead" && m.available) { box.classList.remove("soon"); renderHomestead(box); return; }
   if (id === "meetings" && m.available) { box.classList.remove("soon"); renderMeetings(box); return; }
   if (id === "display" && m.available) { box.classList.remove("soon"); renderCorkboard(box); return; }
@@ -3404,6 +3405,84 @@ function birthdayText(v) {
   let age = now.getFullYear() - d.getFullYear();
   if (now < new Date(now.getFullYear(), d.getMonth(), d.getDate())) age--;
   return d.toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" }) + (age >= 0 && age < 130 ? ` (${age})` : "");
+}
+
+// Driveway: a tab per vehicle; its fill-ups, economy and maintenance side by side.
+let drivewayDrawn = "", vehicleOpen = "";
+const localUnits = () => /^en-US|^en-LR|^my/.test(navigator.language || "") ? "mi" : "km";
+async function renderDriveway(box, force = false) {
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select")) return;
+  let d;
+  try { d = await api("GET", "/api/vehicles?units=" + localUnits()); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  if (box.dataset.module !== "garage") return;
+  const sig = JSON.stringify([d, vehicleOpen]);
+  if (!force && sig === drivewayDrawn && box.childElementCount) return;
+  drivewayDrawn = sig;
+  const redraw = () => renderDriveway(box, true);
+  const act = async (method, path, body) => { try { await api(method, path, body); redraw(); } catch (err) { alert(err.message); } };
+  const mi = d.units === "mi";
+  const U = { dist: mi ? "mi" : "km", vol: mi ? "gal" : "L", econ: mi ? "mpg" : "L/100 km" };
+  if (!d.vehicles.some((v) => v.id === vehicleOpen)) vehicleOpen = d.vehicles[0] ? d.vehicles[0].id : "";
+  const tabs = el("nav", { class: "tabs subtabs", role: "tablist" }, ...d.vehicles.map((v) => el("button", { role: "tab", "aria-selected": String(v.id === vehicleOpen), onclick: () => { vehicleOpen = v.id; redraw(); } }, v.name)),
+    d.canEdit ? el("button", { type: "button", class: "link", onclick: () => {
+      const name = prompt("What do you call it? (e.g. The Sienna, Dad's truck)");
+      if (name) act("POST", "/api/vehicles", { name });
+    } }, "+ Add a vehicle") : null);
+  const unitsSel = el("select", { "aria-label": "Units" }, el("option", { value: "" }, "Units: this device's region"), el("option", { value: "mi" }, "Miles and gallons (mpg)"), el("option", { value: "km" }, "Km and litres (L/100 km)"));
+  unitsSel.value = d.unitsChosen ? d.units : "";
+  unitsSel.addEventListener("change", () => act("PUT", "/api/vehicles/units", { units: unitsSel.value }));
+  const v = d.vehicles.find((x) => x.id === vehicleOpen);
+  if (!v) { box.replaceChildren(tabs, el("p", { class: "muted" }, d.canEdit ? "No vehicles yet. Press + Add a vehicle." : "No vehicles yet.")); return; }
+  const money = (n) => n ? n.toLocaleString([], { style: "currency", currency: (Intl.NumberFormat().resolvedOptions().currency) || "USD", maximumFractionDigits: 2 }).replace(/^[A-Z]{3}\s?/, "") : "";
+  const today = new Date().toISOString().slice(0, 10);
+  // Fuel
+  const fDate = el("input", { type: "date", value: today }), fOdo = el("input", { type: "number", min: "0", step: "1", placeholder: U.dist, value: v.odometer ? String(Math.round(v.odometer)) : "" });
+  const fAmt = el("input", { type: "number", min: "0", step: "0.01", placeholder: U.vol }), fCost = el("input", { type: "number", min: "0", step: "0.01", placeholder: "cost" });
+  const fFull = el("input", { type: "checkbox", class: "switch", role: "switch", checked: "" });
+  const fForm = el("form", { class: "upkeep-add" }, el("div", { class: "row" }, el("label", {}, "Day", fDate), el("label", {}, "Odometer", fOdo)),
+    el("div", { class: "row" }, el("label", {}, "Fuel (" + U.vol + ")", fAmt), el("label", {}, "Cost", fCost), el("label", { class: "switch-label" }, fFull, "Filled to the top")),
+    el("div", { class: "row" }, el("button", { type: "submit" }, "Log fill-up")));
+  fForm.addEventListener("submit", (ev) => { ev.preventDefault(); act("POST", `/api/vehicles/${v.id}/fuel`, { date: fDate.value, odometer: Number(fOdo.value) || 0, amount: Number(fAmt.value) || 0, cost: Number(fCost.value) || 0, full: fFull.checked }); });
+  const fuelRows = v.fuel.map((f, i) => [f, i]).reverse().map(([f, i]) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, `${f.amount} ${U.vol}` + (f.cost ? ` · ${money(f.cost)}` : "")),
+      el("div", { class: "sub" }, [f.date, f.odometer ? `${Math.round(f.odometer).toLocaleString()} ${U.dist}` : "", f.economy ? `${f.economy} ${U.econ}` : "", f.full ? "" : "part fill"].filter(Boolean).join(" · "))),
+    d.canEdit ? el("button", { type: "button", class: "link", onclick: () => { if (confirm("Remove this fill-up?")) act("DELETE", `/api/vehicles/${v.id}/fuel/${i}`); } }, "Remove") : null));
+  // Economy: the figures and a little chart of each full fill.
+  const pts = v.fuel.filter((f) => f.economy);
+  let chart = el("p", { class: "muted small" }, "Log two fill-ups to the top to see the economy.");
+  if (pts.length >= 2) {
+    const W = 320, H = 120, ys = pts.map((f) => f.economy), lo = Math.min(...ys), hi = Math.max(...ys), span = (hi - lo) || 1;
+    const xy = pts.map((f, i) => [8 + i * (W - 16) / (pts.length - 1), H - 12 - (f.economy - lo) / span * (H - 24)]);
+    chart = el("div", { class: "econ-chart" });
+    chart.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Economy over time"><polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" points="${xy.map((p) => p.join(",")).join(" ")}"/>${xy.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--secondary)"/>`).join("")}</svg><div class="muted small">${lo} to ${hi} ${U.econ}</div>`;
+  }
+  const stat = (big, label) => el("div", { class: "stat" }, el("div", { class: "stat-big" }, big || "—"), el("div", { class: "muted small" }, label));
+  // Maintenance
+  const sDate = el("input", { type: "date", value: today }), sWhat = el("input", { placeholder: "e.g. Oil change", maxlength: "80" }), sCost = el("input", { type: "number", min: "0", step: "0.01", placeholder: "cost" });
+  const sOdo = el("input", { type: "number", min: "0", step: "1", placeholder: U.dist });
+  const sEvery = el("select", {}, ...[["", "Just this once"], ["3 months", "Every 3 months"], ["6 months", "Every 6 months"], ["12 months", "Every year"], ["24 months", "Every 2 years"]].map(([k, t]) => el("option", { value: k }, t)));
+  const sForm = el("form", { class: "upkeep-add" }, el("label", {}, "What was done", sWhat), el("div", { class: "row" }, el("label", {}, "Day", sDate), el("label", {}, "Odometer", sOdo), el("label", {}, "Cost", sCost)),
+    el("label", {}, "Comes round", sEvery), el("div", { class: "row" }, el("button", { type: "submit" }, "Log service")));
+  sForm.addEventListener("submit", (ev) => { ev.preventDefault(); if (sWhat.value.trim()) act("POST", `/api/vehicles/${v.id}/service`, { date: sDate.value, what: sWhat.value.trim(), cost: Number(sCost.value) || 0, odometer: Number(sOdo.value) || 0, every: sEvery.value }); });
+  const svcRows = v.service.map((e, i) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, e.what), el("div", { class: "sub" }, [e.date, e.odometer ? `${Math.round(e.odometer).toLocaleString()} ${U.dist}` : "", e.cost ? money(e.cost) : ""].filter(Boolean).join(" · "))),
+    d.canEdit ? el("button", { type: "button", class: "link", onclick: () => { if (confirm("Remove this?")) act("DELETE", `/api/vehicles/${v.id}/service/${i}`); } }, "Remove") : null));
+  const remRows = v.reminders.map((c) => el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, c.title), el("div", { class: "sub" }, `${repeatText(c.every)} · next ${c.due}`))));
+  const details = el("div", { class: "muted small" }, [v.year, v.make, v.model, v.plate].filter(Boolean).join(" · ") || "");
+  box.replaceChildren(el("div", { class: "row driveway-top" }, tabs, el("span", { class: "grow" }), unitsSel),
+    el("div", { class: "driveway" },
+      el("div", { class: "panel" }, el("h2", {}, "Fuel"), d.canEdit ? fForm : null, fuelRows.length ? el("ul", { class: "list" }, ...fuelRows) : el("p", { class: "muted" }, "No fill-ups yet.")),
+      el("div", { class: "panel" }, el("h2", {}, v.name), details,
+        el("div", { class: "stats" }, stat(v.odometer ? Math.round(v.odometer).toLocaleString() : "", U.dist + " on the clock"), stat(v.avgEconomy ? String(v.avgEconomy) : "", "average " + U.econ),
+          stat(v.costPerDist ? money(v.costPerDist) : "", "fuel per " + U.dist), stat(v.spend30 ? money(v.spend30) : "", "fuel, last 30 days")), chart,
+        d.canEdit ? el("div", { class: "row" }, el("button", { type: "button", class: "secondary", onclick: () => {
+          const make = prompt("Make (e.g. Toyota):", v.make || ""); if (make === null) return;
+          const model = prompt("Model (e.g. Sienna):", v.model || ""); if (model === null) return;
+          const year = prompt("Year:", v.year || ""); if (year === null) return;
+          const plate = prompt("Number plate:", v.plate || ""); if (plate === null) return;
+          act("PUT", `/api/vehicles/${v.id}`, { make, model, year, plate });
+        } }, "Details"), el("button", { type: "button", class: "link danger", onclick: () => { if (confirm(`Remove ${v.name} and its reminders?`)) { vehicleOpen = ""; act("DELETE", `/api/vehicles/${v.id}`); } } }, "Remove")) : null),
+      el("div", { class: "panel" }, el("h2", {}, "Maintenance"), d.canEdit ? sForm : null,
+        ...(remRows.length ? [el("h3", {}, "Coming round (in Upkeep)"), el("ul", { class: "list" }, ...remRows)] : []),
+        el("h3", {}, "Done"), svcRows.length ? el("ul", { class: "list" }, ...svcRows) : el("p", { class: "muted" }, "Nothing logged yet."))));
 }
 
 // Plain pages for a babysitter: each profile on its own page, with the parents' numbers.

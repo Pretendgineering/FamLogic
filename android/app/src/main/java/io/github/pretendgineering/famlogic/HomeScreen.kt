@@ -153,6 +153,7 @@ fun HomeScreen(
     onOpenChat: (String) -> Unit = { onOpen(Tab.Chat) },
 ) {
     if (Profiles.open) ProfilesDialog(prefs)
+    if (Driveway.open) DrivewayDialog(prefs)
     if (Homestead.open) HomesteadDialog(prefs)
     if (Huddle.open) HuddleDialog(prefs)
     if (Corkboard.open) CorkboardDialog(prefs)
@@ -209,6 +210,7 @@ fun HomeScreen(
         "display" -> Modules.has(features, "display") && Corkboard.mayControl(prefs) && !Access.isDisplay
         "homestead" -> Modules.has(features, "homestead") && Access.can("homestead") && prefs.access != "dependent"
         "meetings" -> Modules.has(features, "meetings") && Access.can("meetings") && prefs.access != "dependent"
+        "garage" -> (Modules.has(features, "garage") && Access.can("garage") && prefs.access != "dependent") || "soon:garage" in features
         in SOON_TILES -> "soon:$t" in features
         // Glance tiles.
         "today", "countdown", "clock" -> true
@@ -336,6 +338,7 @@ fun HomeScreen(
                         "homestead" -> Homestead.open = true
                         "meetings" -> Huddle.open = true
                         "profiles" -> Profiles.open = true
+                        "garage" -> if (Modules.has(features, "garage")) Driveway.open = true else if (Steward.available(prefs)) Steward.sheetOpen = true
                         "nudges" -> shortcut = "nudges"
                         "ride" -> shortcut = "ride"
                         "quickadd" -> shortcut = "quickadd"
@@ -376,6 +379,8 @@ fun HomeScreen(
                         SimpleTile(Access.name("meetings"), next?.title ?: "Family meetings", h, big, icon = tileIcon("meetings")) { Huddle.open = true }
                     }
                     "profiles" -> if (t.h() >= 2 || t.w(cols) >= 3) DossierTile(prefs, h, t.w(cols), t.h(), big) { Profiles.open = true } else SimpleTile(Access.name("profiles"), "Allergies, medicines, contacts", h, big, icon = tileIcon("profiles")) { Profiles.open = true }
+                    "garage" -> if (Modules.has(features, "garage")) SimpleTile(Access.name("garage"), "Fill-ups, mileage, services", h, big, icon = tileIcon("garage")) { Driveway.open = true }
+                        else SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) { if (Steward.available(prefs)) Steward.sheetOpen = true }
                     in SOON_TILES -> SimpleTile(Access.name(t.id), "Coming soon", h, big, icon = tileIcon(t.id)) { if (Steward.available(prefs)) Steward.sheetOpen = true }
                     "nudges" -> ButtonTile(Access.name("nudges"), h, big, picture = { Pictures.Nudge(it) }, icon = tileIcon("nudges")) { shortcut = "nudges" }
                     "ride" -> ButtonTile(if (Access.pictures) "Pick me up" else Access.name("ride"), h, big, picture = { Pictures.Pickup(it) }, icon = tileIcon("ride")) { shortcut = "ride" }
