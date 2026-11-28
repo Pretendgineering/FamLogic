@@ -1161,3 +1161,12 @@ button.small { padding: .35rem .8rem; font-size: .85rem; border-radius: 999px; }
 .glance-note { font-size: 1.05rem; white-space: pre-wrap; flex: 1; overflow: hidden; }
 .note-tile { background: color-mix(in srgb, #ffe07a 40%, var(--surface)); cursor: pointer; }
 .clock-tile { justify-content: center; text-align: center; }
+
+/* Dossier: the list on the left, the one picked on the right */
+.dossier { display: grid; grid-template-columns: minmax(240px, 340px) 1fr; gap: 16px; align-items: start; margin-top: 12px; }
+.dossier-left .wide { width: 100%; margin: 4px 0 10px; }
+.dossier-list li.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 12px; }
+.dossier-right { min-height: 300px; }
+@media (max-width: 800px) { .dossier { grid-template-columns: 1fr; } }
+dialog.quick-add { border: 0; border-radius: 22px; padding: 20px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); width: min(440px, 92vw); }
+dialog.quick-add h2 { margin-top: 0; }

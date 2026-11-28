@@ -103,4 +103,32 @@ func TestProfiles(t *testing.T) {
 	if !strings.Contains(string(b), "famlogic_id:") || !strings.Contains(string(b), "## Allergies\n- Peanuts") {
 		t.Fatalf("note: %s", b)
 	}
+
+	// Pets and contacts: notes of their own, which the younger child can't change.
+	st, pet := e.status("POST", "/api/profiles/cards", f.teen, map[string]any{"kind": "pet", "name": "Biscuit", "emoji": "🐕", "profile": map[string]string{"Food": "Twice a day"}})
+	if st != 200 || pet["id"] == nil {
+		t.Fatalf("add pet: %d %v", st, pet)
+	}
+	if st, _ := e.status("POST", "/api/profiles/cards", f.kid, map[string]any{"kind": "contact", "name": "Gran"}); st != 403 {
+		t.Fatalf("younger child adds: %d", st)
+	}
+	id := pet["id"].(string)
+	if st, out := e.status("PUT", "/api/profiles/cards/"+id, f.mom, map[string]any{"name": "Biscuit the Dog", "profile": map[string]string{"Vet": "Dr Paws"}}); st != 200 || out["name"] != "Biscuit the Dog" {
+		t.Fatalf("edit pet: %d %v", st, out)
+	}
+	_, res = e.status("GET", "/api/profiles", f.kid, nil)
+	pets := res["pets"].([]any)
+	if len(pets) != 1 {
+		t.Fatalf("pets: %v", pets)
+	}
+	pp := pets[0].(map[string]any)["profile"].(map[string]any)
+	if pp["Food"] != "Twice a day" || pp["Vet"] != "Dr Paws" {
+		t.Fatalf("pet profile: %v", pp)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(e.path), "vault", "Pets", "Biscuit the Dog.md")); err != nil {
+		t.Fatal("renamed note missing")
+	}
+	if st, _ := e.status("DELETE", "/api/profiles/cards/"+id, f.mom, nil); st != 204 {
+		t.Fatalf("delete: %d", st)
+	}
 }

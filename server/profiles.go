@@ -160,7 +160,9 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request, me *Memb
 			parents = append(parents, map[string]string{"name": m.Name, "phone": m.Phone})
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"people": people, "sections": profileSections, "parents": parents})
+	writeJSON(w, http.StatusOK, map[string]any{"people": people, "sections": profileSections, "parents": parents,
+		"pets": s.dossierCards("pet"), "contacts": s.dossierCards("contact"), "petSections": cardSections["pet"],
+		"contactSections": cardSections["contact"], "canEditCards": canEditCards(me)})
 }
 
 // PUT /api/profiles/{id} {profile: {Section: text}}: change someone's profile (only

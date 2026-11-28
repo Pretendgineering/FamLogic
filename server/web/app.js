@@ -1741,13 +1741,13 @@ const MODULE_QUESTIONS = [
   ["Daily routines (mornings, bedtime, a homeschool day)?", ["routines"]],
   ["Plan meals and keep recipes?", ["meals"]],
   ["An AI helper you can just tell things to?", ["agents"]],
-  ["Pets?", ["pets"]],
+  ["Pets?", ["profiles"]],
   ["A car, or a few?", ["garage"]],
   ["A home to look after, owned or rented (filters, bin day)?", ["homestead"]],
   ["Help with bills, the budget or grocery spending?", ["ledger"]],
   ["Walks, runs, steps or health tracking?", ["outings"]],
   ["Allergies, medicines and emergency contacts in one place?", ["profiles"]],
-  ["A shared address book?", ["contacts"]],
+  ["A shared address book?", ["profiles"]],
 ];
 function moduleQuestions(target, isOn) {
   target.replaceChildren(...MODULE_QUESTIONS.map(([q, ids]) => {
@@ -3238,52 +3238,106 @@ async function talkStop() {
   }
 }
 
-// Dossier: everyone's profile (in their People note), editable by who may, and a
-// printable page per person for babysitters and grandparents.
-let profilesDrawn = "", profileOpen = "";
+// Dossier: the people (their People notes), the pets and the family's contacts, in
+// two panes: the list on the left, the one you picked on the right (to read, change
+// or print). A small pop-up adds a pet or a contact.
+let profilesDrawn = "", profileOpen = "", profileEditing = false, dossierTab = "people";
+const DOSSIER_TABS = [["people", "People"], ["pets", "Pets"], ["contacts", "Contacts"]];
 async function renderProfiles(box, force = false) {
   if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
   let d;
   try { d = await api("GET", "/api/profiles"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   if (box.dataset.module !== "profiles") return;
-  const sig = JSON.stringify([d, profileOpen]);
+  const sig = JSON.stringify([d, profileOpen, profileEditing, dossierTab]);
   if (!force && sig === profilesDrawn && box.childElementCount) return;
   profilesDrawn = sig;
-  const card = (p) => {
-    const editing = profileOpen === p.id;
-    const head = el("div", { class: "profile-head" }, avatarOf(personById(p.id) || p), el("div", { class: "name" }, p.name));
-    const print = el("button", { type: "button", class: "secondary" }, "Print");
-    print.addEventListener("click", () => printProfile(p, d));
-    head.append(print);
-    if (p.canEdit && !editing) {
-      const edit = el("button", { type: "button", class: "tonal" }, "Change");
-      edit.addEventListener("click", () => { profileOpen = p.id; renderProfiles(box, true); });
-      head.append(edit);
-    }
-    if (editing) {
-      const fields = d.sections.map((sec) => {
-        const f = sec === "Birthday" ? el("input", { type: "date", value: p.profile[sec] || "" })
-          : el("textarea", { rows: sec === "Notes" || sec === "Emergency contacts" ? "3" : "2", placeholder: sec === "Emergency contacts" ? "- Grandma (Mom's mum): 07700 900123" : "One per line" }, p.profile[sec] || "");
-        f.dataset.sec = sec;
-        return el("label", {}, sec, f);
-      });
-      const save = el("button", { type: "submit" }, "Save");
-      const cancel = el("button", { type: "button", class: "link" }, "Cancel");
-      cancel.addEventListener("click", () => { profileOpen = ""; renderProfiles(box, true); });
-      const form = el("form", { class: "upkeep-add" }, ...fields, el("div", { class: "row" }, save, cancel));
-      form.addEventListener("submit", async (ev) => {
-        ev.preventDefault();
-        const profile = Object.fromEntries([...form.querySelectorAll("[data-sec]")].map((f) => [f.dataset.sec, f.value.trim()]));
-        try { await api("PUT", `/api/profiles/${p.id}`, { profile }); profileOpen = ""; renderProfiles(box, true); } catch (err) { alert(err.message); }
-      });
-      return el("div", { class: "panel list-card" }, head, form);
-    }
-    const shown = d.sections.filter((sec) => p.profile[sec]);
-    return el("div", { class: "panel list-card" }, head,
-      shown.length ? el("dl", { class: "profile" }, ...shown.flatMap((sec) => [el("dt", {}, sec), el("dd", {}, sec === "Birthday" ? birthdayText(p.profile[sec]) : p.profile[sec])]))
-        : el("p", { class: "muted small" }, p.canEdit ? "Nothing yet. Change adds allergies, medicines, emergency contacts and more." : "Nothing yet."));
-  };
-  box.replaceChildren(...d.people.map(card));
+  const redraw = () => renderProfiles(box, true);
+  const kind = dossierTab === "pets" ? "pet" : dossierTab === "contacts" ? "contact" : "person";
+  const entries = kind === "person" ? d.people : kind === "pet" ? (d.pets || []) : (d.contacts || []);
+  const sections = kind === "person" ? d.sections : kind === "pet" ? d.petSections : d.contactSections;
+  const canEdit = (x) => kind === "person" ? x.canEdit : d.canEditCards;
+  if (!entries.some((x) => x.id === profileOpen)) { profileOpen = entries[0] ? entries[0].id : ""; profileEditing = false; }
+  const open = entries.find((x) => x.id === profileOpen);
+  const face = (x) => kind === "person" ? avatarOf(personById(x.id) || x)
+    : el("div", { class: "avatar emoji", style: `background:${kind === "pet" ? "#b0773f" : "#3dbe6a"}` }, x.emoji || (kind === "pet" ? "🐾" : initial(x.name)));
+  const subOf = (x) => kind === "person" ? [x.profile.Allergies && "Allergies", x.profile.Birthday && birthdayText(x.profile.Birthday)].filter(Boolean).join(" · ")
+    : kind === "pet" ? (x.profile.Kind || "") : (x.profile.Relationship || x.profile.Phone || "");
+  // The tabs
+  const tabs = el("nav", { class: "tabs subtabs", role: "tablist" }, ...DOSSIER_TABS.map(([id, label]) => el("button", { role: "tab", "aria-selected": String(dossierTab === id),
+    onclick: () => { dossierTab = id; profileOpen = ""; profileEditing = false; redraw(); } }, label,
+    el("span", { class: "count" }, String(id === "people" ? d.people.length : id === "pets" ? (d.pets || []).length : (d.contacts || []).length)))));
+  // The list
+  const list = el("ul", { class: "list dossier-list" }, ...entries.map((x) => el("li", { class: "clickable" + (x.id === profileOpen ? " selected" : ""),
+    onclick: () => { profileOpen = x.id; profileEditing = false; redraw(); } },
+    face(x), el("div", { class: "grow" }, el("div", { class: "title" }, x.name), subOf(x) ? el("div", { class: "sub" }, subOf(x)) : null))));
+  if (!entries.length) list.append(el("li", { class: "muted" }, kind === "pet" ? "No pets yet." : kind === "contact" ? "No contacts yet." : "Nobody yet."));
+  const left = el("div", { class: "panel dossier-left" }, list);
+  if (kind !== "person" && d.canEditCards) left.prepend(el("button", { type: "button", class: "tonal wide", onclick: () => quickAddCard(kind, async (made) => { profileOpen = made.id; profileEditing = true; redraw(); }) },
+    kind === "pet" ? "+ Add a pet" : "+ Add a contact"));
+  if (kind === "person") left.append(el("button", { type: "button", class: "secondary wide", onclick: () => printProfiles(d.people, d) }, "Print everyone"));
+  // The one picked
+  let right;
+  if (!open) right = el("div", { class: "panel dossier-right muted" }, "Pick someone on the left.");
+  else if (profileEditing) {
+    const fields = sections.map((sec) => {
+      const f = sec === "Birthday" ? el("input", { type: "date", value: open.profile[sec] || "" })
+        : el("textarea", { rows: ["Notes", "Emergency contacts", "Address"].includes(sec) ? "3" : "2",
+          placeholder: sec === "Emergency contacts" ? "- Grandma (Mom's mum): 07700 900123" : sec === "Phone" || sec === "Email" || sec === "Kind" || sec === "Relationship" ? "" : "One per line" }, open.profile[sec] || "");
+      f.dataset.sec = sec;
+      return el("label", {}, sec, f);
+    });
+    const nameField = kind !== "person" ? el("label", {}, "Name", el("input", { id: "card-name", value: open.name, maxlength: "60" })) : null;
+    const emojiField = kind !== "person" ? el("label", {}, "Picture (an emoji)", el("input", { id: "card-emoji", value: open.emoji || "", maxlength: "8" })) : null;
+    const form = el("form", { class: "upkeep-add" }, nameField, emojiField, ...fields,
+      el("div", { class: "row" }, el("button", { type: "submit" }, "Save"), el("button", { type: "button", class: "link", onclick: () => { profileEditing = false; redraw(); } }, "Cancel"),
+        kind !== "person" ? el("button", { type: "button", class: "link danger", onclick: async () => {
+          if (!confirm(`Remove ${open.name}?`)) return;
+          try { await api("DELETE", `/api/profiles/cards/${open.id}`); profileOpen = ""; profileEditing = false; redraw(); } catch (err) { alert(err.message); }
+        } }, "Remove") : null));
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const profile = Object.fromEntries([...form.querySelectorAll("[data-sec]")].map((f) => [f.dataset.sec, f.value.trim()]));
+      try {
+        if (kind === "person") await api("PUT", `/api/profiles/${open.id}`, { profile });
+        else await api("PUT", `/api/profiles/cards/${open.id}`, { profile, name: $("#card-name").value, emoji: $("#card-emoji").value });
+        profileEditing = false; redraw();
+      } catch (err) { alert(err.message); }
+    });
+    right = el("div", { class: "panel dossier-right" }, el("div", { class: "profile-head" }, face(open), el("div", { class: "name" }, open.name)), form);
+  } else {
+    const shown = sections.filter((sec) => open.profile[sec]);
+    right = el("div", { class: "panel dossier-right" },
+      el("div", { class: "profile-head" }, face(open), el("div", { class: "name" }, open.name),
+        el("button", { type: "button", class: "secondary", onclick: () => printProfiles([open], d, sections) }, "Print"),
+        canEdit(open) ? el("button", { type: "button", class: "tonal", onclick: () => { profileEditing = true; redraw(); } }, "Change") : null),
+      shown.length ? el("dl", { class: "profile" }, ...shown.flatMap((sec) => [el("dt", {}, sec), el("dd", {}, sec === "Birthday" ? birthdayText(open.profile[sec]) : open.profile[sec])]))
+        : el("p", { class: "muted small" }, canEdit(open) ? "Nothing yet. Press Change to fill it in." : "Nothing yet."));
+  }
+  box.replaceChildren(tabs, el("div", { class: "dossier" }, left, right));
+}
+
+// The quick pop-up for a new pet or contact: a name (and a picture), then it opens to fill in.
+function quickAddCard(kind, done) {
+  const dlg = el("dialog", { class: "quick-add" });
+  const name = el("input", { maxlength: "60", placeholder: kind === "pet" ? "e.g. Biscuit" : "e.g. Grandma Rose", required: "" });
+  const emoji = el("input", { maxlength: "8", placeholder: kind === "pet" ? "🐕" : "", style: "max-width:6em" });
+  const extra = kind === "pet" ? el("input", { placeholder: "Dog, cat, hamster…" }) : el("input", { placeholder: "Phone number" });
+  const form = el("form", { method: "dialog" }, el("h2", {}, kind === "pet" ? "A new pet" : "A new contact"),
+    el("div", { class: "row" }, el("label", { class: "grow" }, "Name", name), el("label", {}, "Picture", emoji)),
+    el("label", {}, kind === "pet" ? "What kind" : "Phone", extra),
+    el("div", { class: "row" }, el("span", { class: "grow" }), el("button", { type: "button", class: "link", onclick: () => dlg.close() }, "Cancel"), el("button", { type: "submit" }, "Add")));
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      const made = await api("POST", "/api/profiles/cards", { kind, name: name.value, emoji: emoji.value, profile: kind === "pet" ? { Kind: extra.value } : { Phone: extra.value } });
+      dlg.close(); dlg.remove(); done(made);
+    } catch (err) { alert(err.message); }
+  });
+  dlg.append(form);
+  dlg.addEventListener("close", () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+  name.focus();
 }
 
 function birthdayText(v) {
@@ -3295,19 +3349,24 @@ function birthdayText(v) {
   return d.toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" }) + (age >= 0 && age < 130 ? ` (${age})` : "");
 }
 
-// A plain page for one person, for a babysitter: their profile and the parents' numbers.
-function printProfile(p, d) {
+// Plain pages for a babysitter: each profile on its own page, with the parents' numbers.
+function printProfiles(list, d, sections = d.sections) {
   const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-  const rows = d.sections.filter((s) => p.profile[s]).map((s) => `<h2>${esc(s)}</h2><p>${esc(s === "Birthday" ? birthdayText(p.profile[s]) : p.profile[s]).replace(/\n/g, "<br>")}</p>`).join("");
   const parents = d.parents.filter((x) => x.name).map((x) => `<li>${esc(x.name)}${x.phone ? ": " + esc(x.phone) : ""}</li>`).join("");
+  const page = (p) => {
+    const secs = p.access !== undefined ? d.sections : sections;
+    const rows = secs.filter((s) => p.profile[s]).map((s) => `<h2>${esc(s)}</h2><p>${esc(s === "Birthday" ? birthdayText(p.profile[s]) : p.profile[s]).replace(/\n/g, "<br>")}</p>`).join("");
+    return `<section><h1>${esc(p.name)}</h1><div style="color:#555">${esc($("#family-name").textContent || "")}</div>${rows || "<p>No details yet.</p>"}
+      ${parents ? `<div class="box"><h2 style="margin-top:0">Parents</h2><ul>${parents}</ul></div>` : ""}</section>`;
+  };
   const w = window.open("", "_blank");
   if (!w) { alert("Allow pop-ups to print."); return; }
-  w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(p.name)}</title><style>
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(list.length === 1 ? list[0].name : "Dossier")}</title><style>
     body{font:15px/1.45 system-ui,sans-serif;margin:32px;color:#222;max-width:640px}
     h1{font-family:"Liberation Serif",Georgia,serif;margin:0 0 4px}h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:#555;margin:18px 0 2px}
     p{margin:0}.box{border:2px solid #222;border-radius:12px;padding:10px 14px;margin-top:20px}ul{margin:4px 0;padding-left:18px}
-    </style><h1>${esc(p.name)}</h1><div style="color:#555">${esc($("#family-name").textContent || "")}</div>${rows || "<p>No details yet.</p>"}
-    ${parents ? `<div class="box"><h2 style="margin-top:0">Parents</h2><ul>${parents}</ul></div>` : ""}`);
+    section+section{break-before:page;margin-top:32px}
+    </style>${list.map(page).join("")}`);
   w.document.close();
   w.focus();
   setTimeout(() => w.print(), 200);
