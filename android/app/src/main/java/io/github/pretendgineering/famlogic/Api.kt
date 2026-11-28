@@ -49,6 +49,8 @@ data class Member(
     val trips: Boolean = false,
     /** "parent", "child" or "dependent" (servers before roles: everyone is a parent). */
     val role: String = "parent",
+    /** A paired TV or tablet showing the family's board, not a person. */
+    val display: Boolean = false,
     /** admin, parent, older_child, younger_child or dependent. */
     val access: String = "parent",
     /** Their phone number, for Call buttons ("" if they haven't given one). */
@@ -995,6 +997,7 @@ class Api(private val baseUrl: String, private val token: String = "") {
             trail = o.optBoolean("trail", false),
             trips = o.optBoolean("trips", false),
             role = o.optString("role", "parent").ifEmpty { "parent" },
+            display = o.optBoolean("display"),
             access = o.optString("access", "parent").ifEmpty { "parent" },
             phone = o.optString("phone"),
             rideTo = o.optString("rideTo"),

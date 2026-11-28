@@ -723,8 +723,10 @@ fun MapScreen(
             val config = LocalConfiguration.current
             val wide = config.screenWidthDp >= 720 && config.screenWidthDp > config.screenHeightDp
             // The map, edge to edge.
+            // Younger children: a rounded card with a margin, like their other screens.
+            val kidCard = Access.younger
             val mapCard: @Composable (Modifier) -> Unit = { mapMod ->
-            Box(mapMod) {
+            Box(if (kidCard) mapMod.padding(horizontal = 12.dp, vertical = 8.dp).clip(RoundedCornerShape(24.dp)) else mapMod) {
                 OsmMap(
                     members = shown,
                     places = (if (circleFilter.isEmpty()) places else places.filter { it.circleId == circleFilter }).filter { it.id != fenceDraft?.id },
@@ -759,6 +761,7 @@ fun MapScreen(
                     tiles = MapStyles.resolve(mapStyle, LocalDarkTheme.current, tileUrl, tileUrlDark, attribution, dimMap),
                     camera = camera,
                     statusOf = statusOf,
+                    corner = if (kidCard) 24.dp else 0.dp,
                     modifier = Modifier.fillMaxSize(),
                 )
                 Box(Modifier.fillMaxWidth().padding(top = 4.dp)) { chips() }
@@ -1109,7 +1112,8 @@ internal fun HoldForSosBar(onTriggered: () -> Unit, modifier: Modifier = Modifie
         modifier
             .then(if (tile) Modifier else Modifier.height(if (tall) 84.dp else 60.dp))
             .clip(RoundedCornerShape(if (tile) 0.dp else 16.dp))
-            .background(red.copy(alpha = if (tile) 0.2f else 0.14f))
+            // The pale bar follows the theme; the words, the picture and the fill stay red.
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = if (tile) 0.2f else 0.14f))
             .drawBehind { drawRect(red, size = size.copy(width = size.width * progress.value)) }
             .semantics { contentDescription = "SOS. Press and hold for 3 seconds to alert everyone." }
             .pointerInput(Unit) {

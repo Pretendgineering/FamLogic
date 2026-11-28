@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: a page showing every picture icon, for checking the drawings. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name=".PictureGalleryActivity" android:exported="true" />
+    </application>
+</manifest>

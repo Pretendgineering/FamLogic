@@ -83,6 +83,8 @@ var kidFeatures = []kidSwitch{
 	{"trips", "See other people's trips", "thereabouts", false, true},
 	{"pause", "Pause sharing their location", "thereabouts", false, false},
 	{"chat_start", "Start new chats and groups (groups with a child need a parent's OK)", "chat", true, true},
+	{"chat_everyone", "Everyone they share a group with is already in their chats", "chat", true, false},
+	{"chat_times", "Show times and dates in chats", "chat", false, true},
 	{"chat_photos", "Send photos", "chat", true, true},
 	{"chat_delete", "Delete their own messages", "chat", false, false},
 	{"chat_mute", "Mute chats", "chat", false, false},

@@ -246,9 +246,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("picture_icons", false)
         set(v) = sp.edit { putBoolean("picture_icons", v) }
     /** Plain names (Map, Chat…) instead of the modules' own (Thereabouts, Chitchat…). This device only. */
-    var plainNames: Boolean
-        get() = sp.getBoolean("plain_names", false)
-        set(v) = sp.edit { putBoolean("plain_names", v) }
+    /** Plain labels, if this device's owner chose (null: the default, plain for younger children). */
+    var plainNames: Boolean?
+        get() = if (sp.contains("plain_names")) sp.getBoolean("plain_names", false) else null
+        set(v) = sp.edit { if (v == null) remove("plain_names") else putBoolean("plain_names", v) }
 
     /** Voice engine: "auto", "phone" (Android's own speech) or "server" (the family's server). */
     /** Tiles across the home screen: 2 or 3 (0, not chosen, means 3). */

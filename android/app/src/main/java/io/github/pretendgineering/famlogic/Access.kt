@@ -26,8 +26,9 @@ object Access {
     /** Bigger buttons and text; picture icons (a tiny map, a talking face). */
     var big by mutableStateOf(false)
     var pictures by mutableStateOf(false)
-    /** "Map, Chat" instead of "Thereabouts, Chitchat" (this device). */
-    var plainNames by mutableStateOf(false)
+    /** "Map, Chat" instead of "Thereabouts, Chitchat" (this device; younger children start with plain). */
+    private var plainChoice by mutableStateOf<Boolean?>(null)
+    val plainNames get() = plainChoice ?: younger
     /** A parent opened settings on this device from afar, until then (ms). */
     var unlockedUntil by mutableStateOf(0L)
     var canSignIn by mutableStateOf(true)
@@ -48,7 +49,7 @@ object Access {
 
     fun setPlainNames(context: Context, on: Boolean) {
         Prefs(context).plainNames = on
-        plainNames = on
+        plainChoice = on
     }
 
     val isDisplay get() = deviceMode == "display"
@@ -63,7 +64,7 @@ object Access {
         role = p.role
         big = p.bigUi
         pictures = p.pictureIcons
-        plainNames = p.plainNames
+        plainChoice = p.plainNames
         canSignIn = p.canUsePassword
         allowed = if (isChild) p.kidAllowed else null
         preset = p.kidPreset

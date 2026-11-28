@@ -62,7 +62,24 @@ enum class Palette(val id: String, val title: String, val description: String) {
     }
 }
 
-private fun tokens(p: Palette, dark: Boolean): Tokens = when (p) {
+/**
+ * The palette, with its background, cards and lines washed with its main colour so the
+ * whole screen changes with the theme (low saturation, but visible). Noir and High
+ * contrast stay neutral on purpose. The console (style.css) has the same mixes.
+ */
+private fun tokens(p: Palette, dark: Boolean): Tokens {
+    val t = baseTokens(p, dark)
+    if (p == Palette.Noir || p == Palette.Contrast) return t
+    fun mix(a: Long, f: Float): Long {
+        val r = { v: Long, sh: Int -> ((v shr sh) and 0xFF).toFloat() }
+        fun ch(sh: Int) = Math.round(r(a, sh) + (r(t.accent, sh) - r(a, sh)) * f).toLong()
+        return (0xFF000000L or (ch(16) shl 16) or (ch(8) shl 8) or ch(0))
+    }
+    return if (dark) t.copy(background = mix(t.background, .09f), surface = mix(t.surface, .11f), surface2 = mix(t.surface2, .15f), line = mix(t.line, .22f))
+    else t.copy(background = mix(t.background, .10f), surface = mix(t.surface, .05f), surface2 = mix(t.surface2, .14f), line = mix(t.line, .20f))
+}
+
+private fun baseTokens(p: Palette, dark: Boolean): Tokens = when (p) {
     Palette.Dracula -> if (dark) Tokens(0xFF22212C, 0xFF2A2937, 0xFF353445, 0xFFECEBF3, 0xFFA7A4BE, 0xFF403F53,
         0xFFB8A3E3, 0xFF231B3A, 0xFF46405E, 0xFFE6DCFF, 0xFFE3A3C8, 0xFFE57A8E, 0xFFE0607A)
     else Tokens(0xFFF6F4F8, 0xFFFFFFFF, 0xFFECE9F2, 0xFF282A36, 0xFF615E77, 0xFFDCD8E6,

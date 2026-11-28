@@ -344,7 +344,7 @@ func (s *Server) handleChatDirect(w http.ResponseWriter, r *http.Request, me *Me
 	if !kidChatOK(w, me) {
 		return
 	}
-	if !me.can("chat_start") {
+	if !me.can("chat_start") && !me.can("chat_everyone") { // the people already in their list
 		writeError(w, http.StatusForbidden, "ask a parent to start a new chat")
 		return
 	}

@@ -331,7 +331,16 @@ private fun ConversationList(
                     }
                 }
             }
-            val list = convs
+            // Younger children: everyone they can see is already in the list, so a chat
+            // with anyone is one tap away (it's made on the first message... or the first tap).
+            val list = convs?.let { cs ->
+                if (!Access.younger || !Access.can("chat_everyone")) cs
+                else {
+                    val have = cs.filter { it.kind == "direct" }.flatMap { it.members }.toSet()
+                    cs + people.filter { it.id != prefs.memberId && it.id !in have && it.role != "dependent" && !it.display }
+                        .map { ChatConversation("new:" + it.id, "direct", it.name, listOf(prefs.memberId, it.id), null, 0, false) }
+                }
+            }
             if (list == null) {
                 item { Text("Loading…", modifier = Modifier.padding(16.dp)) }
             } else {
@@ -339,7 +348,19 @@ private fun ConversationList(
                     item(key = c.id) {
                         val open = panel != null && c.id == shownPanel
                         Box(if (open) Modifier.onSizeChanged { rowHeight = with(density) { it.height.toDp() } } else Modifier) {
-                            ConversationRow(c, people, prefs.memberId, selected = c.id == selected, closable = open) { onOpen(c.id) }
+                            ConversationRow(c, people, prefs.memberId, selected = c.id == selected, closable = open) {
+                                if (!c.id.startsWith("new:")) onOpen(c.id)
+                                else scope.launch {
+                                    try {
+                                        val api = Api(prefs.serverUrl, prefs.token)
+                                        val made = api.chatDirect(c.id.removePrefix("new:"))
+                                        convs = api.chats()
+                                        onOpen(made.id)
+                                    } catch (e: IOException) {
+                                        error = e.message
+                                    }
+                                }
+                            }
                         }
                     }
                     if (panel != null && c.id == shownPanel) {
@@ -433,7 +454,7 @@ private fun ConversationRow(c: ChatConversation, people: List<Member>, me: Strin
             val last = c.last
             val who = if (last != null && c.kind != "direct") (if (last.sender == me) "You" else people.find { it.id == last.sender }?.name ?: "") + ": " else ""
             Text(
-                if (last == null) "No messages yet" else who + last.text.ifEmpty { "Photo" },
+                if (last == null) (if (Access.younger) "Say hi" else "No messages yet") else who + last.text.ifEmpty { "Photo" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -809,7 +830,7 @@ private fun ConversationView(
                             scope.launch { if (!Voice.speak(context, prefs, "$name said: ${m.text}", who?.voice.orEmpty())) Voice.oops(context) }
                         }) else null,
                     )
-                    if (older == null || !sameDay(older.time, m.time)) DayHeader(m.time)
+                    if (Access.can("chat_times") && (older == null || !sameDay(older.time, m.time))) DayHeader(m.time)
                 }
             }
             LaunchedEffect(listState.firstVisibleItemIndex) { if (listState.firstVisibleItemIndex == 0) newBelow = 0 }
@@ -1146,8 +1167,11 @@ private fun Bubble(
         if (!mine) speaker()
         }
         ReactionChips(m.reactions, prefs.memberId, onReact)
-        Text(
-            DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(m.time)) + if (seenBy.isNotEmpty()) " · Seen by ${seenBy.joinToString(", ")}" else "",
+        // Times can be switched off for children (younger ones start without them).
+        val times = Access.can("chat_times")
+        if (times || seenBy.isNotEmpty()) Text(
+            (if (times) DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(m.time)) else "") +
+                if (seenBy.isNotEmpty()) (if (times) " · " else "") + "Seen by ${seenBy.joinToString(", ")}" else "",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 1.dp),

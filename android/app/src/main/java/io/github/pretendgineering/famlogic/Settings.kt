@@ -877,8 +877,10 @@ private fun LookCards(prefs: Prefs) {
                 checked = Access.pictures,
                 onChange = { on -> Access.pictures = on; scope.launch { runCatching { Api(prefs.serverUrl, prefs.token).setAssist(pictures = on) } } },
             )
+            if (Access.pictures) PictureGallery()
         }
     }
+
     SettingsCard("Colours") {
         // The current theme; tap to pull open the whole collection (each with its little story),
         // like a shade, and pick one to watch the app recolour.
