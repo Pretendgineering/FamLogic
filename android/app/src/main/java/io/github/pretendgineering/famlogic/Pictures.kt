@@ -122,6 +122,7 @@ object Pictures {
         "note" -> { d -> Note(d) }
         "quickadd" -> { d -> QuickAdd(d) }
         "quiet" -> { d -> Quiet(d) }
+        "startroutine" -> { d -> Rhythms(d) }
         "whoshome" -> { d -> WhosHome(d) }
         else -> null
     }

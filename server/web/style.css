@@ -1208,3 +1208,10 @@ dialog.quick-add h2 { margin-top: 0; }
 .stat { background: var(--surface-2); border-radius: 14px; padding: 10px 12px; }
 .stat-big { font-family: var(--serif); font-size: 1.5rem; font-weight: 700; color: var(--secondary); }
 .econ-chart svg { width: 100%; height: auto; background: var(--surface-2); border-radius: 14px; }
+
+.steps-edit li { display: flex; gap: 8px; align-items: center; cursor: grab; }
+.steps-edit input { flex: 1; }
+.routine-card.paused { opacity: .7; }
+.routine-card .on-now { color: var(--secondary); margin: 4px 0; }
+.routine-card select { width: auto; }
+button.link.danger, .link.danger { background: none; color: var(--danger); box-shadow: none; padding-left: 6px; padding-right: 6px; }

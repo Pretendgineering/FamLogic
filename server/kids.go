@@ -100,7 +100,9 @@ var kidFeatures = []kidSwitch{
 var homeTiles = []string{"map", "chat", "sos", "checkin", "calendar", "todos", "chores", "meals", "routines", "nudges", "ride", "steward", "display", "meetings",
 	"outings", "garage", "ledger", "pets", "profiles", "homestead", "contacts",
 	// 0.50.1: glance tiles
-	"today", "feed", "whoshome", "countdown", "clock", "note", "quickadd", "quiet", "weather"}
+	"today", "feed", "whoshome", "countdown", "clock", "note", "quickadd", "quiet", "weather",
+	// 0.53: start a routine for someone (or on the TV)
+	"startroutine"}
 
 // "2x1@0": 2 columns, 1 row, in the first column.
 var gridSize = regexp.MustCompile(`^[1-5]x[1-5](@[0-4])?$`) // up to 5 across and 5 tall (one-button tiles: the app keeps them to 2 x 1)

@@ -3062,29 +3062,96 @@ document.addEventListener("keydown", (e) => {
 });
 
 // Rhythms: routines, and who's on which now.
-async function renderRoutines(box) {
+// Rhythms: the builder on the left (a new routine, or the one you're changing), the
+// bank of saved routines on the right: switch each on (it comes round at its time) or
+// off (kept for later), start one now for someone, change or delete it.
+let routineEdit = null;
+const DAY_KEYS = [["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"], ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"]];
+async function renderRoutines(box, force = false) {
   let d;
   try { d = await api("GET", "/api/routines"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   if (box.dataset.module !== "routines") return; // the page changed while loading
-  if (box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, textarea, select")) return;
+  const redraw = () => renderRoutines(box, true);
+  const act = async (method, path, body) => { try { await api(method, path, body); redraw(); } catch (err) { alert(err.message); } };
   const name = (id) => (personById(id) || {}).name || "?";
-  const cards = d.routines.map((r) => {
-    const on = Object.entries(d.now).filter(([, id]) => id === r.id).map(([who]) => name(who));
-    return el("div", { class: "panel list-card" }, el("div", { class: "list-head" }, el("div", { class: "title" }, r.title),
-      el("span", { class: "muted small" }, [r.who.length ? r.who.map(name).join(", ") : "Everyone", r.starts && "from " + r.starts, (r.days || []).join(" ")].filter(Boolean).join(" · "))),
-      on.length ? el("p", { class: "small", style: "color:var(--secondary);margin:4px 6px" }, "On now for " + on.join(", ")) : null,
-      el("ul", { class: "list compact" }, ...r.items.map((i) => el("li", { class: i.done ? "done-item" : "" }, el("span", { class: "item-check" }, el("span", {}, (i.done ? "✓ " : "") + (i.emoji ? i.emoji + " " : "") + i.text))))));
-  });
-  const title = el("input", { placeholder: "e.g. Bedtime", maxlength: "60" });
-  const starts = el("input", { type: "time", value: "19:30" });
-  const steps = el("textarea", { rows: "4", placeholder: "Steps, one per line" });
-  const form = el("form", { class: "upkeep-add" }, el("div", { class: "row" }, el("label", { class: "grow" }, "Routine", title), el("label", {}, "Starts", starts)), steps, el("div", { class: "row" }, el("button", { type: "submit" }, "Make routine")));
+  const people = lastMembers.filter((m) => m.role !== "dependent" && m.access !== "display");
+  const active = d.active || {};
+  const onFor = (r) => Object.entries(active).filter(([, ids]) => ids.includes(r.id)).map(([who]) => name(who));
+  // The builder
+  const ed = routineEdit && d.routines.find((r) => r.id === routineEdit) || null;
+  const title = el("input", { placeholder: "e.g. Bedtime, Tidy up, Leaving the house", maxlength: "60", value: ed ? ed.title : "" });
+  const timed = el("input", { type: "checkbox", class: "switch", role: "switch", ...(ed ? (ed.starts ? { checked: "" } : {}) : { checked: "" }) });
+  const starts = el("input", { type: "time", value: ed && ed.starts ? ed.starts : "19:30" });
+  const days = el("div", { class: "toggles" }, ...DAY_KEYS.map(([k, t]) => {
+    const on = ed ? !(ed.days || []).length || (ed.days || []).includes(k) : true;
+    const b = el("button", { type: "button", class: "toggle", "data-day": k, "aria-pressed": String(on) }, t);
+    b.addEventListener("click", () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"));
+    return b;
+  }));
+  const timeBox = el("div", {}, el("div", { class: "row" }, el("label", {}, "Starts at", starts)), el("div", { class: "muted small" }, "On"), days);
+  const syncTimed = () => { timeBox.hidden = !timed.checked; };
+  timed.addEventListener("change", syncTimed); syncTimed();
+  const who = whoPicker(people, ed ? ed.who : []);
+  const stepsList = el("ul", { class: "list steps-edit" });
+  const addStep = (t = "") => {
+    const inp = el("input", { value: t, placeholder: "A step, e.g. 🪥 Brush teeth", maxlength: "100" });
+    const li = el("li", { draggable: "true" }, el("span", { class: "handle" }, "☰"), inp, el("button", { type: "button", class: "link", onclick: () => li.remove() }, "✕"));
+    li.addEventListener("dragstart", () => { stepsList.dragging = li; });
+    li.addEventListener("dragover", (e) => { e.preventDefault(); const dr = stepsList.dragging; if (dr && dr !== li) stepsList.insertBefore(dr, li.nextSibling === dr ? li : li.nextSibling); });
+    stepsList.append(li);
+    return inp;
+  };
+  (ed ? ed.items.map((i) => (i.emoji ? i.emoji + " " : "") + i.text) : ["", "", ""]).forEach((t) => addStep(t));
+  const save = el("button", { type: "submit" }, ed ? "Save changes" : "Save to the bank");
+  const form = el("form", { class: "upkeep-add" }, el("label", {}, "Name", title),
+    el("label", { class: "switch-label" }, timed, "Comes round at a time (otherwise you start it when you need it)"), timeBox,
+    el("div", { class: "muted small" }, "For"), who,
+    el("div", { class: "muted small" }, "Steps (drag ☰ to reorder; start a step with an emoji for its picture)"), stepsList,
+    el("button", { type: "button", class: "link", onclick: () => addStep().focus() }, "+ Add a step"),
+    el("div", { class: "row" }, save, ed ? el("button", { type: "button", class: "link", onclick: () => { routineEdit = null; redraw(); } }, "Cancel") : null));
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (!title.value.trim()) return;
-    try { await api("POST", "/api/routines", { title: title.value.trim(), starts: starts.value, items: steps.value.split("\n").map((x) => x.trim()).filter(Boolean) }); renderRoutines(box); } catch (err) { alert(err.message); }
+    const body = { title: title.value.trim(), who: who.chosen(), starts: timed.checked ? starts.value : "",
+      days: timed.checked ? [...days.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.day) : [],
+      items: [...stepsList.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean) };
+    if (body.days.length === 7) body.days = [];
+    try {
+      if (ed) await api("PUT", `/api/routines/${ed.id}`, body);
+      else await api("POST", "/api/routines", body);
+      routineEdit = null; redraw();
+    } catch (err) { alert(err.message); }
   });
-  box.replaceChildren(...(cards.length ? cards : [el("p", { class: "muted" }, "No routines yet.")]), ...(d.canEdit ? [el("h2", {}, "Make a routine"), form] : []));
+  // The bank
+  const card = (r) => {
+    const on = onFor(r);
+    const enabled = el("input", { type: "checkbox", class: "switch", role: "switch", title: "Comes round on its own", ...(r.paused ? {} : { checked: "" }) });
+    enabled.addEventListener("change", () => act("PUT", `/api/routines/${r.id}`, { paused: !enabled.checked }));
+    const startSel = el("select", { "aria-label": "Start it now for" }, el("option", { value: "" }, "Start now for…"), el("option", { value: "*" }, "Everyone it's for"),
+      ...lastMembers.filter((m) => m.role !== "dependent").map((m) => el("option", { value: m.id }, m.access === "display" ? `${m.name} (the TV)` : m.name)));
+    startSel.addEventListener("change", () => {
+      const v = startSel.value; if (!v) return;
+      act("POST", `/api/routines/${r.id}/start`, { who: v === "*" ? (r.who.length ? r.who : people.map((p) => p.id)) : [v] });
+    });
+    const when = r.starts ? `${r.starts}${(r.days || []).length ? " · " + r.days.join(" ") : " · every day"}` : "Started by hand";
+    return el("div", { class: "panel list-card routine-card" + (r.paused ? " paused" : "") },
+      el("div", { class: "list-head" }, el("div", { class: "grow" }, el("div", { class: "title" }, r.title),
+        el("div", { class: "muted small" }, [r.who.length ? r.who.map(name).join(", ") : "Everyone", when, `${r.items.length} steps`].join(" · "))),
+        d.canEdit && r.starts ? el("label", { class: "switch-label small" }, enabled, r.paused ? "Off" : "On") : null),
+      on.length ? el("p", { class: "small on-now" }, "On now for " + on.join(", ")) : null,
+      el("div", { class: "muted small" }, r.items.slice(0, 6).map((i) => (i.emoji ? i.emoji + " " : "") + i.text).join(" · ") + (r.items.length > 6 ? " …" : "")),
+      el("div", { class: "row" }, startSel,
+        on.length ? el("button", { type: "button", class: "link", onclick: () => act("POST", `/api/routines/${r.id}/stop`, { who: Object.entries(active).filter(([, ids]) => ids.includes(r.id)).map(([w]) => w) }) }, "Stop") : null,
+        d.canEdit ? el("button", { type: "button", class: "link", onclick: () => { routineEdit = r.id; redraw(); } }, "Change") : null,
+        d.canEdit ? el("button", { type: "button", class: "link danger", onclick: () => { if (confirm(`Delete "${r.title}"? Its note stays in the vault's archive.`)) act("POST", `/api/routines/${r.id}/delete`); } }, "Delete") : null));
+  };
+  const timedOnes = d.routines.filter((r) => r.starts && !r.paused), others = d.routines.filter((r) => !r.starts || r.paused);
+  box.replaceChildren(el("div", { class: "two-pane" },
+    d.canEdit ? el("div", { class: "panel" }, el("h2", {}, ed ? `Change "${ed.title}"` : "Make a routine"), form) : el("div", {}),
+    el("div", {}, el("h2", {}, "On a timetable"), ...(timedOnes.length ? timedOnes.map(card) : [el("p", { class: "muted" }, "None come round on their own yet.")]),
+      el("h2", {}, "In the bank"), el("p", { class: "muted small" }, "Saved for when you need them: start one for someone, or give it a time."),
+      ...(others.length ? others.map(card) : [el("p", { class: "muted" }, "Nothing saved yet.")]))));
 }
 
 // Pantry: this week's meals and the recipes.

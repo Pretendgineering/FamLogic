@@ -61,13 +61,19 @@ import org.json.JSONObject
 
 // ---- Rhythms: routines that come round, and which one is on now.
 
-data class Routine(val list: FamilyList, val starts: String, val days: List<String>)
-data class RoutinesData(val routines: List<Routine>, val now: Map<String, String>, val canEdit: Boolean)
+data class Routine(val list: FamilyList, val starts: String, val days: List<String>, val paused: Boolean = false)
+/** [active]: every routine on for each person now (the timed one, and any started by hand). */
+data class RoutinesData(val routines: List<Routine>, val now: Map<String, String>, val canEdit: Boolean, val active: Map<String, List<String>> = emptyMap()) {
+    fun activeFor(id: String): List<Routine> = (active[id] ?: listOfNotNull(now[id])).mapNotNull { r -> routines.find { it.list.id == r } }
+}
+
+suspend fun Api.startRoutine(id: String, who: List<String>) { call("POST", "/api/routines/$id/start", JSONObject().put("who", JSONArray(who))) }
 
 suspend fun Api.routines(): RoutinesData {
     val o = call("GET", "/api/routines")
     val arr = o.optJSONArray("routines") ?: JSONArray()
     val now = o.optJSONObject("now")
+    val act = o.optJSONObject("active")
     return RoutinesData(
         (0 until arr.length()).map { i ->
             val r = arr.getJSONObject(i)
@@ -77,11 +83,12 @@ suspend fun Api.routines(): RoutinesData {
             Routine(
                 FamilyList(r.optString("id"), r.optString("title"), "routine", (0 until who.length()).map { who.getString(it) },
                     (0 until items.length()).map { j -> items.getJSONObject(j).let { ListItem(it.optString("id"), it.optString("text"), it.optBoolean("done"), "", "", it.optString("section")) } }),
-                r.optString("starts"), (0 until days.length()).map { days.getString(it) },
+                r.optString("starts"), (0 until days.length()).map { days.getString(it) }, r.optBoolean("paused"),
             )
         },
         now?.keys()?.asSequence()?.associateWith { now.optString(it) } ?: emptyMap(),
         o.optBoolean("canEdit"),
+        act?.keys()?.asSequence()?.associateWith { k -> act.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty() } ?: emptyMap(),
     )
 }
 
@@ -95,6 +102,7 @@ object Rhythms {
 fun RoutinesScreen(prefs: Prefs) {
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(false) }
+    var starting by remember { mutableStateOf<Routine?>(null) }
     var people by remember { mutableStateOf<List<Member>>(emptyList()) }
     LaunchedEffect(Unit) { runCatching { people = Api(prefs.serverUrl, prefs.token).members(Long.MAX_VALUE / 2).members } }
     LaunchedEffect(Unit) { while (true) { Rhythms.refresh(prefs); delay(30_000) } }
@@ -105,13 +113,14 @@ fun RoutinesScreen(prefs: Prefs) {
         floatingActionButton = { if (data?.canEdit == true) ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("New routine") }, modifier = Modifier.pageFab()) },
     ) { padding ->
         if (data == null) { Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) { Text("Loading…") }; return@Scaffold }
-        val mine = data.routines.find { it.list.id == data.now[prefs.memberId] }
+        // Every routine on for me now (two can overlap: the timed one and one started by hand).
+        val mineNow = data.activeFor(prefs.memberId)
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (mine != null) {
-                item { Text("Now: ${mine.list.title}", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }
-                items(mine.list.items, key = { "n" + it.id }) { it -> RoutineStep(prefs, mine, it, big) }
+            mineNow.forEach { mine ->
+                item(key = "h" + mine.list.id) { Text("Now: ${mine.list.title}", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary) }
+                items(mine.list.items, key = { "n" + mine.list.id + it.id }) { it -> RoutineStep(prefs, mine, it, big) }
             }
-            items(data.routines.filter { it != mine }, key = { it.list.id }) { r ->
+            items(data.routines.filter { it !in mineNow }, key = { it.list.id }) { r ->
                 ElevatedCard(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
                         Text(r.list.title, style = MaterialTheme.typography.titleLarge)
@@ -122,6 +131,9 @@ fun RoutinesScreen(prefs: Prefs) {
                         // Who's on which routine now (for parents).
                         val onNow = data.now.filterValues { it == r.list.id }.keys.mapNotNull { id -> people.find { it.id == id }?.name }
                         if (onNow.isNotEmpty() && !Access.isChild) Text("On now for " + onNow.joinToString(", "), style = MaterialTheme.typography.labelMedium, color = Accent2, modifier = Modifier.padding(top = 4.dp))
+                        if (r.paused || r.starts.isEmpty()) Text("Started by hand", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // Start it now: for me, or (grown-ups) for someone, or on the TV.
+                        TextButton(onClick = { starting = r }) { Text(if (data.canEdit) "Start it now…" else "Start it now") }
                     }
                 }
             }
@@ -129,6 +141,55 @@ fun RoutinesScreen(prefs: Prefs) {
         }
     }
     if (adding) NewRoutineDialog(prefs, people) { adding = false; scope.launch { Rhythms.refresh(prefs) } }
+    starting?.let { r ->
+        if (data?.canEdit != true) {
+            LaunchedEffect(r) { runCatching { Api(prefs.serverUrl, prefs.token).startRoutine(r.list.id, listOf(prefs.memberId)) }; starting = null; Rhythms.refresh(prefs) }
+        } else StartRoutineDialog(prefs, listOf(r), people) { starting = null; scope.launch { Rhythms.refresh(prefs) } }
+    }
+}
+
+/** Start a routine now for someone, or on a family display (the home tile, and Rhythms). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun StartRoutineDialog(prefs: Prefs, routines: List<Routine>, people: List<Member>, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pick by remember { mutableStateOf(routines.singleOrNull()) }
+    var who by remember { mutableStateOf(emptySet<String>()) }
+    // The family's TVs and wall displays too, so a routine can go up on the TV.
+    LaunchedEffect(Unit) { if (Corkboard.mayControl(prefs)) Corkboard.refresh(prefs) }
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(pick?.let { "Start ${it.list.title}" } ?: "Start a routine") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (routines.size > 1) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    routines.forEach { r -> FilterChip(selected = pick == r, onClick = { pick = r }, label = { Text(r.list.title) }) }
+                }
+                Text("For", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    people.filter { it.role != "dependent" }.forEach { p ->
+                        FilterChip(selected = p.id in who, onClick = { who = if (p.id in who) who - p.id else who + p.id },
+                            label = { Text(if (p.display) "${p.name} (TV)" else p.name) })
+                    }
+                    Corkboard.displays.forEach { (id, n) ->
+                        FilterChip(selected = id in who, onClick = { who = if (id in who) who - id else who + id }, label = { Text("$n (TV)") })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = pick != null && who.isNotEmpty(), onClick = {
+                val r = pick ?: return@TextButton
+                scope.launch {
+                    runCatching { Api(prefs.serverUrl, prefs.token).startRoutine(r.list.id, who.toList()) }
+                        .onSuccess { Toast.makeText(context, "${r.list.title} started", Toast.LENGTH_SHORT).show(); onDone() }
+                        .onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                }
+            }) { Text("Start") }
+        },
+        dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
+    )
 }
 
 @Composable
