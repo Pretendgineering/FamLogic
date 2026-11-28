@@ -90,6 +90,7 @@ var kidFeatures = []kidSwitch{
 	{"chat_mute", "Mute chats", "chat", false, false},
 	{"voice", "Talk instead of typing, and hear messages read aloud", "chat", true, true},
 	{"feed", "The family feed, to the left of Home", "", false, true},
+	{"steward", "Steward, the AI helper (only what they could do with a tap; bigger things it asks a parent)", "", false, true},
 }
 
 // Home screen tiles. Module tiles show once the module is available and on.

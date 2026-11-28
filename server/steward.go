@@ -92,7 +92,7 @@ func (s *Server) stewardReady() bool {
 
 func (s *Server) mayTalkToSteward(me *Member) bool {
 	// The family's TV can ask too (with the remote's microphone), with a display's permissions.
-	return s.stewardReady() && me.role() != RoleDependent && (isAdult(me) || me.Display || s.store.Steward().Everyone)
+	return s.stewardReady() && me.role() != RoleDependent && (isAdult(me) || me.Display || (s.store.Steward().Everyone && me.can("steward")))
 }
 
 // ---- conversation history
@@ -202,6 +202,26 @@ func argStr(a map[string]any, k string) string {
 }
 
 var stewardTools = []stewardTool{
+	{"ask_a_parent", "Send the parents a short request from a child, for something the child can't do themselves (more screen time, a new reward, changing someone else's thing).", obj(map[string]any{
+		"text": str("The request, in the child's words, e.g. Can I have a friend over on Saturday?"),
+	}, "text"),
+		func(s *Server, me *Member, a map[string]any) any {
+			text := argStr(a, "text")
+			if text == "" {
+				return map[string]any{"error": "say what to ask"}
+			}
+			if len([]rune(text)) > 300 {
+				text = string([]rune(text)[:300])
+			}
+			var to []string
+			for _, m := range s.store.Members() {
+				if m.role() == RoleParent {
+					to = append(to, m.ID)
+				}
+			}
+			s.store.ChoreEvents(to, Event{Type: EventAskParent, MemberID: me.ID, Name: me.Name, Title: text})
+			return map[string]any{"ok": true, "sentTo": len(to)}
+		}},
 	{"list_people", "Everyone in the family: id, name, role, stars.", obj(map[string]any{}),
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handlePeople, "GET", "/api/v1/people", nil, nil)

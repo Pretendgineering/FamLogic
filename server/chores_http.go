@@ -278,6 +278,7 @@ func (s *Server) handleChoreDone(w http.ResponseWriter, r *http.Request, me *Mem
 		if ch.Stars > 0 {
 			s.store.AddStars(by.ID, ch.Stars)
 		}
+		s.settleBarters(ch.ID, by.ID, ch.Every != "")
 		s.store.AddTimeline(Event{Type: EventChoreDone, MemberID: by.ID, Name: by.Name, Title: ch.Title, Level: ch.Stars, Note: ch.ID})
 		// Parents hear about it (not the one who did it).
 		var to []string

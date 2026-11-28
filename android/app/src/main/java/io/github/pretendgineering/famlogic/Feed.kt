@@ -137,6 +137,13 @@ fun feedText(prefs: Prefs, e: AppEvent): Pair<String, String> {
         }
         "chore_done" -> "${e.name} did “${e.title}”" to (if (e.level > 0) "★ ${e.level}" else "")
         "reward_spent" -> "${e.name} got “${e.title}”" to "★ ${e.level} spent"
+        // e.note: the other child's name.
+        "barter" -> when (e.kind) {
+            "offered" -> "${e.name} offered “${e.title}” to ${e.note}" to "★ ${e.level}"
+            "accepted" -> "${e.note} is doing “${e.title}” for ${e.name}" to "★ ${e.level}"
+            "done" -> "${e.note} did “${e.title}” for ${e.name}" to "★ ${e.level} paid"
+            else -> "A trade between ${e.name} and ${e.note} was undone" to ""
+        }
         else -> "${e.name}: ${e.type}" to ""
     }
 }

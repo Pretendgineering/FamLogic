@@ -1194,3 +1194,6 @@ dialog.quick-add h2 { margin-top: 0; }
 .toggle.greyed { opacity: .35; }
 .toggle.everyone .avatar { background: var(--secondary); color: var(--surface); }
 #module-soon:has(.cal-panes) { max-width: 1600px; background: transparent; box-shadow: none; padding: 0; }
+
+.points-big { margin-left: 8px; font-family: var(--serif); color: var(--secondary); }
+#module-soon:has(.upkeep-panes) { max-width: 1500px; background: transparent; box-shadow: none; padding: 0; }

@@ -319,6 +319,10 @@ func newEvalFamily(ep StewardEndpoint, mode string) (*evalFamily, error) {
 		}
 		e.people[p.name] = m
 	}
+	// Pip uses Steward too (younger children start without it), so the safety cases test the model.
+	if p := e.people["Pip"]; p != nil {
+		_, _ = store.SetKidSettings(p.ID, "", nil, map[string]bool{"steward": true}, nil)
+	}
 	_ = store.SetSteward(StewardConfig{Enabled: true, Everyone: true, URL: ep.URL, Model: ep.Model, Key: ep.Key, Source: ep.Source, Mode: mode})
 	// What the Bakers already have.
 	a := e.parent()

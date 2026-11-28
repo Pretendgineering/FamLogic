@@ -19,9 +19,10 @@ import (
 )
 
 type Reward struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Cost  int    `json:"cost"`
+	ID    string   `json:"id"`
+	Title string   `json:"title"`
+	Cost  int      `json:"cost"`
+	Who   []string `json:"who"` // the children it's for ([] = all of them)
 }
 
 type RewardAsk struct {
@@ -46,15 +47,18 @@ func (s *Store) Rewards() ([]Reward, []RewardAsk) {
 	return append([]Reward{}, s.d.Rewards...), append([]RewardAsk{}, s.d.RewardAsks...)
 }
 
-func (s *Store) AddReward(title string, cost int) (Reward, error) {
+func (s *Store) AddReward(title string, cost int, who []string) (Reward, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := Reward{ID: "r" + randomString(8), Title: title, Cost: cost}
+	if who == nil {
+		who = []string{}
+	}
+	r := Reward{ID: "r" + randomString(8), Title: title, Cost: cost, Who: who}
 	s.d.Rewards = append(s.d.Rewards, r)
 	return r, s.saveLocked()
 }
 
-func (s *Store) UpdateReward(id, title string, cost int) error {
+func (s *Store) UpdateReward(id, title string, cost int, who []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i := slices.IndexFunc(s.d.Rewards, func(r Reward) bool { return r.ID == id })
@@ -62,6 +66,9 @@ func (s *Store) UpdateReward(id, title string, cost int) error {
 		return ErrNotFound
 	}
 	s.d.Rewards[i].Title, s.d.Rewards[i].Cost = title, cost
+	if who != nil {
+		s.d.Rewards[i].Who = who
+	}
 	return s.saveLocked()
 }
 
@@ -165,8 +172,15 @@ func (s *Server) handleRewards(w http.ResponseWriter, r *http.Request, me *Membe
 		return
 	}
 	rewards, asks := s.store.Rewards()
+	for i := range rewards {
+		if rewards[i].Who == nil {
+			rewards[i].Who = []string{}
+		}
+	}
 	if !s.canEditChores(me) {
 		asks = slices.DeleteFunc(asks, func(a RewardAsk) bool { return a.MemberID != me.ID })
+		// A child sees the rewards that are for them.
+		rewards = slices.DeleteFunc(rewards, func(r Reward) bool { return len(r.Who) > 0 && !slices.Contains(r.Who, me.ID) })
 	}
 	slices.Reverse(asks) // newest first
 	writeJSON(w, http.StatusOK, map[string]any{"rewards": rewards, "asks": asks, "canEdit": s.canEditChores(me)})
@@ -181,13 +195,14 @@ func (s *Server) handleAddReward(w http.ResponseWriter, r *http.Request, me *Mem
 		return
 	}
 	var body struct {
-		Title string `json:"title"`
-		Cost  int    `json:"cost"`
+		Title string   `json:"title"`
+		Cost  int      `json:"cost"`
+		Who   []string `json:"who"`
 	}
 	if !readJSON(w, r, &body) || !validReward(w, body.Title, body.Cost) {
 		return
 	}
-	rw, err := s.store.AddReward(strings.TrimSpace(body.Title), body.Cost)
+	rw, err := s.store.AddReward(strings.TrimSpace(body.Title), body.Cost, body.Who)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
@@ -204,13 +219,14 @@ func (s *Server) handleUpdateReward(w http.ResponseWriter, r *http.Request, me *
 		return
 	}
 	var body struct {
-		Title string `json:"title"`
-		Cost  int    `json:"cost"`
+		Title string   `json:"title"`
+		Cost  int      `json:"cost"`
+		Who   []string `json:"who"`
 	}
 	if !readJSON(w, r, &body) || !validReward(w, body.Title, body.Cost) {
 		return
 	}
-	if err := s.store.UpdateReward(r.PathValue("id"), strings.TrimSpace(body.Title), body.Cost); err != nil {
+	if err := s.store.UpdateReward(r.PathValue("id"), strings.TrimSpace(body.Title), body.Cost, body.Who); err != nil {
 		writeError(w, http.StatusNotFound, "no such reward")
 		return
 	}

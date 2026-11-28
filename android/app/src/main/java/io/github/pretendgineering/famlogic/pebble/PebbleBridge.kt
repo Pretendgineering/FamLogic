@@ -181,7 +181,7 @@ object PebbleBridge {
                     C_MAP_REQ -> sendMap(context, prefs, api, id, d)
                     C_CHORE_DONE -> {
                         val ch = api.choreDone(id)
-                        result(context, if (ch.stars > 0) "Done! +${ch.stars} stars" else "Done!")
+                        result(context, if (ch.stars > 0) "Done! +${ch.stars} points" else "Done!")
                         push(context, APP_UUID)
                     }
                     C_SEEN -> {

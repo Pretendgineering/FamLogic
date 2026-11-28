@@ -84,7 +84,8 @@ object Steward {
 
     fun available(prefs: Prefs): Boolean {
         val f = prefs.serverFeatures
-        return "steward" in f && prefs.access != "dependent" && (!Access.isChild || "steward-kids" in f)
+        // Children: when the family lets children use it, and their own switch is on (older ones start with it).
+        return "steward" in f && prefs.access != "dependent" && (!Access.isChild || ("steward-kids" in f && Access.can("steward")))
     }
 }
 

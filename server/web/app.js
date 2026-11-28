@@ -1147,7 +1147,8 @@ async function renderHome() {
     const at = (e) => e.place || (places.find((p) => p.id === e.placeId) || {}).name || "a place";
     const label = { arrived: (e) => `got to ${at(e)}`, left: (e) => `left ${at(e)}`, checkin: (e) => "checked in" + (e.note ? `: ${e.note}` : ""),
       sos: () => "sent an SOS", sos_end: () => "is OK", drive_start: () => "started driving", trip: () => "finished a trip",
-      chore_done: (e) => `did "${e.title}"`, reward_spent: (e) => `got "${e.title}"` };
+      chore_done: (e) => `did "${e.title}"`, reward_spent: (e) => `got "${e.title}"`,
+      barter: (e) => ({ offered: `offered "${e.title}" to ${e.note} for ${e.level} points`, accepted: `'s trade with ${e.note} is on: "${e.title}"`, done: `paid ${e.note} ${e.level} points for "${e.title}"`, undone: `'s trade with ${e.note} was undone` }[e.kind] || "traded a chore") };
     out.today = (panel("#/thereabouts", "people", "Today", rows(feed.items.slice(0, 14).map((e) => li(`${e.name} ${(label[e.type] || (() => e.type))(e)}`, time(e.time))), "Nothing yet today.")));
   }
   if (events) out.calendar = (panel("#/calendar", "calendar", displayName(moduleInfo("calendar")),
@@ -1155,8 +1156,8 @@ async function renderHome() {
   if (chores) {
     const due = chores.chores.filter((c) => !c.finished && (!c.due || c.due <= chores.today));
     out.chores = (panel("#/chores", "upkeep", displayName(moduleInfo("chores")),
-      el("div", {}, rows(due.slice(0, 8).map((c) => li(c.title, c.who.length ? c.who.map(name).join(", ") : "Anyone", c.stars ? el("span", { class: "badge" }, "★ " + c.stars) : null)), "Nothing due."),
-        Object.keys(chores.stars || {}).length ? el("p", { class: "dash-sub" }, "Stars: " + Object.entries(chores.stars).map(([id, n]) => `${name(id)} ${n}`).join(" · ")) : null)));
+      el("div", {}, rows(due.slice(0, 8).map((c) => li(c.title, c.who.length ? c.who.map(name).join(", ") : "Anyone", c.stars ? el("span", { class: "badge" }, c.stars + " pts") : null)), "Nothing due."),
+        Object.keys(chores.stars || {}).length ? el("p", { class: "dash-sub" }, "Points: " + Object.entries(chores.stars).map(([id, n]) => `${name(id)} ${n}`).join(" · ")) : null)));
   }
   if (lists) out.todos = (panel("#/todos", "check", displayName(moduleInfo("todos")),
     rows(lists.lists.slice(0, 6).map((l) => { const open = l.items.filter((i) => !i.done); return li(l.title, open.length ? open.slice(0, 4).map((i) => i.text).join(", ") + (open.length > 4 ? ` +${open.length - 4}` : "") : "all done", el("span", { class: "badge" }, String(open.length))); }), "No lists yet.")));
@@ -2275,9 +2276,11 @@ async function renderUpkeep(box, force = false) {
   try { data = await api("GET", "/api/chores"); }
   catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   try { rewards = await api("GET", "/api/rewards"); } catch (_) {}
+  let barters = [];
+  try { barters = (await api("GET", "/api/barters")).barters; } catch (_) {}
   if (box.dataset.module !== "chores") return; // the page changed while loading
   // Redraw only when something changed (the 10-second refresh calls this too).
-  const sig = JSON.stringify([data, rewards, upkeepEdit && upkeepEdit.id]);
+  const sig = JSON.stringify([data, rewards, barters, upkeepEdit && upkeepEdit.id]);
   if (!force && sig === upkeepDrawn && box.childElementCount) return;
   upkeepDrawn = sig;
   const people = lastMembers.filter((m) => m.role !== "dependent");
@@ -2299,7 +2302,7 @@ async function renderUpkeep(box, force = false) {
   const stars = el("input", { type: "number", min: "0", max: "100", value: ed ? String(ed.stars || 0) : "0", style: "width:4.5em" });
   const nudge = (n) => { const b = el("button", { type: "button", class: "secondary small" }, (n > 0 ? "+" : "−") + Math.abs(n));
     b.addEventListener("click", () => { stars.value = Math.max(0, Math.min(100, (Number(stars.value) || 0) + n)); }); return b; };
-  const starPicker = el("div", { class: "stars-pick" }, el("span", {}, "Stars"), nudge(-10), nudge(-5), nudge(-1), stars, nudge(1), nudge(5), nudge(10));
+  const starPicker = el("div", { class: "stars-pick" }, el("span", {}, "Points"), nudge(-10), nudge(-5), nudge(-1), stars, nudge(1), nudge(5), nudge(10));
   const notes = el("textarea", { rows: "2", placeholder: "Details (optional)", maxlength: "2000" });
   if (ed) notes.value = ed.notes || "";
   const cancel = el("button", { type: "button", class: "secondary" }, "Cancel");
@@ -2344,7 +2347,7 @@ async function renderUpkeep(box, force = false) {
     return el("li", { class: "chore" + (late ? " late" : "") },
       el("div", { class: "faces" }, ...faces),
       el("div", { class: "grow" },
-        el("div", { class: "title" }, c.title, c.stars ? el("span", { class: "badge" }, "★ " + c.stars) : null),
+        el("div", { class: "title" }, c.title, c.stars ? el("span", { class: "badge" }, c.stars + " pts") : null),
         el("div", { class: "sub" }, [repeatText(c.every), c.finished ? "done" : (c.due ? (late ? "late: " : "due ") + c.due : ""),
           last ? `last done ${last.date}${last.by ? " by " + name(last.by) : ""}` : ""].filter(Boolean).join(" · ")),
         c.notes ? el("div", { class: "muted small" }, c.notes) : null),
@@ -2355,17 +2358,28 @@ async function renderUpkeep(box, force = false) {
   const finished = data.chores.filter((c) => c.finished);
   const section = (h, list, empty) => [el("h2", {}, h), list.length ? el("ul", { class: "list" }, ...list.map(row)) : el("p", { class: "muted" }, empty)];
 
-  // Stars, for the children who have any (or could).
+  // Points, for the children who have any (or could), with what they did this week.
   const kids = people.filter((m) => m.role === "child");
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const doneThisWeek = (id) => data.chores.reduce((n, c) => n + c.done.filter((d) => d.by === id && d.date >= weekAgo).length, 0);
+  const pointsThisWeek = (id) => data.chores.reduce((n, c) => n + c.done.filter((d) => d.by === id && d.date >= weekAgo).length * (c.stars || 0), 0);
   const starRow = (m) => {
     const n = data.stars[m.id] || 0;
     const btn = (label, body) => { const b = el("button", { type: "button", class: "secondary" }, label); b.addEventListener("click", () => act("POST", `/api/members/${m.id}/stars`, body)); return b; };
-    return el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "title" }, m.name), el("div", { class: "sub" }, `★ ${n}`)),
+    return el("li", {}, avatarOf(m), el("div", { class: "grow" }, el("div", { class: "title" }, m.name, el("span", { class: "points-big" }, `${n} pts`)),
+        el("div", { class: "sub" }, `This week: ${doneThisWeek(m.id)} chores, ${pointsThisWeek(m.id)} points earned`)),
       el("div", { class: "stars-pick" }, btn("−10", { add: -10 }), btn("−5", { add: -5 }), btn("−1", { add: -1 }),
         btn("+1", { add: 1 }), btn("+5", { add: 5 }), btn("+10", { add: 10 }), btn("Spend all", { set: 0 })));
   };
 
-  // Rewards: a child asks, a parent says yes (the stars come off) or no.
+  // Trades: children swapping chores for points. Parents can undo one that went ahead.
+  const tradeWords = { offered: "offered", accepted: "accepted, not done yet", declined: "said no", cancelled: "called off", done: "done, points paid", undone: "undone by a parent" };
+  const tradeRows = barters.slice(0, 12).map((t) => el("li", {},
+    el("div", { class: "grow" }, el("div", { class: "title" }, `${name(t.from)} → ${name(t.to)}: ${t.choreTitle}`),
+      el("div", { class: "sub" }, `${t.points} pts · ${tradeWords[t.status] || t.status} · ${ago(t.created)}`)),
+    data.canEdit && (t.status === "accepted" || t.status === "done") ? el("button", { type: "button", class: "link danger", onclick: () => { if (confirm("Undo this trade?" + (t.status === "done" ? " The points go back." : " The chore goes back."))) act("POST", `/api/barters/${t.id}/undo`); } }, "Undo") : null));
+
+  // Rewards: a child asks, a parent says yes (the points come off) or no.
   const rewardBox = [];
   const pending = rewards.asks.filter((a) => a.status === "asked");
   if (pending.length) rewardBox.push(el("ul", { class: "list" }, ...pending.map((a) => {
@@ -2376,29 +2390,37 @@ async function renderUpkeep(box, force = false) {
     no.addEventListener("click", () => act("POST", `/api/rewards/asks/${a.id}/decline`));
     return el("li", {}, m ? avatarOf(m) : null, el("div", { class: "grow" },
       el("div", { class: "title" }, `${m ? m.name : "Someone"} asked for ${a.title}`),
-      el("div", { class: "sub" }, `★ ${a.cost} · has ★ ${data.stars[a.memberId] || 0}`)), no, yes);
+      el("div", { class: "sub" }, `${a.cost} pts · has ${data.stars[a.memberId] || 0}`)), no, yes);
   })));
   if (rewards.rewards.length) rewardBox.push(el("ul", { class: "list" }, ...rewards.rewards.map((r) => {
     const rm = el("button", { type: "button", class: "link" }, "Remove");
     rm.addEventListener("click", () => { if (confirm(`Remove "${r.title}"?`)) act("DELETE", `/api/rewards/${r.id}`); });
-    return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, r.title)), el("span", { class: "badge" }, "★ " + r.cost), rewards.canEdit ? rm : null);
+    const forWho = (r.who || []).length ? r.who.map(name).join(", ") : "Every child";
+    return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, r.title), el("div", { class: "sub" }, forWho)), el("span", { class: "badge" }, r.cost + " pts"), rewards.canEdit ? rm : null);
   })));
   if (rewards.canEdit) {
     const rt = el("input", { placeholder: "e.g. 30 minutes of screen time", maxlength: "60" });
     const rc = el("input", { type: "number", min: "1", max: "1000", value: "10", style: "width:5em" });
-    const rf = el("form", { class: "row upkeep-reward" }, el("label", { class: "grow" }, "Reward ", rt), el("label", {}, "★ ", rc), el("button", { type: "submit" }, "Add reward"));
-    rf.addEventListener("submit", (ev) => { ev.preventDefault(); if (rt.value.trim()) act("POST", "/api/rewards", { title: rt.value.trim(), cost: Number(rc.value) || 1 }); });
+    const rwho = whoPicker(kids);
+    const rf = el("form", { class: "upkeep-add upkeep-reward" }, el("div", { class: "row" }, el("label", { class: "grow" }, "Reward ", rt), el("label", {}, "Points ", rc)),
+      el("div", { class: "muted small" }, "For (nobody picked: every child)"), rwho, el("div", { class: "row" }, el("button", { type: "submit" }, "Add reward")));
+    rf.addEventListener("submit", (ev) => { ev.preventDefault(); if (rt.value.trim()) act("POST", "/api/rewards", { title: rt.value.trim(), cost: Number(rc.value) || 1, who: rwho.chosen() }); });
     rewardBox.push(rf);
   }
 
-  box.replaceChildren(
-    ...section("Due now", now, "Nothing due."),
-    ...section("Coming up", later, "Nothing coming up."),
-    ...(finished.length ? section("Done", finished, "") : []),
-    ...(data.canEdit ? [el("h2", {}, ed ? `Change "${ed.title}"` : "Add a chore"), add] : []),
-    ...(kids.length ? [el("h2", {}, "Stars"), el("ul", { class: "list" }, ...kids.map(starRow))] : []),
-    ...(rewardBox.length ? [el("h2", {}, "Rewards"), ...rewardBox] : []),
-    el("p", { class: "muted small" }, "Chores are Markdown notes in the vault's Chores folder: open it in Obsidian, or let your AI agent add and tick them off (Settings → AI & API)."));
+  // Two panes: the chores (and adding one) on the left; points, trades and rewards on the right.
+  box.replaceChildren(el("div", { class: "two-pane upkeep-panes" },
+    el("div", { class: "panel" },
+      ...(data.canEdit ? [el("h2", {}, ed ? `Change "${ed.title}"` : "Add a chore"), add] : []),
+      ...section("Due now", now, "Nothing due."),
+      ...section("Coming up", later, "Nothing coming up."),
+      ...(finished.length ? section("Done", finished, "") : []),
+      el("p", { class: "muted small" }, "Chores are Markdown notes in the vault's Chores folder: open it in Obsidian, or let your AI agent add and tick them off (Settings → AI & API).")),
+    el("div", { class: "panel" },
+      ...(kids.length ? [el("h2", {}, "Points"), el("ul", { class: "list" }, ...kids.map(starRow))] : []),
+      el("h2", {}, "Trades"), el("p", { class: "muted small" }, "Children can offer a chore to a brother or sister for some of their points, in the app. The points move when the chore's done."),
+      tradeRows.length ? el("ul", { class: "list" }, ...tradeRows) : el("p", { class: "muted" }, "No trades yet."),
+      el("h2", {}, "Rewards"), ...(rewardBox.length ? rewardBox : [el("p", { class: "muted" }, "No rewards yet.")]))));
 }
 
 // ---- Settings → AI: Steward's model (built in, at home, or in the cloud, with a

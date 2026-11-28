@@ -121,9 +121,12 @@ fun UpkeepScreen(prefs: Prefs) {
     var pickWho by remember { mutableStateOf<Chore?>(null) }
     var rewards by remember { mutableStateOf<RewardList?>(null) }
     var addingReward by remember { mutableStateOf(false) }
+    var barters by remember { mutableStateOf<List<Barter>>(emptyList()) }
+    var trading by remember { mutableStateOf(false) }
     val refreshAll: suspend () -> Unit = {
         Upkeep.refresh(prefs)
         rewards = runCatching { Api(prefs.serverUrl, prefs.token).rewards() }.getOrDefault(rewards)
+        if (Access.isChild) barters = runCatching { Api(prefs.serverUrl, prefs.token).barters() }.getOrDefault(barters)
     }
     LaunchedEffect(Unit) {
         while (true) {
@@ -169,7 +172,27 @@ fun UpkeepScreen(prefs: Prefs) {
         val othersNow = data.chores.filter { !Upkeep.isMine(it, me) && Upkeep.dueNow(it, today) }
         val doneToday = data.chores.filter { c -> c.done.any { it.first == today } }
         val later = data.chores.filter { !it.finished && it.due > today && it.done.none { d -> d.first == today } }
+        val myPoints = data.stars[me] ?: 0
+        val siblings = people.filter { it.role == "child" && it.id != me }
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // A child's points, and trades with brothers and sisters.
+            if (Access.isChild) {
+                item(key = "kidpoints") {
+                    val weekAgo = java.time.LocalDate.now().minusDays(7).toString()
+                    val done = data.chores.sumOf { c -> c.done.count { it.second == me && it.first >= weekAgo } }
+                    val next = rewards?.rewards?.filter { it.cost > 0 }?.sortedBy { it.cost }?.let { rs -> rs.firstOrNull { it.cost > myPoints } ?: rs.lastOrNull() }
+                    KidPointsCard(myPoints, done, next, big)
+                }
+                barterCards(barters, me, people, big) { b, action ->
+                    scope.launch {
+                        runCatching { api().barterAction(b.id, action) }.onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                        refreshAll()
+                    }
+                }
+                if (siblings.isNotEmpty() && myPoints > 0 && mineNow.isNotEmpty()) item(key = "trade") {
+                    androidx.compose.material3.OutlinedButton(onClick = { trading = true }, modifier = Modifier.fillMaxWidth()) { Text("Trade a job for points") }
+                }
+            }
             item { SectionTitle(if (Access.isChild) "Your jobs" else "Yours") }
             if (mineNow.isEmpty()) item { Text("Nothing to do right now.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = if (big) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge) }
             items(mineNow, key = { "m" + it.id }) { c ->
@@ -207,7 +230,7 @@ fun UpkeepScreen(prefs: Prefs) {
             }
             // Stars, for parents: who has how many.
             if (data.canEdit && data.stars.isNotEmpty()) {
-                item { SectionTitle("Stars") }
+                item { SectionTitle("Points") }
                 item {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         data.stars.forEach { (id, n) ->
@@ -278,6 +301,20 @@ fun UpkeepScreen(prefs: Prefs) {
                     Text((if (a.status == "approved") "Yes to " else "Not this time: ") + a.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (rw.canEdit) item { TextButton(onClick = { addingReward = true }) { Text("Add a reward") } }
+            }
+        }
+    }
+    if (trading) {
+        val d = Upkeep.list
+        val mineOpen = d?.chores.orEmpty().filter { Upkeep.isMine(it, prefs.memberId) && !it.finished && barters.none { b -> b.choreId == it.id && (b.status == "offered" || b.status == "accepted") } }
+        TradeDialog(mineOpen, people.filter { it.role == "child" && it.id != prefs.memberId }, d?.stars?.get(prefs.memberId) ?: 0,
+            onDismiss = { trading = false }) { c, who, pts ->
+            trading = false
+            scope.launch {
+                runCatching { api().offerBarter(c.id, who.id, pts) }
+                    .onSuccess { Toast.makeText(context, "Offered to ${who.name}", Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                refreshAll()
             }
         }
     }
@@ -473,7 +510,7 @@ private fun AddChoreDialog(prefs: Prefs, people: List<Member>, data: ChoreList?,
                     }) { Text(if (due == data?.today) "Today" else due) }
                 }
                 if (!ownOnly) {
-                    Text("Stars", style = MaterialTheme.typography.labelLarge)
+                    Text("Points", style = MaterialTheme.typography.labelLarge)
                     StarPicker(stars, 0, 100) { stars = it }
                 }
                 OutlinedTextField(notes, { notes = it.take(2000) }, label = { Text("Details (optional)") }, modifier = Modifier.fillMaxWidth())

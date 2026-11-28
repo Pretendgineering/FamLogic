@@ -120,11 +120,15 @@ object Alerts {
                 notify(context, CHANNEL_ALERTS, sosId(e.memberId), "${e.name} is OK", "They ended their SOS.", e.memberId)
             }
             // Upkeep: a chore for you, or (for parents) one someone did.
+            // A child asked for something through Steward (to parents).
+            "ask_parent" -> notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} asks", e.title, e.memberId)
             "chore" -> {
                 if (e.kind == "done") {
                     if (e.memberId in prefs.mutedPeople) return
                     val stars = if (e.level > 0) "  ★ ${e.level}" else ""
                     notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} did a chore", e.title + stars, e.memberId, upkeep = true)
+                } else if (e.kind == "barter") {
+                    notify(context, CHANNEL_ALERTS, eventId(e), "${e.name} wants to trade", "“${e.title}” for ★ ${e.level}. Yes or no?", e.memberId, upkeep = true)
                 } else if (e.kind == "due") {
                     val stars = if (e.level > 0) "  ★ ${e.level}" else ""
                     notify(context, CHANNEL_ALERTS, eventId(e), "Time for a job", e.title + stars, "", upkeep = true)

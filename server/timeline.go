@@ -22,6 +22,8 @@ import (
 const (
 	EventChore     = "chore"      // to one person: a chore for them (Kind "new"), or a parent: one done (Kind "done")
 	EventChoreDone = "chore_done" // the timeline: someone did a chore
+	EventAskParent = "ask_parent" // to parents: a child asked for something through Steward
+	EventBarter    = "barter"     // the timeline: a chore traded for points (Kind: offered, accepted, done, undone)
 	timelineDays   = 60
 )
 
