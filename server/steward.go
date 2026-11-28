@@ -404,6 +404,7 @@ var stewardTools = []stewardTool{
 		"ingredients": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "One per entry, with amounts"},
 		"method":      str("Steps, one per line, numbered (1. ..., 2. ...)"),
 		"serves":      str("Optional, e.g. 4 or 1 loaf"),
+		"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "2 to 4 short tags: the meal, the kind of dish, Quick, Vegetarian…"},
 	}, "title", "ingredients"),
 		func(s *Server, me *Member, a map[string]any) any {
 			ing := []string{}
@@ -415,7 +416,7 @@ var stewardTools = []stewardTool{
 				}
 			}
 			return s.callAs(me, s.handleAddRecipe, "POST", "/api/recipes", nil,
-				map[string]any{"title": argStr(a, "title"), "ingredients": ing, "method": argStr(a, "method"), "serves": argStr(a, "serves")})
+				map[string]any{"title": argStr(a, "title"), "ingredients": ing, "method": argStr(a, "method"), "serves": argStr(a, "serves"), "tags": a["tags"]})
 		}},
 	{"shop_recipe", "Put a recipe's ingredients on the shopping list.", obj(map[string]any{
 		"recipe_id": str("The recipe's id (from list_meals)"),

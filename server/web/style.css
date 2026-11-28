@@ -1215,3 +1215,22 @@ dialog.quick-add h2 { margin-top: 0; }
 .routine-card .on-now { color: var(--secondary); margin: 4px 0; }
 .routine-card select { width: auto; }
 button.link.danger, .link.danger { background: none; color: var(--danger); box-shadow: none; padding-left: 6px; padding-right: 6px; }
+
+/* Pantry: the week grid and the recipe book */
+.meal-grid-wrap { overflow-x: auto; margin: 10px 0; }
+.meal-grid { display: grid; grid-template-columns: 110px repeat(7, minmax(120px, 1fr)); gap: 6px; min-width: 900px; }
+.meal-dayhead { padding: 6px 8px; border-radius: 12px; background: var(--surface); text-align: center; }
+.meal-dayhead.today { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.meal-slot { display: flex; align-items: center; padding-left: 4px; }
+.meal-cell input { width: 100%; font-size: .9rem; padding: 8px; }
+.meal-cell.today input { outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+.recipe-panes { grid-template-columns: minmax(280px, 380px) 1fr; }
+.recipe-left input[type=search] { width: 100%; margin-bottom: 8px; }
+.recipe-left .wide { width: 100%; margin: 8px 0; }
+.recipe-left li { align-items: center; }
+.recipe-left li input[type=checkbox] { width: auto; margin-right: 8px; }
+.recipe-left li.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 12px; }
+.recipe-method ol, .recipe-method ul { padding-left: 22px; }
+.recipe-ings { columns: 2; }
+#module-soon:has(.meal-grid), #module-soon:has(.recipe-panes) { max-width: 1600px; background: transparent; box-shadow: none; padding: 0; }
+@media (max-width: 800px) { .recipe-ings { columns: 1; } }

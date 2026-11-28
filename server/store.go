@@ -166,6 +166,8 @@ type data struct {
 	Fridge  *FridgeNote   `json:"fridge,omitempty"` // the family's sticky note
 	// DrivewayUnits: "mi" (miles and gallons) or "km" (km and litres); "" = each device's region.
 	DrivewayUnits string `json:"drivewayUnits,omitempty"`
+	// MealSlots: which meal slots the Pantry week shows (nil: Breakfast, Lunch, Dinner).
+	MealSlots []string `json:"mealSlots,omitempty"`
 	// RoutineStarts: routines started by hand today (Rhythms), on top of the timed ones.
 	RoutineStarts []RoutineStart `json:"routineStarts,omitempty"`
 	// Barters: children trading chores for points (Upkeep).

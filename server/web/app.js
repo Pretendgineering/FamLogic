@@ -3154,50 +3154,152 @@ async function renderRoutines(box, force = false) {
       ...(others.length ? others.map(card) : [el("p", { class: "muted" }, "Nothing saved yet.")]))));
 }
 
-// Pantry: this week's meals and the recipes.
-let mealsWeek = "";
-async function renderMeals(box) {
+// Pantry: the week (a column a day, a row for each meal the family uses) and the
+// recipe book (the list on the left, the recipe to read or change on the right).
+let mealsWeek = "", pantryTab = "week", recipeOpen = "", recipeEditing = false, recipeQuery = "", recipeTag = "";
+const recipePicked = new Set();
+// A little Markdown for recipes: headings, lists, numbered steps, bold and italics.
+function mdLite(text) {
+  const esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*(?!\s)(.+?)\*/g, "$1<em>$2</em>");
+  let html = "", list = "";
+  const close = () => { if (list) { html += `</${list}>`; list = ""; } };
+  for (const raw of (text || "").split("\n")) {
+    const l = raw.trim();
+    let m;
+    if (!l) { close(); continue; }
+    if ((m = l.match(/^#{1,4}\s+(.*)/))) { close(); html += `<h4>${inline(m[1])}</h4>`; }
+    else if ((m = l.match(/^\d+[.)]\s+(.*)/))) { if (list !== "ol") { close(); html += "<ol>"; list = "ol"; } html += `<li>${inline(m[1])}</li>`; }
+    else if ((m = l.match(/^[-*]\s+(?:\[.\]\s+)?(.*)/))) { if (list !== "ul") { close(); html += "<ul>"; list = "ul"; } html += `<li>${inline(m[1])}</li>`; }
+    else { close(); html += `<p>${inline(l)}</p>`; }
+  }
+  close();
+  return html;
+}
+async function renderMeals(box, force = false) {
   let d;
   try { d = await api("GET", "/api/meals" + (mealsWeek ? "?week=" + mealsWeek : "")); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   if (box.dataset.module !== "meals") return; // the page changed while loading
-  if (box.contains(document.activeElement) && document.activeElement.matches("input, textarea")) return;
+  if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, textarea, select")) return;
   mealsWeek = d.week;
-  const meals = ["Breakfast", "Lunch", "Dinner"];
-  const rows = d.days.map((day) => {
-    const dt = new Date(day.date + "T12:00");
-    return el("li", {}, el("span", { class: "feed-time muted small" }, dt.toLocaleDateString([], { weekday: "short", day: "numeric" })),
-      el("div", { class: "grow meal-row" }, ...meals.map((m) => {
-        const inp = el("input", { value: day.meals[m] || "", "aria-label": m, maxlength: "100", ...(d.canEdit ? {} : { readonly: "" }) });
-        inp.addEventListener("change", async () => { try { await api("PUT", `/api/meals/${d.week}`, { date: day.date, meal: m, dish: inp.value }); } catch (err) { alert(err.message); } });
-        return inp;
-      })));
-  });
+  const redraw = () => renderMeals(box, true);
+  const tabs = el("nav", { class: "tabs subtabs", role: "tablist" }, ...[["week", "The week"], ["recipes", "Recipes"]].map(([id, t]) =>
+    el("button", { role: "tab", "aria-selected": String(pantryTab === id), onclick: () => { pantryTab = id; redraw(); } }, t)));
+  box.replaceChildren(tabs, pantryTab === "recipes" ? recipeBook(d, redraw) : mealWeek(d, redraw));
+}
+
+function mealWeek(d, redraw) {
+  const shown = d.shownSlots || ["Breakfast", "Lunch", "Dinner"];
+  // Which meals the family plans (a toggle each).
+  const slotToggles = el("div", { class: "toggles" }, el("span", { class: "muted small" }, "Meals to plan:"), ...(d.slots || shown).map((sl) => {
+    const b = el("button", { type: "button", class: "toggle", "aria-pressed": String(shown.includes(sl)), disabled: d.canEdit ? null : "" }, sl);
+    b.addEventListener("click", async () => {
+      const next = shown.includes(sl) ? shown.filter((x) => x !== sl) : [...shown, sl];
+      try { await api("PUT", "/api/meals/slots", { slots: next }); redraw(); } catch (err) { alert(err.message); }
+    });
+    return b;
+  }));
   const shift = (by) => {
     const [y, w] = d.week.split("-W").map(Number);
     const jan4 = new Date(y, 0, 4); const mon = new Date(jan4); mon.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (w - 1 + by) * 7);
     const t = new Date(mon); t.setDate(t.getDate() + 3); const y2 = t.getFullYear(); const j4 = new Date(y2, 0, 4);
     const wk = 1 + Math.round(((t - j4) / 86400000 - 3 + ((j4.getDay() + 6) % 7)) / 7);
-    mealsWeek = `${y2}-W${String(wk).padStart(2, "0")}`; renderMeals(box);
+    mealsWeek = `${y2}-W${String(wk).padStart(2, "0")}`; redraw();
   };
-  const prev = el("button", { type: "button", class: "secondary" }, "‹ Last week"); prev.addEventListener("click", () => shift(-1));
-  const next = el("button", { type: "button", class: "secondary" }, "Next week ›"); next.addEventListener("click", () => shift(1));
-  const recipes = d.recipes.map((r) => {
-    const shop = el("button", { type: "button", class: "link" }, "Add to Shopping");
-    shop.addEventListener("click", async () => { try { const x = await api("POST", `/api/recipes/${r.id}/shop`); alert(`Added ${x.added} to Shopping.`); } catch (err) { alert(err.message); } });
-    return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, r.title), el("div", { class: "sub" }, r.ingredients.join(", "))), shop);
+  const today = new Date().toISOString().slice(0, 10);
+  const titles = d.recipes.map((r) => r.title);
+  const list = el("datalist", { id: "recipe-titles" }, ...titles.map((t) => el("option", { value: t })));
+  // The grid: a column a day, a row a meal.
+  const grid = el("div", { class: "meal-grid", style: `--rows:${shown.length}` },
+    el("div", { class: "meal-corner" }),
+    ...d.days.map((day) => el("div", { class: "meal-dayhead" + (day.date === today ? " today" : "") },
+      el("strong", {}, new Date(day.date + "T12:00").toLocaleDateString([], { weekday: "short" })), el("span", { class: "muted small" }, " " + new Date(day.date + "T12:00").getDate()))),
+    ...shown.flatMap((sl) => [el("div", { class: "meal-slot muted small" }, sl), ...d.days.map((day) => {
+      const inp = el("input", { value: day.meals[sl] || "", "aria-label": `${sl}, ${day.date}`, maxlength: "100", list: "recipe-titles", ...(d.canEdit ? {} : { readonly: "" }) });
+      inp.addEventListener("change", async () => { try { await api("PUT", `/api/meals/${d.week}`, { date: day.date, meal: sl, dish: inp.value }); } catch (err) { alert(err.message); } });
+      return el("div", { class: "meal-cell" + (day.date === today ? " today" : "") }, inp);
+    })]));
+  return el("div", {}, el("div", { class: "row", style: "align-items:center" }, el("button", { type: "button", class: "secondary", onclick: () => shift(-1) }, "‹ Last week"),
+      el("strong", {}, "Week " + Number(d.week.split("-W")[1])), el("button", { type: "button", class: "secondary", onclick: () => shift(1) }, "Next week ›")),
+    slotToggles, list, el("div", { class: "meal-grid-wrap" }, grid),
+    el("p", { class: "muted small" }, "Type a dish, or pick one of your recipes. Each week is a note in the vault's Meals folder."));
+}
+
+function recipeBook(d, redraw) {
+  const allTags = [...new Set(d.recipes.flatMap((r) => r.tags || []))].sort();
+  const q = recipeQuery.toLowerCase();
+  const shown = d.recipes.filter((r) => (!recipeTag || (r.tags || []).includes(recipeTag)) && (!q || r.title.toLowerCase().includes(q) || r.ingredients.some((i) => i.toLowerCase().includes(q))));
+  if (!d.recipes.some((r) => r.id === recipeOpen)) { recipeOpen = shown[0] ? shown[0].id : ""; }
+  const open = d.recipes.find((r) => r.id === recipeOpen);
+  const search = el("input", { type: "search", placeholder: "Find a recipe or an ingredient", value: recipeQuery });
+  search.addEventListener("input", () => { recipeQuery = search.value; clearTimeout(search._t); search._t = setTimeout(() => { redraw(); setTimeout(() => { const s2 = document.querySelector(".recipe-left input[type=search]"); if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } }, 0); }, 250); });
+  const tagRow = allTags.length ? el("div", { class: "toggles" }, ...["", ...allTags].map((t) => el("button", { type: "button", class: "toggle", "aria-pressed": String(recipeTag === t), onclick: () => { recipeTag = t; redraw(); } }, t || "All"))) : null;
+  const rows = shown.map((r) => {
+    const pick = el("input", { type: "checkbox", title: "Pick to print", ...(recipePicked.has(r.id) ? { checked: "" } : {}) });
+    pick.addEventListener("click", (e) => e.stopPropagation());
+    pick.addEventListener("change", () => { pick.checked ? recipePicked.add(r.id) : recipePicked.delete(r.id); redraw(); });
+    return el("li", { class: "clickable" + (r.id === recipeOpen ? " selected" : ""), onclick: () => { recipeOpen = r.id; recipeEditing = false; redraw(); } }, pick,
+      el("div", { class: "grow" }, el("div", { class: "title" }, r.title), el("div", { class: "sub" }, [(r.tags || []).join(", "), `${r.ingredients.length} ingredients`].filter(Boolean).join(" · "))));
   });
-  const rt = el("input", { placeholder: "Recipe name", maxlength: "80" });
-  const ing = el("textarea", { rows: "4", placeholder: "Ingredients, one per line" });
-  const method = el("textarea", { rows: "3", placeholder: "Method" });
-  const form = el("form", { class: "upkeep-add" }, rt, ing, method, el("div", { class: "row" }, el("button", { type: "submit" }, "Add recipe")));
-  form.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    if (!rt.value.trim()) return;
-    try { await api("POST", "/api/recipes", { title: rt.value.trim(), ingredients: ing.value.split("\n").map((x) => x.trim()).filter(Boolean), method: method.value }); renderMeals(box); } catch (err) { alert(err.message); }
-  });
-  box.replaceChildren(el("div", { class: "row", style: "align-items:center" }, prev, el("strong", {}, "Week " + Number(d.week.split("-W")[1])), next), el("div", { class: "meals-head" }, el("span"), ...meals.map((m) => el("span", { class: "muted small" }, m))), el("ul", { class: "list meals-week" }, ...rows),
-    el("h2", {}, "Recipes"), recipes.length ? el("ul", { class: "list" }, ...recipes) : el("p", { class: "muted" }, "No recipes yet."),
-    ...(d.canEdit ? [el("h2", {}, "Add a recipe"), form] : []));
+  const left = el("div", { class: "panel recipe-left" }, search, tagRow,
+    d.canEdit ? el("button", { type: "button", class: "tonal wide", onclick: () => { recipeOpen = ""; recipeEditing = true; redraw(); } }, "+ New recipe") : null,
+    rows.length ? el("ul", { class: "list" }, ...rows) : el("p", { class: "muted" }, d.recipes.length ? "Nothing matches." : "No recipes yet. Add one, or tell Steward (\"save my banana bread recipe…\")."),
+    el("div", { class: "row" }, el("button", { type: "button", class: "secondary", disabled: recipePicked.size ? null : "", onclick: () => printRecipes(d.recipes.filter((r) => recipePicked.has(r.id))) }, `Print picked (${recipePicked.size})`),
+      recipePicked.size ? el("button", { type: "button", class: "link", onclick: () => { recipePicked.clear(); redraw(); } }, "Clear") : null));
+  let right;
+  if (recipeEditing) {
+    const r = open || { title: "", ingredients: [], method: "", serves: "", tags: [] };
+    const title = el("input", { value: r.title, placeholder: "e.g. Grandma's banana bread", maxlength: "80" });
+    const serves = el("input", { value: r.serves || "", placeholder: "e.g. 4", maxlength: "30" });
+    const tags = el("input", { value: (r.tags || []).join(", "), placeholder: "e.g. Dinner, Quick, Vegetarian" });
+    const ing = el("textarea", { rows: "8", placeholder: "One per line, with amounts" }, r.ingredients.join("\n"));
+    const method = el("textarea", { rows: "10", placeholder: "1. Heat the oven…\n2. …\n\nMarkdown works: **bold**, lists, headings." }, r.method || "");
+    const locked = el("input", { type: "checkbox", class: "switch", role: "switch", ...(r.locked ? { checked: "" } : {}) });
+    const form = el("form", { class: "upkeep-add" }, el("div", { class: "row" }, el("label", { class: "grow" }, "Name", title), el("label", {}, "Serves", serves)),
+      el("label", {}, "Tags", tags), el("label", {}, "Ingredients", ing), el("label", {}, "Method", method),
+      open ? el("label", { class: "switch-label" }, locked, "Only parents and whoever added it can change it") : null,
+      el("div", { class: "row" }, el("button", { type: "submit" }, "Save"), el("button", { type: "button", class: "link", onclick: () => { recipeEditing = false; redraw(); } }, "Cancel"),
+        open ? el("button", { type: "button", class: "link danger", onclick: async () => { if (!confirm(`Delete "${open.title}"?`)) return; try { await api("DELETE", `/api/recipes/${open.id}`); recipeOpen = ""; recipeEditing = false; redraw(); } catch (err) { alert(err.message); } } }, "Delete") : null));
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!title.value.trim()) return;
+      const body = { title: title.value.trim(), serves: serves.value.trim(), tags: tags.value.split(",").map((t) => t.trim()).filter(Boolean),
+        ingredients: ing.value.split("\n").map((x) => x.trim()).filter(Boolean), method: method.value };
+      try {
+        if (open) await api("PUT", `/api/recipes/${open.id}`, { ...body, locked: locked.checked });
+        else { const made = await api("POST", "/api/recipes", body); recipeOpen = made.id; }
+        recipeEditing = false; redraw();
+      } catch (err) { alert(err.message); }
+    });
+    right = el("div", { class: "panel recipe-right" }, el("h2", {}, open ? `Change "${open.title}"` : "A new recipe"), form);
+  } else if (open) {
+    const method = el("div", { class: "recipe-method" }); method.innerHTML = mdLite(open.method);
+    right = el("div", { class: "panel recipe-right" },
+      el("div", { class: "profile-head" }, el("div", { class: "name grow" }, open.title),
+        el("button", { type: "button", class: "secondary", onclick: () => printRecipes([open]) }, "Print"),
+        el("button", { type: "button", class: "secondary", onclick: async () => { try { const x = await api("POST", `/api/recipes/${open.id}/shop`); toast(`Added ${x.added} to Shopping`); } catch (err) { alert(err.message); } } }, "Add to Shopping"),
+        d.canEdit ? el("button", { type: "button", class: "tonal", onclick: () => { recipeEditing = true; redraw(); } }, "Change") : null),
+      el("div", { class: "muted small" }, [open.serves && "Serves " + open.serves, (open.tags || []).join(", "), open.locked ? "Locked" : ""].filter(Boolean).join(" · ")),
+      el("h3", {}, "Ingredients"), el("ul", { class: "plain recipe-ings" }, ...open.ingredients.map((i) => el("li", {}, i))),
+      el("h3", {}, "Method"), method);
+  } else right = el("div", { class: "panel recipe-right muted" }, "Pick a recipe on the left.");
+  return el("div", { class: "two-pane recipe-panes" }, left, right);
+}
+
+// Recipes to paper: each on its own page.
+function printRecipes(list) {
+  if (!list.length) return;
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const w = window.open("", "_blank");
+  if (!w) { alert("Allow pop-ups to print."); return; }
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(list.length === 1 ? list[0].title : "Recipes")}</title><style>
+    body{font:15px/1.5 system-ui,sans-serif;margin:32px;color:#222;max-width:680px}h1{font-family:"Liberation Serif",Georgia,serif;margin:0 0 4px}
+    h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:#555;margin:18px 0 4px}h4{margin:12px 0 4px}section+section{break-before:page;margin-top:32px}
+    </style>${list.map((r) => `<section><h1>${esc(r.title)}</h1><div style="color:#555">${esc([r.serves && "Serves " + r.serves, (r.tags || []).join(", ")].filter(Boolean).join(" · "))}</div>
+    <h2>Ingredients</h2><ul>${r.ingredients.map((i) => `<li>${esc(i)}</li>`).join("")}</ul><h2>Method</h2>${mdLite(r.method)}</section>`).join("")}`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 200);
 }
 
 // Pairing a family display: a one-time code for the display's FamLogic app.

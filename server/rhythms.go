@@ -311,9 +311,17 @@ type Recipe struct {
 	ID          string   `json:"id"`
 	Title       string   `json:"title"`
 	Ingredients []string `json:"ingredients"`
-	Method      string   `json:"method,omitempty"`
+	Method      string   `json:"method,omitempty"` // Markdown
 	Serves      string   `json:"serves,omitempty"`
+	Tags        []string `json:"tags"`             // the family's own tags (Dinner, Quick, Grandma's)
+	By          string   `json:"by,omitempty"`     // who added it (member id)
+	Locked      bool     `json:"locked,omitempty"` // only parents and whoever added it may change it
+	path        string
 }
+
+// The meal slots a day can have, in order. The family picks which show (Settings
+// on the Pantry page); "Breakfast, Lunch, Dinner" to start.
+var mealSlots = []string{"Morning snack", "Breakfast", "Brunch", "Lunch", "Afternoon snack", "Dinner", "Midnight snack"}
 
 var mealLineRe = regexp.MustCompile(`^\s*-\s*([^:]{1,40}):\s*(.*)$`)
 
@@ -369,7 +377,7 @@ func (s *Server) writeWeek(week string, days []MealDay) error {
 	var b strings.Builder
 	_, w, _ := strings.Cut(week, "-W")
 	fmt.Fprintf(&b, "---\ntype: meals\nweek: %s\n---\n# Meals, week %s\n", week, strings.TrimLeft(w, "0"))
-	order := []string{"Breakfast", "Lunch", "Dinner"}
+	order := mealSlots
 	for _, d := range days {
 		t, _ := time.Parse(dayLayout, d.Date)
 		fmt.Fprintf(&b, "\n## %s %s\n", t.Format("Mon"), d.Date)
@@ -430,6 +438,15 @@ func (s *Server) recipes() []Recipe {
 			rc.Title = t
 		}
 		rc.Serves, _ = n.field("serves")
+		rc.path = filepath.Join(dir, e.Name())
+		_, rc.Tags = n.field("tags")
+		if rc.Tags == nil {
+			rc.Tags = []string{}
+		}
+		rc.By, _ = n.field("by")
+		if l, _ := n.field("locked"); l == "true" {
+			rc.Locked = true
+		}
 		section := ""
 		var method []string
 		for _, line := range strings.Split(n.body, "\n") {
@@ -465,7 +482,7 @@ func (s *Server) handleMeals(w http.ResponseWriter, r *http.Request, me *Member)
 		week = isoWeek(time.Now())
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"week": week, "days": s.readWeek(week), "recipes": s.recipes(),
-		"canEdit": isAdult(me) || levelAtLeast(me.level("meals"), LevelAdd)})
+		"canEdit": isAdult(me) || levelAtLeast(me.level("meals"), LevelAdd), "slots": mealSlots, "shownSlots": s.shownSlots()})
 }
 
 // PUT /api/meals/{week} {date, meal, dish}: set (or with "" clear) one meal.
@@ -528,6 +545,7 @@ func (s *Server) handleAddRecipe(w http.ResponseWriter, r *http.Request, me *Mem
 		Ingredients []string `json:"ingredients"`
 		Method      string   `json:"method"`
 		Serves      string   `json:"serves"`
+		Tags        []string `json:"tags"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -545,9 +563,12 @@ func (s *Server) handleAddRecipe(w http.ResponseWriter, r *http.Request, me *Mem
 	}
 	var b strings.Builder
 	id := "r" + randomHex(5)
-	fmt.Fprintf(&b, "---\ntype: recipe\nfamlogic_id: %s\n", id)
+	fmt.Fprintf(&b, "---\ntype: recipe\nfamlogic_id: %s\nby: %s\n", id, me.ID)
 	if body.Serves != "" {
 		fmt.Fprintf(&b, "serves: %s\n", yamlString(body.Serves))
+	}
+	if t := cleanTags(body.Tags); len(t) > 0 {
+		fmt.Fprintf(&b, "tags: [%s]\n", strings.Join(t, ", "))
 	}
 	fmt.Fprintf(&b, "---\n# %s\n\n## Ingredients\n", title)
 	for _, it := range body.Ingredients {

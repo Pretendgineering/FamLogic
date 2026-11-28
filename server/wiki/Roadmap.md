@@ -175,6 +175,12 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.53.0: Driveway, Rhythms you build, and a recipe book
+- **Driveway (vehicles):** a tab per vehicle with its fill-ups, economy (mpg, or L/100 km), fuel spend and services side by side. Log a fill-up in the console, the app, or by telling Steward ("filled up the Sienna, 15 gallons, $56"). A service that comes round again (an oil change every 6 months) becomes a reminder in Upkeep. Units follow your region until a parent picks them. Each vehicle is a note in the vault's Vehicles folder.
+- **Rhythms:** build a routine on the left (steps you can drag into order, with pictures), and keep them in the bank on the right: on a timetable, or saved for when you need them. Start any routine now for someone (or put it up on the TV), stop it, change it or delete it. Two routines can be on at once. Steward starts them too, and a **Start a routine** home tile does it in two taps.
+- **Pantry's week:** a column a day and a row for each meal the family plans: choose from morning snack, breakfast, brunch, lunch, afternoon snack, dinner and midnight snack. Dishes can be picked from your recipes.
+- **The recipe book:** your recipes on the left (search by name or ingredient, filter by tag), the one you picked on the right to read, change, print or put on the Shopping list. Methods are Markdown. Tag recipes your own way (Steward adds tags when it saves one), lock one so only parents and whoever added it can change it, and print several at once, each on its own page.
+
 ### ✅ 0.52.0: Points, trades, and modules in two panes
 - **Points** (stars are now called points). Children see a points card at the top of Upkeep: how many they have, the jobs they did this week, and how far to the next reward. Rewards can be for chosen children.
 - **Trading chores:** a child offers one of their jobs to a brother or sister for some of their points. If the other says yes, the job is theirs (its next time, if it repeats), and the points move when it's done. It all shows in the family feed, and a parent can undo a trade in the console.
@@ -243,7 +249,7 @@ In this order (each is finished before the next starts):
 - **Ledger (budget):** bills on the calendar, spending, groceries and paying off debt (see Future modules).
 - **Cameras (RTSP):** the family's cameras (doorbell, nursery, driveway) on the TV and in the app; a camera's view popping up on the TV when the doorbell rings.
 
-### 💡 Future modules (switch-on placeholders since 0.39.0: Vitals, Driveway, Ledger; Steward keeps their notes until each is built. Menagerie and Rolodex became part of Dossier in 0.51.0)
+### 💡 Future modules (switch-on placeholders since 0.39.0: Vitals and Ledger (Driveway arrived in 0.53.0); Steward keeps their notes until each is built. Menagerie and Rolodex became part of Dossier in 0.51.0)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
 - **Health & activity (Vitals, grown from walks and runs):** family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like. Then:
   - **Steps** from the phone and the Pebble, shown anywhere someone wants them (Home, a tile, the watch, the family display), or nowhere.
