@@ -162,15 +162,15 @@ type data struct {
 	// Outside calendars shown in Datebook (see calendar_feeds.go).
 	Feeds []CalFeed `json:"calendarFeeds,omitempty"`
 	// The family displays\' quiet time and messages (see display.go).
-	Display *DisplayState      `json:"display,omitempty"`
-	Fridge  *FridgeNote        `json:"fridge,omitempty"` // the family's sticky note
+	Display *DisplayState `json:"display,omitempty"`
+	Fridge  *FridgeNote   `json:"fridge,omitempty"` // the family's sticky note
 	// OwnerWebHome is the web home of whoever logs in with the admin password.
-	OwnerWebHome []string `json:"ownerWebHome,omitempty"`
-	KeyLog  []KeyUse           `json:"keyLog,omitempty"`
-	Members map[string]*Member `json:"members"`
-	Invites map[string]*Invite `json:"invites"`
-	Circles map[string]*Circle `json:"circles"`
-	Places  map[string]*Place  `json:"places,omitempty"`
+	OwnerWebHome []string           `json:"ownerWebHome,omitempty"`
+	KeyLog       []KeyUse           `json:"keyLog,omitempty"`
+	Members      map[string]*Member `json:"members"`
+	Invites      map[string]*Invite `json:"invites"`
+	Circles      map[string]*Circle `json:"circles"`
+	Places       map[string]*Place  `json:"places,omitempty"`
 	// Place reminders, by id (see requests.go).
 	Reminders map[string]*Reminder `json:"reminders,omitempty"`
 	// Trails, per member, oldest point first (see trails.go).
