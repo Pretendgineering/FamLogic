@@ -2989,24 +2989,86 @@ async function renderMeetings(box, editingId = null) {
   })));
   if (d.canEdit) {
     const editing = d.meetings.find((m) => m.id === editingId);
-    const title = el("input", { maxlength: "80", value: editing ? editing.title : "Family meeting" });
-    const date = el("input", { type: "date", value: editing ? editing.date : new Date().toISOString().slice(0, 10) });
-    const agenda = el("textarea", { rows: "12", placeholder: "## Weekend plans\nThe park on Saturday, or the pool?\n- Pack the picnic @Sam\n- Bring the football\n\n## Chores for the week\n- Hoover the stairs" });
-    agenda.value = editing ? slidesToAgenda(editing, people) : "";
-    const save = el("button", { type: "submit" }, editing ? "Save meeting" : "Make the meeting");
-    const form = el("form", { class: "upkeep-add" }, el("div", { class: "row" }, el("label", { class: "grow" }, "Title", title), el("label", {}, "Date", date)),
-      el("label", {}, "Topics", agenda),
-      el("p", { class: "muted small" }, "Each topic starts with ## and becomes a slide; lines under it are what it says. \"- Job @Name\" hands out a job (without @Name, it asks for a volunteer); \"> \" is a note. Names: " + people.map((p) => p.name.replace(/ /g, "_")).join(", ") + "."),
-      el("div", { class: "row" }, save, editing ? (() => { const c = el("button", { type: "button", class: "secondary" }, "Cancel"); c.addEventListener("click", () => renderMeetings(box)); return c; })() : null,
-        editing ? (() => { const r = el("button", { type: "button", class: "link danger" }, "Remove"); r.addEventListener("click", async () => { if (confirm(`Remove "${editing.title}"?`)) { await api("POST", `/api/meetings/${editing.id}/delete`).catch(() => {}); renderMeetings(box); } }); return r; })() : null));
-    form.addEventListener("submit", async (ev) => {
-      ev.preventDefault();
-      const body = { title: title.value.trim(), date: date.value, slides: agendaToSlides(agenda.value) };
-      try { await api(editing ? "PUT" : "POST", editing ? `/api/meetings/${editing.id}` : "/api/meetings", body); renderMeetings(box); } catch (err) { alert(err.message); }
-    });
-    parts.push(el("h2", {}, editing ? "Edit the meeting" : "New meeting"), form);
+    parts.push(el("h2", {}, editing ? "Edit the meeting" : "New meeting"), meetingBuilder(box, editing, people));
   }
   box.replaceChildren(...parts);
+}
+
+// The meeting builder: sections added with buttons and filled in by tapping, no Markdown.
+const MEETING_SECTIONS = [
+  ["wins", "Wins and thank-yous", "Go round the family: something good from the week, or a thank-you."],
+  ["coming", "Coming up", "Next week's events from the Datebook, to talk through."],
+  ["jobs", "Jobs to hand out", "Give each job to someone, or ask for a volunteer. They go to the Docket at the end."],
+  ["vote", "A vote", "A question with choices; everyone taps their pick."],
+  ["", "A topic", "Anything else to talk about."],
+];
+function meetingBuilder(box, editing, people) {
+  const slides = editing ? editing.slides.map((sl) => ({ ...sl, jobs: sl.jobs.map((j) => ({ ...j })), options: (sl.options || []).map((o) => o.text) })) : [];
+  const title = el("input", { maxlength: "80", value: editing ? editing.title : "Family meeting" });
+  const date = el("input", { type: "date", value: editing ? editing.date : new Date().toISOString().slice(0, 10) });
+  const list = el("div", { class: "meeting-slides" });
+  const sectionName = (k) => (MEETING_SECTIONS.find(([id]) => id === (k || "")) || [, "A topic"])[1];
+  const draw = () => list.replaceChildren(...slides.map((sl, i) => {
+    const t = el("input", { value: sl.title, maxlength: "80", "aria-label": "Title" });
+    t.addEventListener("input", () => { sl.title = t.value; });
+    const move = (by) => { const j = i + by; if (j < 0 || j >= slides.length) return; [slides[i], slides[j]] = [slides[j], slides[i]]; draw(); };
+    const body = [];
+    if (sl.kind === "" || sl.kind === "coming" || !sl.kind) {
+      const tx = el("textarea", { rows: sl.kind === "coming" ? "5" : "3", placeholder: "What to talk about (optional)" }, sl.text || "");
+      tx.addEventListener("input", () => { sl.text = tx.value; });
+      body.push(tx);
+    }
+    if (sl.kind === "jobs" || !sl.kind) {
+      body.push(el("div", { class: "muted small" }, "Jobs"), ...sl.jobs.map((j, k) => {
+        const jt = el("input", { value: j.text, placeholder: "e.g. Hoover the stairs", maxlength: "120" });
+        jt.addEventListener("input", () => { j.text = jt.value; });
+        const who = el("select", {}, el("option", { value: "" }, "Ask for a volunteer"), ...people.map((p) => el("option", { value: p.id }, p.name)));
+        who.value = j.who || "";
+        who.addEventListener("change", () => { j.who = who.value; });
+        return el("div", { class: "row job-row" }, jt, who, el("button", { type: "button", class: "link", onclick: () => { sl.jobs.splice(k, 1); draw(); } }, "✕"));
+      }), el("button", { type: "button", class: "link", onclick: () => { sl.jobs.push({ text: "", who: "" }); draw(); } }, "+ Add a job"));
+    }
+    if (sl.kind === "vote") {
+      body.push(el("div", { class: "muted small" }, "Choices"), ...sl.options.map((o, k) => {
+        const ot = el("input", { value: o, placeholder: `Choice ${k + 1}`, maxlength: "80" });
+        ot.addEventListener("input", () => { sl.options[k] = ot.value; });
+        return el("div", { class: "row" }, ot, el("button", { type: "button", class: "link", onclick: () => { sl.options.splice(k, 1); draw(); } }, "✕"));
+      }), el("button", { type: "button", class: "link", onclick: () => { sl.options.push(""); draw(); } }, "+ Add a choice"));
+    }
+    if (sl.kind === "wins") body.push(el("p", { class: "muted small" }, "During the meeting, each person's win or thank-you is added here: " + people.map((p) => p.name).join(", ") + "."));
+    return el("div", { class: "panel meeting-slide-edit" },
+      el("div", { class: "row" }, el("span", { class: "badge" }, sectionName(sl.kind)), el("span", { class: "grow" }),
+        el("button", { type: "button", class: "link", title: "Earlier", onclick: () => move(-1) }, "↑"), el("button", { type: "button", class: "link", title: "Later", onclick: () => move(1) }, "↓"),
+        el("button", { type: "button", class: "link danger", onclick: () => { slides.splice(i, 1); draw(); } }, "Remove")),
+      t, ...body);
+  }));
+  const addButtons = el("div", { class: "meeting-add" }, ...MEETING_SECTIONS.map(([kind, name, hint]) => el("button", { type: "button", class: "secondary", title: hint, onclick: async () => {
+    const sl = { title: name, kind, text: "", jobs: [], notes: [], options: kind === "vote" ? ["", ""] : [] };
+    if (kind === "coming") {
+      // Next week's events, from the Datebook.
+      const from = new Date(); from.setHours(0, 0, 0, 0);
+      try {
+        const ev = (await api("GET", `/api/events?from=${from.getTime()}&to=${from.getTime() + 8 * 86400000}`)).events || [];
+        sl.text = ev.slice(0, 15).map((e) => `- ${new Date(e.start).toLocaleDateString([], { weekday: "short", day: "numeric" })}${e.allDay ? "" : " " + new Date(e.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${e.title}`).join("\n") || "Nothing on the calendar next week.";
+      } catch (_) { sl.text = ""; }
+    }
+    if (kind === "jobs") sl.jobs.push({ text: "", who: "" });
+    slides.push(sl); draw();
+  } }, "+ " + name)));
+  draw();
+  const form = el("form", { class: "upkeep-add" }, el("div", { class: "row" }, el("label", { class: "grow" }, "Title", title), el("label", {}, "Date", date)),
+    el("div", { class: "muted small" }, "Add sections with the buttons, in any order:"), addButtons, list,
+    el("div", { class: "row" }, el("button", { type: "submit" }, editing ? "Save meeting" : "Make the meeting"),
+      editing ? el("button", { type: "button", class: "secondary", onclick: () => renderMeetings(box) }, "Cancel") : null,
+      editing ? el("button", { type: "button", class: "link danger", onclick: async () => { if (confirm(`Remove "${editing.title}"?`)) { await api("POST", `/api/meetings/${editing.id}/delete`).catch(() => {}); renderMeetings(box); } } }, "Remove") : null));
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (!slides.length) { alert("Add a section first."); return; }
+    const body = { title: title.value.trim(), date: date.value, slides: slides.map((sl) => ({ title: sl.title.trim() || sectionName(sl.kind), kind: sl.kind || "", text: sl.text || "",
+      jobs: sl.jobs.filter((j) => j.text.trim()), options: (sl.options || []).filter((o) => o.trim()), notes: sl.notes || [] })) };
+    try { await api(editing ? "PUT" : "POST", editing ? `/api/meetings/${editing.id}` : "/api/meetings", body); renderMeetings(box); } catch (err) { alert(err.message); }
+  });
+  return form;
 }
 
 async function presentMeeting(box, d, people) {
@@ -3044,9 +3106,27 @@ async function presentMeeting(box, d, people) {
     if (send) send.addEventListener("click", async () => {
       try { const r = await api("POST", `/api/meetings/${m.id}/send`); m = r.meeting; draw(); alert(r.sent ? `${r.sent} ${r.sent === 1 ? "job" : "jobs"} on the Docket` : "Nothing new to send (jobs need someone first)."); } catch (err) { alert(err.message); }
     });
+    // A vote: each choice with who picked it; pick a person, then tap their choice.
+    let voteBox = null;
+    if (s.kind === "vote" && (s.options || []).length) {
+      const voter = el("select", { "aria-label": "Who's voting" }, ...people.map((p) => el("option", { value: p.id }, p.name)));
+      const nameOf2 = (id) => (people.find((p) => p.id === id) || {}).name || "";
+      const most = Math.max(1, ...s.options.map((o) => o.votes.length));
+      voteBox = el("div", { class: "vote" }, el("label", {}, "Voting: ", voter), ...s.options.map((o, k) => el("button", { type: "button", class: "vote-choice", onclick: () => act("POST", `/api/meetings/${m.id}/slides/${at}/vote`, { option: k, who: voter.value }) },
+        el("span", { class: "grow" }, o.text), el("span", { class: "vote-bar", style: `--w:${Math.round(100 * o.votes.length / most)}%` }), el("span", { class: "muted small" }, o.votes.length ? `${o.votes.length}: ${o.votes.map(nameOf2).join(", ")}` : "no votes"))));
+    }
+    // Wins and thank-yous: one per person, as notes ("Sam: scored a goal").
+    let winBox = null;
+    if (s.kind === "wins" && d.canRun) {
+      const who = el("select", {}, ...people.map((p) => el("option", { value: p.name }, p.name)));
+      const what = el("input", { placeholder: "Something good this week, or a thank-you", maxlength: "200" });
+      const f = el("form", { class: "row" }, who, el("label", { class: "grow" }, what), el("button", { type: "submit", class: "secondary" }, "Add"));
+      f.addEventListener("submit", (ev) => { ev.preventDefault(); if (what.value.trim()) act("POST", `/api/meetings/${m.id}/slides/${at}/notes`, { text: `${who.value}: ${what.value.trim()}` }); });
+      winBox = f;
+    }
     box.replaceChildren(
       el("div", { class: "row" }, el("h2", { class: "grow" }, m.title), back),
-      el("div", { class: "panel slide" }, el("div", { class: "muted small" }, `${at + 1} of ${m.slides.length}`), el("h1", { class: "slide-title" }, s.title), s.text ? el("p", { class: "slide-text" }, s.text) : null),
+      el("div", { class: "panel slide" }, el("div", { class: "muted small" }, `${at + 1} of ${m.slides.length}`), el("h1", { class: "slide-title" }, s.title), s.text ? el("p", { class: "slide-text" }, s.text) : null, voteBox, winBox),
       el("h2", {}, "Jobs"), s.jobs.length ? jobs : el("p", { class: "muted small" }, "None yet."), d.canRun ? add("jobs", "Add a job") : null,
       el("h2", {}, "Notes"), ...(s.notes.length ? s.notes.map((n) => el("p", {}, "• " + n)) : [el("p", { class: "muted small" }, "None yet.")]), d.canRun ? add("notes", "Add a note") : null,
       el("div", { class: "row" }, prev, next, send));

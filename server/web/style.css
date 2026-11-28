@@ -1235,3 +1235,16 @@ button.link.danger, .link.danger { background: none; color: var(--danger); box-s
 #module-soon:has(.meal-grid), #module-soon:has(.recipe-panes) { max-width: 1600px; background: transparent; box-shadow: none; padding: 0; }
 @media (max-width: 800px) { .recipe-ings { columns: 1; } }
 .steward-fab { border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--secondary)); color: #fff; box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* Huddle's builder and votes */
+.meeting-add { display: flex; flex-wrap: wrap; gap: 8px; }
+.meeting-slides { display: flex; flex-direction: column; gap: 10px; }
+.meeting-slide-edit { display: flex; flex-direction: column; gap: 8px; }
+.meeting-slide-edit .job-row input { flex: 1; }
+.meeting-slide-edit select { width: auto; }
+.vote { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.vote select { width: auto; }
+.vote-choice { display: flex; align-items: center; gap: 12px; text-align: left; background: var(--surface-2); color: var(--text); border: 0; box-shadow: none; border-radius: 14px; padding: 12px 14px; position: relative; overflow: hidden; }
+.vote-choice .vote-bar { position: absolute; left: 0; top: 0; bottom: 0; width: var(--w); background: color-mix(in srgb, var(--accent) 18%, transparent); z-index: 0; }
+.vote-choice > * { position: relative; z-index: 1; }
+.meeting-slide-edit .row input { flex: 1; }

@@ -214,6 +214,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/meetings/{id}/slides/{slide}/jobs", s.choreAuth(s.handleMeetingJob))
 	mux.HandleFunc("POST /api/meetings/{id}/slides/{slide}/jobs/{job}", s.choreAuth(s.handleMeetingJobWho))
 	mux.HandleFunc("POST /api/meetings/{id}/slides/{slide}/notes", s.choreAuth(s.handleMeetingNote))
+	mux.HandleFunc("POST /api/meetings/{id}/slides/{slide}/vote", s.choreAuth(s.handleMeetingVote))
 	mux.HandleFunc("POST /api/routines", s.choreAuth(s.handleCreateRoutine))
 	mux.HandleFunc("POST /api/routines/{id}/items/{item}", s.choreAuth(s.handleTickRoutine))
 	mux.HandleFunc("POST /api/routines/{id}/delete", s.choreAuth(s.handleArchiveRoutine))

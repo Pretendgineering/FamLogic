@@ -45,10 +45,23 @@ type MeetingJob struct {
 
 type MeetingSlide struct {
 	Title string       `json:"title"`
+	Kind  string       `json:"kind,omitempty"` // wins, coming, jobs, vote or "" (a topic): which builder made it
 	Text  string       `json:"text,omitempty"`
 	Jobs  []MeetingJob `json:"jobs"`
 	Notes []string     `json:"notes"`
+	// A vote: the choices, and who picked each (member ids).
+	Options []MeetingOption `json:"options"`
 }
+
+// MeetingOption is one choice in a vote: "? The park — Sam, Pip" in the note.
+type MeetingOption struct {
+	Text  string   `json:"text"`
+	Votes []string `json:"votes"`
+}
+
+var meetingKindRe = regexp.MustCompile(`^<!--\s*kind:\s*([a-z]+)\s*-->$`)
+
+var meetingKinds = map[string]bool{"": true, "wins": true, "coming": true, "jobs": true, "vote": true}
 
 type Meeting struct {
 	ID     string         `json:"id"`
@@ -92,9 +105,22 @@ func (mt *meetings) parse(n *note, members []Member) Meeting {
 			m.Title = strings.TrimSpace(t[2:])
 		case strings.HasPrefix(t, "## "):
 			flush()
-			cur = &MeetingSlide{Title: strings.TrimSpace(t[3:]), Jobs: []MeetingJob{}, Notes: []string{}}
+			cur = &MeetingSlide{Title: strings.TrimSpace(t[3:]), Jobs: []MeetingJob{}, Notes: []string{}, Options: []MeetingOption{}}
 		case cur == nil:
 			continue
+		case meetingKindRe.MatchString(strings.TrimSpace(t)):
+			cur.Kind = meetingKindRe.FindStringSubmatch(strings.TrimSpace(t))[1]
+		case strings.HasPrefix(t, "? "):
+			opt, voters, _ := strings.Cut(strings.TrimSpace(t[2:]), " — ")
+			o := MeetingOption{Text: strings.TrimSpace(opt), Votes: []string{}}
+			for _, v := range strings.Split(voters, ",") {
+				if mem := memberByName(members, strings.TrimSpace(v)); mem != nil {
+					o.Votes = append(o.Votes, mem.ID)
+				}
+			}
+			if o.Text != "" {
+				cur.Options = append(cur.Options, o)
+			}
 		case taskLineRe.MatchString(t):
 			g := taskLineRe.FindStringSubmatch(t)
 			job := MeetingJob{Text: g[3]}
@@ -129,6 +155,9 @@ func renderMeeting(m Meeting, members []Member) string {
 	fmt.Fprintf(&b, "# %s\n", m.Title)
 	for _, s := range m.Slides {
 		fmt.Fprintf(&b, "\n## %s\n", s.Title)
+		if s.Kind != "" {
+			fmt.Fprintf(&b, "<!-- kind: %s -->\n", s.Kind)
+		}
 		if s.Text != "" {
 			b.WriteString(s.Text + "\n")
 		}
@@ -144,6 +173,21 @@ func renderMeeting(m Meeting, members []Member) string {
 			}
 			if j.Sent {
 				line += " 📋"
+			}
+			b.WriteString(line + "\n")
+		}
+		for _, o := range s.Options {
+			var names []string
+			for _, id := range o.Votes {
+				for _, mem := range members {
+					if mem.ID == id {
+						names = append(names, mem.Name)
+					}
+				}
+			}
+			line := "? " + o.Text
+			if len(names) > 0 {
+				line += " — " + strings.Join(names, ", ")
 			}
 			b.WriteString(line + "\n")
 		}
@@ -295,9 +339,11 @@ type meetingInput struct {
 	Title  string `json:"title"`
 	Date   string `json:"date"`
 	Slides []struct {
-		Title string `json:"title"`
-		Text  string `json:"text"`
-		Jobs  []struct {
+		Title   string   `json:"title"`
+		Kind    string   `json:"kind"`
+		Text    string   `json:"text"`
+		Options []string `json:"options"`
+		Jobs    []struct {
 			Text string `json:"text"`
 			Who  string `json:"who"`
 		} `json:"jobs"`
@@ -324,7 +370,16 @@ func (s *Server) meetingFromInput(in meetingInput) (Meeting, error) {
 		if t == "" {
 			continue
 		}
-		slide := MeetingSlide{Title: t, Text: strings.TrimSpace(sl.Text), Jobs: []MeetingJob{}, Notes: []string{}}
+		kind := sl.Kind
+		if !meetingKinds[kind] {
+			kind = ""
+		}
+		slide := MeetingSlide{Title: t, Kind: kind, Text: strings.TrimSpace(sl.Text), Jobs: []MeetingJob{}, Notes: []string{}, Options: []MeetingOption{}}
+		for _, o := range sl.Options {
+			if o = strings.TrimSpace(strings.NewReplacer("\n", " ", " — ", " - ").Replace(o)); o != "" && len(slide.Options) < 12 {
+				slide.Options = append(slide.Options, MeetingOption{Text: o, Votes: []string{}})
+			}
+		}
 		for _, j := range sl.Jobs {
 			if txt := strings.TrimSpace(strings.ReplaceAll(j.Text, "\n", " ")); txt != "" {
 				slide.Jobs = append(slide.Jobs, MeetingJob{Text: txt, Who: resolveWho(members, j.Who)})
@@ -404,9 +459,20 @@ func (s *Server) handleSaveMeeting(w http.ResponseWriter, r *http.Request, me *M
 				}
 			}
 		}
+		votes := map[string][]string{} // a vote's choices keep their votes when the meeting is changed
+		for _, sl := range m.Slides {
+			for _, o := range sl.Options {
+				votes[sl.Title+"\x00"+o.Text] = o.Votes
+			}
+		}
 		for i := range next.Slides {
 			for k := range next.Slides[i].Jobs {
 				next.Slides[i].Jobs[k].Sent = sent[next.Slides[i].Title+"\x00"+next.Slides[i].Jobs[k].Text]
+			}
+			for k := range next.Slides[i].Options {
+				if v := votes[next.Slides[i].Title+"\x00"+next.Slides[i].Options[k].Text]; v != nil {
+					next.Slides[i].Options[k].Votes = v
+				}
 			}
 		}
 		m.Title, m.Slides = next.Title, next.Slides
@@ -592,4 +658,53 @@ func (s *Server) handleMeetingSend(w http.ResponseWriter, r *http.Request, me *M
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"meeting": m, "sent": sent, "canEdit": mayEditMeetings(me), "canRun": mayRunMeetings(me)})
+}
+
+// POST /api/meetings/{id}/slides/{slide}/vote {option, who?}: a vote for one choice (each
+// person has one vote per slide; voting again moves it). Anyone in the family votes for
+// themselves; a parent or the TV can vote on someone's behalf.
+func (s *Server) handleMeetingVote(w http.ResponseWriter, r *http.Request, me *Member) {
+	if !s.meetingsOn(w, me) {
+		return
+	}
+	var body struct {
+		Option int    `json:"option"`
+		Who    string `json:"who"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	who := me.ID
+	if body.Who != "" && body.Who != me.ID {
+		if !mayRunMeetings(me) {
+			writeError(w, http.StatusForbidden, "you vote for yourself")
+			return
+		}
+		who = body.Who
+	}
+	m, err := s.meetings.change(r.PathValue("id"), s.store.Members(), func(m *Meeting) error {
+		sl, err := slideAt(m, r)
+		if err != nil {
+			return err
+		}
+		if body.Option < 0 || body.Option >= len(sl.Options) {
+			return fmt.Errorf("no such choice")
+		}
+		for i := range sl.Options {
+			sl.Options[i].Votes = slicesDelete(sl.Options[i].Votes, who)
+		}
+		sl.Options[body.Option].Votes = append(sl.Options[body.Option].Votes, who)
+		return nil
+	})
+	s.meetingReply(w, me, m, err)
+}
+
+func slicesDelete(xs []string, x string) []string {
+	out := xs[:0]
+	for _, y := range xs {
+		if y != x {
+			out = append(out, y)
+		}
+	}
+	return out
 }

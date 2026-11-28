@@ -55,3 +55,28 @@ func TestMeetings(t *testing.T) {
 		t.Fatalf("sent twice: %v", b["sent"])
 	}
 }
+
+func TestMeetingVote(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	e.status("PUT", "/api/admin/modules", "", map[string]any{"enabled": map[string]bool{"thereabouts": true, "meetings": true, "todos": true}, "setupDone": true})
+	st, m := e.status("POST", "/api/meetings", f.mom, map[string]any{"title": "Sunday", "slides": []map[string]any{
+		{"title": "Saturday trip", "kind": "vote", "options": []string{"The park", "The pool"}},
+		{"title": "Wins", "kind": "wins"},
+	}})
+	if st != 200 {
+		t.Fatalf("create: %d %v", st, m)
+	}
+	id := m["meeting"].(map[string]any)["id"].(string)
+	if st, out := e.status("POST", "/api/meetings/"+id+"/slides/0/vote", f.teen, map[string]any{"option": 1}); st != 200 {
+		t.Fatalf("vote: %d %v", st, out)
+	}
+	e.status("POST", "/api/meetings/"+id+"/slides/0/vote", f.teen, map[string]any{"option": 0}) // changed their mind
+	_, got := e.status("GET", "/api/meetings/"+id, f.mom, nil)
+	sl := got["meeting"].(map[string]any)["slides"].([]any)[0].(map[string]any)
+	opts := sl["options"].([]any)
+	if sl["kind"] != "vote" || len(opts[0].(map[string]any)["votes"].([]any)) != 1 || len(opts[1].(map[string]any)["votes"].([]any)) != 0 {
+		t.Fatalf("slide: %v", sl)
+	}
+}

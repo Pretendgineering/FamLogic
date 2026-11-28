@@ -65,7 +65,9 @@ import org.json.JSONObject
  * onto the Docket. Each meeting is a note in the vault's Meetings/ folder.
  */
 data class MeetingJob(val text: String, val who: String, val sent: Boolean)
-data class MeetingSlide(val title: String, val text: String, val jobs: List<MeetingJob>, val notes: List<String>)
+/** A vote's choice, and who picked it. */
+data class MeetingOption(val text: String, val votes: List<String>)
+data class MeetingSlide(val title: String, val text: String, val jobs: List<MeetingJob>, val notes: List<String>, val kind: String = "", val options: List<MeetingOption> = emptyList())
 data class Meeting(val id: String, val title: String, val date: String, val slides: List<MeetingSlide>)
 data class MeetingsData(val meetings: List<Meeting>, val canEdit: Boolean, val canRun: Boolean)
 
@@ -78,7 +80,8 @@ fun parseMeeting(o: JSONObject): Meeting {
             val jobs = s.optJSONArray("jobs") ?: JSONArray()
             MeetingSlide(s.optString("title"), s.optString("text"),
                 (0 until jobs.length()).map { k -> jobs.getJSONObject(k).let { MeetingJob(it.optString("text"), it.optString("who"), it.optBoolean("sent")) } },
-                strs(s.optJSONArray("notes")))
+                strs(s.optJSONArray("notes")), s.optString("kind"),
+                (s.optJSONArray("options") ?: JSONArray()).let { a -> (0 until a.length()).map { k -> a.getJSONObject(k).let { MeetingOption(it.optString("text"), strs(it.optJSONArray("votes"))) } } })
         }
     })
 }
@@ -100,6 +103,8 @@ suspend fun Api.setMeetingJob(id: String, slide: Int, job: Int, who: String, rem
 suspend fun Api.addMeetingNote(id: String, slide: Int, text: String): Meeting =
     meetingFrom(call("POST", "/api/meetings/$id/slides/$slide/notes", JSONObject().put("text", text)))
 /** Sends the jobs that have someone to the Docket; returns the meeting and how many went. */
+suspend fun Api.meetingVote(id: String, slide: Int, option: Int, who: String): Meeting =
+    meetingFrom(call("POST", "/api/meetings/$id/slides/$slide/vote", JSONObject().put("option", option).put("who", who)))
 suspend fun Api.sendMeeting(id: String): Pair<Meeting, Int> = call("POST", "/api/meetings/$id/send").let { meetingFrom(it) to it.optInt("sent") }
 
 /**
@@ -202,21 +207,44 @@ fun HuddleScreen(prefs: Prefs, onBack: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** A slide being built: its kind (wins, coming, jobs, vote or "" for a topic) and what's in it. */
+private class DraftSlide(kind: String, title: String, text: String = "", jobs: List<Pair<String, String>> = emptyList(), options: List<String> = emptyList(), val notes: List<String> = emptyList()) {
+    val kind = kind
+    var title by mutableStateOf(title)
+    var text by mutableStateOf(text)
+    val jobs = androidx.compose.runtime.mutableStateListOf<Pair<String, String>>().apply { addAll(jobs) } // text, who
+    val options = androidx.compose.runtime.mutableStateListOf<String>().apply { addAll(options) }
+}
+
+private val SECTIONS = listOf("wins" to "Wins and thank-yous", "coming" to "Coming up", "jobs" to "Jobs to hand out", "vote" to "A vote", "" to "A topic")
+
+/** The meeting builder: sections added with buttons and filled in by tapping. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun MeetingEditor(prefs: Prefs, existing: Meeting?, people: List<Member>, onDone: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf(existing?.title ?: "Family meeting") }
     var date by remember { mutableStateOf(existing?.date ?: java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())) }
-    var text by remember { mutableStateOf(existing?.let { m -> meetingText(m) { id -> people.find { it.id == id }?.name } } ?: "## \n") }
+    val slides = remember {
+        androidx.compose.runtime.mutableStateListOf<DraftSlide>().apply {
+            existing?.slides?.forEach { sl -> add(DraftSlide(sl.kind, sl.title, sl.text, sl.jobs.map { it.text to it.who }, sl.options.map { it.text }, sl.notes)) }
+        }
+    }
     var busy by remember { mutableStateOf(false) }
+    val sectionName = { k: String -> SECTIONS.find { it.first == k }?.second ?: "A topic" }
     Scaffold(topBar = {
         TopAppBar(title = { Text(if (existing == null) "New meeting" else "Edit meeting") }, navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             actions = {
-                TextButton(enabled = !busy && title.isNotBlank(), onClick = {
+                TextButton(enabled = !busy && title.isNotBlank() && slides.isNotEmpty(), onClick = {
                     busy = true
-                    val body = JSONObject().put("title", title.trim()).put("date", date.trim()).put("slides", meetingSlidesJson(text))
+                    val arr = JSONArray()
+                    slides.forEach { sl ->
+                        arr.put(JSONObject().put("title", sl.title.ifBlank { sectionName(sl.kind) }).put("kind", sl.kind).put("text", sl.text)
+                            .put("jobs", JSONArray(sl.jobs.filter { it.first.isNotBlank() }.map { JSONObject().put("text", it.first).put("who", it.second) }))
+                            .put("options", JSONArray(sl.options.filter { it.isNotBlank() })).put("notes", JSONArray(sl.notes)))
+                    }
+                    val body = JSONObject().put("title", title.trim()).put("date", date.trim()).put("slides", arr)
                     scope.launch {
                         runCatching { Api(prefs.serverUrl, prefs.token).let { if (existing == null) it.createMeeting(body) else it.saveMeeting(existing.id, body) } }
                             .onSuccess { onDone() }.onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
@@ -228,9 +256,67 @@ private fun MeetingEditor(prefs: Prefs, existing: Meeting?, people: List<Member>
         Column(Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(title, { title = it.take(80) }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp))
             OutlinedTextField(date, { date = it.take(10) }, label = { Text("Date (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp))
-            OutlinedTextField(text, { text = it }, label = { Text("Topics") }, modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp), shape = RoundedCornerShape(18.dp))
-            Text("Each topic starts with ## and becomes a slide. Lines under it are what it says. \"- Job @Name\" hands out a job (without @Name it asks for a volunteer); \"> \" is a note. Names: " +
-                people.joinToString(", ") { it.name.replace(' ', '_') } + ".", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            slides.forEachIndexed { i, sl ->
+                ElevatedCard(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(sectionName(sl.kind), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = Accent2)
+                            TextButton(enabled = i > 0, onClick = { slides.add(i - 1, slides.removeAt(i)) }) { Text("↑") }
+                            TextButton(enabled = i < slides.size - 1, onClick = { slides.add(i + 1, slides.removeAt(i)) }) { Text("↓") }
+                            TextButton(onClick = { slides.removeAt(i) }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+                        }
+                        OutlinedTextField(sl.title, { sl.title = it.take(80) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        if (sl.kind == "" || sl.kind == "coming") OutlinedTextField(sl.text, { sl.text = it.take(2000) }, label = { Text("What to talk about") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                        if (sl.kind == "jobs" || sl.kind == "") {
+                            sl.jobs.forEachIndexed { k, (jt, who) ->
+                                var menu by remember { mutableStateOf(false) }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedTextField(jt, { sl.jobs[k] = it.take(120) to who }, placeholder = { Text("A job") }, singleLine = true, modifier = Modifier.weight(1f))
+                                    androidx.compose.foundation.layout.Box {
+                                        TextButton(onClick = { menu = true }) { Text(people.find { it.id == who }?.name ?: "Volunteer") }
+                                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                            androidx.compose.material3.DropdownMenuItem(text = { Text("Ask for a volunteer") }, onClick = { sl.jobs[k] = jt to ""; menu = false })
+                                            people.forEach { p -> androidx.compose.material3.DropdownMenuItem(text = { Text(p.name) }, onClick = { sl.jobs[k] = jt to p.id; menu = false }) }
+                                        }
+                                    }
+                                }
+                            }
+                            TextButton(onClick = { sl.jobs.add("" to "") }) { Text("+ Add a job") }
+                        }
+                        if (sl.kind == "vote") {
+                            sl.options.forEachIndexed { k, o -> OutlinedTextField(o, { sl.options[k] = it.take(80) }, placeholder = { Text("Choice ${k + 1}") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                            TextButton(onClick = { sl.options.add("") }) { Text("+ Add a choice") }
+                        }
+                        if (sl.kind == "wins") Text("During the meeting, each person's win or thank-you is added here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Text("Add a section", style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SECTIONS.forEach { (kind, name) ->
+                    OutlinedButton(onClick = {
+                        when (kind) {
+                            "vote" -> slides.add(DraftSlide(kind, name, options = listOf("", "")))
+                            "jobs" -> slides.add(DraftSlide(kind, name, jobs = listOf("" to "")))
+                            "coming" -> {
+                                val sl = DraftSlide(kind, name)
+                                slides.add(sl)
+                                // Next week's events, from the Datebook.
+                                scope.launch {
+                                    runCatching {
+                                        val cal = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0) }
+                                        val ev = Api(prefs.serverUrl, prefs.token).call("GET", "/api/events?from=${cal.timeInMillis}&to=${cal.timeInMillis + 8 * 86_400_000L}").optJSONArray("events") ?: JSONArray()
+                                        val fmt = java.text.SimpleDateFormat("EEE d, h:mm a", java.util.Locale.getDefault())
+                                        sl.text = (0 until minOf(ev.length(), 15)).joinToString("\n") { k -> ev.getJSONObject(k).let { "- ${fmt.format(java.util.Date(it.optLong("start")))}: ${it.optString("title")}" } }
+                                            .ifEmpty { "Nothing on the calendar next week." }
+                                    }
+                                }
+                            }
+                            else -> slides.add(DraftSlide(kind, name))
+                        }
+                    }) { Text("+ $name") }
+                }
+            }
             if (existing != null) TextButton(onClick = {
                 scope.launch { runCatching { Api(prefs.serverUrl, prefs.token).deleteMeeting(existing.id) }; onDone() }
             }) { Text("Remove this meeting", color = MaterialTheme.colorScheme.error) }
@@ -261,6 +347,21 @@ private fun MeetingPresenter(prefs: Prefs, start: Meeting, people: List<Member>,
             Text("${at + 1} of ${m.slides.size}", color = Accent2, style = MaterialTheme.typography.labelLarge)
             Text(s.title, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 38.sp)
             if (s.text.isNotEmpty()) Text(s.text, style = MaterialTheme.typography.bodyLarge)
+            // A vote: tap your choice (tap another to change it).
+            if (s.options.isNotEmpty()) {
+                val slideAt = at.coerceIn(0, m.slides.size - 1)
+                s.options.forEachIndexed { k, o ->
+                    val mine = prefs.memberId in o.votes
+                    val names = o.votes.mapNotNull { id -> people.find { it.id == id }?.name }
+                    androidx.compose.material3.OutlinedCard(onClick = { act { meetingVote(m.id, slideAt, k, prefs.memberId) } }, modifier = Modifier.fillMaxWidth(),
+                        border = androidx.compose.foundation.BorderStroke(if (mine) 2.dp else 1.dp, if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
+                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(o.text, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                            Text(if (names.isEmpty()) "" else "${names.size} · ${names.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
             if (s.jobs.isNotEmpty() || canRun) Text("Jobs", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             s.jobs.forEachIndexed { k, j ->
                 var pick by remember(at, k) { mutableStateOf(false) }

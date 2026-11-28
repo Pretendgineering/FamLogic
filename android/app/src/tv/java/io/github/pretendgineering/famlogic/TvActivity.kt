@@ -764,6 +764,7 @@ private fun MeetingTv(api: Api, look: Look, start: Meeting, people: List<Person>
     var m by remember { mutableStateOf(start) }
     var at by remember { mutableIntStateOf(0) }
     var jobMenu by remember { mutableStateOf<Int?>(null) }
+    var voteFor by remember { mutableStateOf<Int?>(null) } // a choice picked: whose vote is it?
     var asking by remember { mutableStateOf<String?>(null) } // "job" or "note": typing or saying one
     fun act(f: suspend Api.() -> Meeting) = scope.launch {
         runCatching { api.f() }.onSuccess { m = it }.onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
@@ -782,6 +783,14 @@ private fun MeetingTv(api: Api, look: Look, start: Meeting, people: List<Person>
                     Text(s.title, color = look.ink, fontFamily = Serif, fontWeight = FontWeight.Bold, fontSize = 40.sp, lineHeight = 46.sp)
                     Spacer(Modifier.height(12.dp))
                     if (s.text.isNotEmpty()) Text(s.text, color = look.ink, fontSize = 22.sp, lineHeight = 30.sp)
+                    // A vote: each choice with its tally; pick a choice, then who's voting.
+                    if (s.options.isNotEmpty()) {
+                        Spacer(Modifier.height(14.dp))
+                        s.options.forEachIndexed { k, o ->
+                            val names = o.votes.mapNotNull { id -> people.find { it.id == id }?.name }
+                            MenuRow(o.text + "   ·   " + if (names.isEmpty()) "no votes" else "${names.size}: ${names.joinToString(", ")}", look) { if (canRun) voteFor = k }
+                        }
+                    }
                 }
                 // Its jobs and notes.
                 LazyColumn(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(6.dp)) {
@@ -813,7 +822,11 @@ private fun MeetingTv(api: Api, look: Look, start: Meeting, people: List<Person>
                 }
             }
         }
-        jobMenu?.let { k ->
+        voteFor?.let { k ->
+        val i = at.coerceIn(0, maxOf(0, m.slides.size - 1))
+        TvMenu("Who's voting for ${m.slides.getOrNull(i)?.options?.getOrNull(k)?.text.orEmpty()}?", people.map { p -> p.name to { voteFor = null; act { meetingVote(m.id, i, k, p.id) }; Unit } }, look) { voteFor = null }
+    }
+    jobMenu?.let { k ->
             val opts = people.map { p -> "${p.name} will do it" to { act { setMeetingJob(m.id, i, k, p.id) }; Unit } } +
                 listOf<Pair<String, () -> Unit>>("Needs a volunteer" to { act { setMeetingJob(m.id, i, k, "") } }, "Remove the job" to { act { setMeetingJob(m.id, i, k, "", remove = true) } })
             TvMenu(s.jobs.getOrNull(k)?.text ?: "Job", opts, look) { jobMenu = null }
