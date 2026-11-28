@@ -51,6 +51,9 @@ func (s *Server) routineSlots(routines []List, members []Member) []routineSlot {
 	out := []routineSlot{}
 	byTitle := map[string]List{}
 	for _, r := range routines {
+		if r.Paused { // in the bank: only started by hand
+			continue
+		}
 		byTitle[strings.ToLower(r.Title)] = r
 		if r.Starts != "" {
 			out = append(out, routineSlot{r.ID, clockMinutes(r.Starts), lower(r.Days), r.Who})
@@ -187,7 +190,8 @@ func (s *Server) handleRoutines(w http.ResponseWriter, r *http.Request, me *Memb
 	for id, cur := range s.currentRoutines(all, members, time.Now()) {
 		now[id] = cur.ID
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"routines": out, "now": now, "canEdit": isAdult(me) || levelAtLeast(me.level("routines"), LevelFull)})
+	writeJSON(w, http.StatusOK, map[string]any{"routines": out, "now": now, "active": s.activeRoutines(all, members, now),
+		"canEdit": isAdult(me) || levelAtLeast(me.level("routines"), LevelFull)})
 }
 
 // POST /api/routines {title, who, starts, days, items}: a parent makes a routine.

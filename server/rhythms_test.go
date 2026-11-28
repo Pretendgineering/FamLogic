@@ -51,3 +51,34 @@ func TestRoutinesAndMeals(t *testing.T) {
 		t.Fatalf("shopping:\n%s", b)
 	}
 }
+
+func TestRoutineBank(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	e.status("PUT", "/api/admin/modules", "", map[string]any{"enabled": map[string]bool{"thereabouts": true, "routines": true}, "setupDone": true})
+	_, r := e.status("POST", "/api/routines", f.mom, map[string]any{"title": "Tidy up", "items": []string{"Toys away", "Books away"}})
+	id := r["id"].(string)
+	// Change it, and keep it in the bank.
+	if st, out := e.status("PUT", "/api/routines/"+id, f.mom, map[string]any{"items": []string{"Toys away", "Books away", "Shoes away"}, "paused": true, "starts": "08:00"}); st != 200 || len(out["items"].([]any)) != 3 || out["paused"] != true {
+		t.Fatalf("update: %d %v", st, out)
+	}
+	// Started by hand for the younger child: it's on for them.
+	if st, _ := e.status("POST", "/api/routines/"+id+"/start", f.mom, map[string]any{"who": []string{f.kidID}}); st != 200 {
+		t.Fatalf("start: %d", st)
+	}
+	_, all := e.status("GET", "/api/routines", f.kid, nil)
+	act, _ := all["active"].(map[string]any)[f.kidID].([]any)
+	if len(act) != 1 || act[0] != id {
+		t.Fatalf("active: %v", all["active"])
+	}
+	// A child can't start one for someone else; stopping takes it off.
+	if st, _ := e.status("POST", "/api/routines/"+id+"/start", f.kid, map[string]any{"who": []string{f.teenID}}); st != 403 {
+		t.Fatalf("child starts for sibling: %d", st)
+	}
+	e.status("POST", "/api/routines/"+id+"/stop", f.mom, map[string]any{"who": []string{f.kidID}})
+	_, all = e.status("GET", "/api/routines", f.kid, nil)
+	if a := all["active"].(map[string]any)[f.kidID]; a != nil {
+		t.Fatalf("still active: %v", a)
+	}
+}

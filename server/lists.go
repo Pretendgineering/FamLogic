@@ -48,8 +48,10 @@ type List struct {
 	Who   []string `json:"who"`            // member ids; empty = everyone's
 	When  string   `json:"when,omitempty"` // a time of day it matters
 	// Routines: when it comes round (HH:MM) and on which days (mon…sun; none: every day).
-	Starts string     `json:"starts,omitempty"`
-	Days   []string   `json:"days,omitempty"`
+	Starts string   `json:"starts,omitempty"`
+	Days   []string `json:"days,omitempty"`
+	// Routines: switched off (kept in the bank, not coming round on its own).
+	Paused bool       `json:"paused,omitempty"`
 	Items  []ListItem `json:"items"`
 	File   string     `json:"file"`
 }
@@ -146,6 +148,9 @@ func (l *lists) parse(n *note, id, kind string, members []Member) List {
 	ls.When, _ = n.field("when")
 	ls.Starts, _ = n.field("starts")
 	_, ls.Days = n.field("days")
+	if p, _ := n.field("paused"); p == "true" {
+		ls.Paused = true
+	}
 	section := ""
 	seen := map[string]int{}
 	for _, line := range strings.Split(n.body, "\n") {

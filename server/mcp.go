@@ -25,7 +25,7 @@ import (
 
 // actionScope: the key scope each action needs.
 var actionScope = map[string]string{
-	"list_vehicles": "vehicles", "log_fuel": "vehicles", "log_service": "vehicles", "list_people": "people", "read_feed": "feed", "ask_a_parent": "people",
+	"list_routines": "lists", "start_routine": "lists", "list_vehicles": "vehicles", "log_fuel": "vehicles", "log_service": "vehicles", "list_people": "people", "read_feed": "feed", "ask_a_parent": "people",
 	"list_chores": "chores", "add_chore": "chores", "complete_chore": "chores", "list_rewards": "chores",
 	"list_events": "calendar", "add_event": "calendar",
 	"list_lists": "lists", "add_to_list": "lists", "make_list": "lists", "tick_list_item": "lists",

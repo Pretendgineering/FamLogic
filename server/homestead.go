@@ -556,7 +556,7 @@ func (s *Server) handleAddProperty(w http.ResponseWriter, r *http.Request, me *M
 	if !slices.Contains(homeKinds, body.Kind) {
 		body.Kind = "house"
 	}
-	p := HomeProfile{ID: strings.ToLower(randomString(8)), Name: name, Kind: body.Kind, Features: []string{}, RecyclingEvery: "week"}
+	p := HomeProfile{ID: plainID(), Name: name, Kind: body.Kind, Features: []string{}, RecyclingEvery: "week"}
 	if err := s.writeHome(p); err != nil {
 		writeError(w, http.StatusInternalServerError, "couldn't save it")
 		return

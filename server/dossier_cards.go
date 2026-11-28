@@ -105,7 +105,7 @@ func (s *Server) dossierCards(kind string) []dossierCard {
 		id := frontValue("---\n"+strings.Join(n.front, "\n")+"\n---\n", "famlogic_id")
 		if !cardID.MatchString(id) {
 			// Written by hand (or by Steward): give it an id so it can be edited here.
-			id = strings.ToLower(randomString(10))
+			id = plainID()
 			n.front = append(n.front, "famlogic_id: "+id)
 			writeAtomic(path, []byte("---\n"+strings.Join(n.front, "\n")+"\n---\n"+n.body))
 		}
@@ -172,7 +172,7 @@ func (s *Server) handleAddCard(w http.ResponseWriter, r *http.Request, me *Membe
 		writeError(w, http.StatusConflict, "there's already one called "+name)
 		return
 	}
-	id := strings.ToLower(randomString(10))
+	id := plainID()
 	front := []string{"famlogic_id: " + id, "type: " + body.Kind}
 	if e := strings.TrimSpace(body.Emoji); e != "" && utf8.RuneCountInString(e) <= 8 {
 		front = append(front, "emoji: "+e)

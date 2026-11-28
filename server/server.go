@@ -217,6 +217,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/routines", s.choreAuth(s.handleCreateRoutine))
 	mux.HandleFunc("POST /api/routines/{id}/items/{item}", s.choreAuth(s.handleTickRoutine))
 	mux.HandleFunc("POST /api/routines/{id}/delete", s.choreAuth(s.handleArchiveRoutine))
+	mux.HandleFunc("PUT /api/routines/{id}", s.choreAuth(s.handleUpdateRoutine))
+	mux.HandleFunc("POST /api/routines/{id}/{action}", s.choreAuth(s.handleStartRoutine))
 	mux.HandleFunc("GET /api/meals", s.choreAuth(s.handleMeals))
 	mux.HandleFunc("PUT /api/meals/{week}", s.choreAuth(s.handleSetMeal))
 	mux.HandleFunc("POST /api/meals/{week}", s.choreAuth(s.handleSetMeal))

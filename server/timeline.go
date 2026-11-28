@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	EventChore     = "chore"      // to one person: a chore for them (Kind "new"), or a parent: one done (Kind "done")
-	EventChoreDone = "chore_done" // the timeline: someone did a chore
-	EventAskParent = "ask_parent" // to parents: a child asked for something through Steward
-	EventBarter    = "barter"     // the timeline: a chore traded for points (Kind: offered, accepted, done, undone)
-	timelineDays   = 60
+	EventChore        = "chore"         // to one person: a chore for them (Kind "new"), or a parent: one done (Kind "done")
+	EventChoreDone    = "chore_done"    // the timeline: someone did a chore
+	EventRoutineStart = "routine_start" // to a person: someone started a routine for them
+	EventAskParent    = "ask_parent"    // to parents: a child asked for something through Steward
+	EventBarter       = "barter"        // the timeline: a chore traded for points (Kind: offered, accepted, done, undone)
+	timelineDays      = 60
 )
 
 // Kinds of event that go on the timeline (when they're not for one person only).

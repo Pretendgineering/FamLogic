@@ -222,6 +222,17 @@ var stewardTools = []stewardTool{
 			s.store.ChoreEvents(to, Event{Type: EventAskParent, MemberID: me.ID, Name: me.Name, Title: text})
 			return map[string]any{"ok": true, "sentTo": len(to)}
 		}},
+	{"list_routines", "Every routine (id, title, steps, when it comes round, paused) and which are on for whom now.", obj(map[string]any{}),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleRoutines, "GET", "/api/routines", nil, nil)
+		}},
+	{"start_routine", "Start a routine now for some people.", obj(map[string]any{
+		"routine": str("The routine's id"),
+		"who":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Member ids; empty for whoever is talking"},
+	}, "routine"),
+		func(s *Server, me *Member, a map[string]any) any {
+			return s.callAs(me, s.handleStartRoutine, "POST", "/api/routines/{id}/start", map[string]string{"id": argStr(a, "routine"), "action": "start"}, a)
+		}},
 	{"list_vehicles", "The family's vehicles: id, name, odometer, average economy, recent fill-ups and services.", obj(map[string]any{}),
 		func(s *Server, me *Member, a map[string]any) any {
 			return s.callAs(me, s.handleVehicles, "GET", "/api/vehicles", nil, nil)

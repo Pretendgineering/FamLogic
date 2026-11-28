@@ -101,7 +101,7 @@ func (s *Server) vehicles(units string) []Vehicle {
 		front := "---\n" + strings.Join(n.front, "\n") + "\n---\n"
 		id := frontValue(front, "famlogic_id")
 		if !cardID.MatchString(id) {
-			id = strings.ToLower(randomString(10))
+			id = plainID()
 			n.front = append(n.front, "famlogic_id: "+id)
 			writeAtomic(path, []byte("---\n"+strings.Join(n.front, "\n")+"\n---\n"+n.body))
 		}
@@ -353,7 +353,7 @@ func (s *Server) handleAddVehicle(w http.ResponseWriter, r *http.Request, me *Me
 		writeError(w, http.StatusConflict, "there's already one called "+name)
 		return
 	}
-	v := Vehicle{ID: strings.ToLower(randomString(10)), Name: name}
+	v := Vehicle{ID: plainID(), Name: name}
 	body.apply(&v)
 	if err := s.writeVehicle(v); err != nil {
 		writeError(w, http.StatusInternalServerError, "couldn't save it")

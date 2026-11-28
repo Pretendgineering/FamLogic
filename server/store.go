@@ -166,6 +166,8 @@ type data struct {
 	Fridge  *FridgeNote   `json:"fridge,omitempty"` // the family's sticky note
 	// DrivewayUnits: "mi" (miles and gallons) or "km" (km and litres); "" = each device's region.
 	DrivewayUnits string `json:"drivewayUnits,omitempty"`
+	// RoutineStarts: routines started by hand today (Rhythms), on top of the timed ones.
+	RoutineStarts []RoutineStart `json:"routineStarts,omitempty"`
 	// Barters: children trading chores for points (Upkeep).
 	Barters []*Barter `json:"barters,omitempty"`
 	// OwnerMember is the main admin's own place in the family (set at first setup). They
@@ -641,4 +643,13 @@ func (s *Store) SetFamilyName(n string) error {
 	defer s.mu.Unlock()
 	s.d.FamilyName = n
 	return s.saveLocked()
+}
+
+// plainID is 12 lowercase hex characters: safe in a URL path and a note's front matter.
+func plainID() string {
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
 }
