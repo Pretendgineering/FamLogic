@@ -103,6 +103,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.SegmentedButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -215,6 +216,8 @@ private fun ConversationList(
     var convs by remember { mutableStateOf<List<ChatConversation>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var newChat by remember { mutableStateOf(false) }
+    // Parents: their own chats, and a Watched tab with their children's chats.
+    var watchedTab by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         while (true) {
             try {
@@ -333,7 +336,17 @@ private fun ConversationList(
             }
             // Younger children: everyone they can see is already in the list, so a chat
             // with anyone is one tap away (it's made on the first message... or the first tap).
-            val list = convs?.let { cs ->
+            val hasWatched = convs?.any { it.oversight } == true
+            if (hasWatched) item(key = "watch-tabs") {
+                androidx.compose.material3.SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    listOf(false to "Chats", true to "Watched").forEachIndexed { i, (w, label) ->
+                        val n = convs.orEmpty().filter { it.oversight }.sumOf { it.unread }
+                        SegmentedButton(selected = watchedTab == w, onClick = { watchedTab = w },
+                            shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(i, 2)) { Text(if (w && n > 0) "$label ($n)" else label) }
+                    }
+                }
+            }
+            val list = convs?.let { all -> if (hasWatched) all.filter { it.oversight == watchedTab } else all }?.let { cs ->
                 if (!Access.younger || !Access.can("chat_everyone")) cs
                 else {
                     val have = cs.filter { it.kind == "direct" }.flatMap { it.members }.toSet()

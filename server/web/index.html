@@ -174,6 +174,10 @@
         <section class="chat-list panel">
           <div class="chat-list-head"><h1>Chat</h1>
             <span class="member-only"><button type="button" class="tonal" id="chat-new">New</button></span></div>
+          <nav class="tabs subtabs chat-tabs" role="tablist" id="chat-tabs" hidden>
+            <button role="tab" data-chats="mine">Chats</button>
+            <button role="tab" data-chats="watched">Watched <span class="count" id="count-watched"></span></button>
+          </nav>
           <p class="muted small" id="chat-note"></p>
           <ul class="list" id="chat-convs"></ul>
         </section>

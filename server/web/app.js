@@ -2030,10 +2030,20 @@ async function loadChats() {
   }
 }
 
+// Your own chats, and (parents) a Watched tab with your children's chats you can read.
+let chatTab = "mine";
+document.querySelectorAll("#chat-tabs [data-chats]").forEach((b) => b.addEventListener("click", () => { chatTab = b.dataset.chats; renderChatList(); }));
 function renderChatList() {
+  const watched = chatConvs.filter((c) => c.oversight);
+  $("#chat-tabs").hidden = adminReader() || !watched.length;
+  if (!watched.length) chatTab = "mine";
+  document.querySelectorAll("#chat-tabs [data-chats]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.chats === chatTab)));
+  const unreadW = watched.reduce((n, c) => n + (c.unread || 0), 0);
+  $("#count-watched").textContent = watched.length ? String(watched.length) + (unreadW ? ` · ${unreadW} new` : "") : "";
   $("#chat-note").textContent = adminReader() ? "You're the main admin: you can read every chat, but not post. Log in with your own account to chat."
-    : me.member && me.member.role === "parent" && chatConvs.some((c) => c.oversight) ? "Chats marked “Watching” are your children's: you can read them, not post." : "";
-  $("#chat-convs").replaceChildren(...chatConvs.map((c) => {
+    : chatTab === "watched" ? "Your children's chats: you can read them and pause, block or delete a chat, not post." : "";
+  const shown = adminReader() ? chatConvs : chatConvs.filter((c) => !!c.oversight === (chatTab === "watched"));
+  $("#chat-convs").replaceChildren(...shown.map((c) => {
     const last = c.last ? (c.last.text || "Photo") : "No messages yet";
     const who = c.last && c.kind !== "direct" ? nameOf(c.last.sender) + ": " : "";
     return el("li", { class: "clickable" + (c.id === chatOpen ? " active" : ""), onclick: () => openChat(c.id) },
