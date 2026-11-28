@@ -11,6 +11,8 @@ A self-hosted family hub. These pages come with FamLogic and are replaced when i
 - [Pebble](Pebble.md): the watch
 - [Corkboard](Corkboard.md): FamLogic on the TV
 - [Huddle](Huddle.md): family meetings, clicked through together
+- [Dossier](Dossier.md): people, pets and the family's contacts
+- [Homestead](Homestead.md): the home's upkeep, for one place or several
 - [Steward](Steward.md): the family's AI helper, and the models it can use
 
 Source: https://github.com/Pretendgineering/FamLogic

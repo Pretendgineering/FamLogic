@@ -175,6 +175,17 @@ In this order (each is finished before the next starts):
 - **Buttons down the right** for the map, the feed, Steward (by the remote's microphone), Datebook and Pantry; choose which in Customize.
 - **The launcher** shows 1 to 6 big picture tiles; parents can upload a picture for any app on the console's TV page.
 
+### ✅ 0.51.0: Pictures, colour, and a console that fits together
+- **Picture icons** for every module and tile (Settings → Look and Feel → Picture icons): Chitchat is an envelope with a pencil, Upkeep a broom sweeping up dust, Homestead a cosy house, and new pictures for Dossier, Driveway, Vitals, Ledger, Huddle, Corkboard, Steward, pets, contacts and the glance tiles.
+- **Themes you can see:** the whole background, cards and lines take a soft wash of the theme's colour, in the app and the console. The SOS bar's tint follows the theme; its words, picture and alarm stay red.
+- **Younger children:** everyone they share a group with is already in their chats (a chat is made with the first tap), no times or dates in chats unless a parent switches them on, plain labels (Map, Chat) to start with, and a rounded map.
+- **Dossier holds the pets and the family's contacts** (Menagerie and Rolodex are part of it now): a list on the left, the one you picked on the right, a quick pop-up to add one, and printing (one page each, or everyone).
+- **Homestead looks after more than one place:** a grandparent's flat, a cabin, a barn, each with its own upkeep. Add your own jobs, and change how often any job comes round.
+- **The web console's Home** is a grid of tiles each person arranges (Arrange: drag, resize, add from the drawer, remove).
+- **Family** has everything about people in one place: open someone to set what they can use (Access & Control is part of it now), invites, groups, the parent PIN, and paired displays listed apart from people. Displays are never on the map and never warn about location or battery.
+- **Settings → Look** (for everyone): a theme picker like the app's, light or dark, plain labels, and the order of the bar on the left. Backups live only in Settings → Server and backup. The Settings icon is a gear.
+- **The main admin is a family member:** at setup (or from Family) they make their own account and sign in with it; the admin password stays for recovery.
+
 ### ✅ 0.50.1: Home tiles that grow, and nine new ones
 - **Every tile shows more as it grows:** Upkeep gets a column per person at 4 or 5 wide; Datebook a column a day at 3 or more wide; Rhythms shows every routine on now side by side; Pantry shows today's meals, then the week; Dossier shows faces with allergy and medicine badges; Homestead the next jobs and bin days; Huddle the next meeting's topics; Corkboard quiet time and the TV's last message.
 - **New tiles:** Today (routines on now, chores due and what's on), Who's home, Weather (from Open-Meteo, free; only your home's position, rounded to about a kilometre, is sent), Clock, Countdown (birthdays and all-day events), Sticky note (one note the whole family shares), Feed, and the buttons Quick add (straight onto Shopping or your to-dos) and Quiet time (nap time on the TV in one tap).
@@ -221,9 +232,10 @@ In this order (each is finished before the next starts):
 - **Messages** rise in with a soft chime, and can be read aloud; a wide FamLogic banner for the TV's app row; displays are named by their own name in the console.
 
 ### 💡 Further out
+- **Ledger (budget):** bills on the calendar, spending, groceries and paying off debt (see Future modules).
 - **Cameras (RTSP):** the family's cameras (doorbell, nursery, driveway) on the TV and in the app; a camera's view popping up on the TV when the doorbell rings.
 
-### 💡 Future modules (switch-on placeholders since 0.39.0: Vitals, Driveway, Ledger, Menagerie, Dossier, Homestead, Rolodex; Steward keeps their notes until each is built)
+### 💡 Future modules (switch-on placeholders since 0.39.0: Vitals, Driveway, Ledger; Steward keeps their notes until each is built. Menagerie and Rolodex became part of Dossier in 0.51.0)
 Every one is a module the family can switch off, like the rest, and keeps its data as Markdown in the vault, printable or exportable where it helps.
 - **Health & activity (Vitals, grown from walks and runs):** family walks and each person's runs or bike rides (route, distance, time, pace), shared to the feed if you like. Then:
   - **Steps** from the phone and the Pebble, shown anywhere someone wants them (Home, a tile, the watch, the family display), or nowhere.

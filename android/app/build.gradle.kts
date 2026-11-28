@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.pretendgineering.famlogic"
         minSdk = 26
         targetSdk = 35
-        versionCode = 78
-        versionName = "0.50.1"
+        versionCode = 79
+        versionName = "0.51.0"
     }
 
     // Release signing comes from environment variables so no secrets live in the repo
