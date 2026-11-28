@@ -63,6 +63,8 @@ async function api(method, path, body) {
 function el(tag, attrs = {}, ...children) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    // No attribute at all for null, undefined or false (so { disabled: null } doesn't disable).
+    if (v == null || v === false) continue;
     if (k === "class") e.className = v;
     else if (k === "style") e.style.cssText = v;
     else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
@@ -2182,6 +2184,7 @@ async function renderKeys() {
   box.replaceChildren(await stewardSettings(true));
 }
 
+let aiTab = ""; // which "Where Steward thinks" tab is open
 // The whole AI page (full) or, in first-time setup, just the model part.
 async function stewardSettings(full = false) {
   const wrap = el("div", { class: "ai" });
@@ -2219,7 +2222,8 @@ function aiPage(d, full, redraw) {
 
   // 2. Where it thinks.
   const where = c.source || (c.url ? (/127\.0\.0\.1|localhost|:11434|:8080/.test(c.url) ? "server" : "cloud") : "builtin");
-  let shown = where;
+  // The tab you picked stays picked when the page redraws (after a download starts, say).
+  let shown = aiTab || where;
   const choices = [["builtin", "On this server", "Built in. Nothing else to set up; speed depends on this computer."],
     ["server", "On a computer at home", "A model server on a stronger computer (a gaming PC's graphics card): Ollama, llama.cpp, LM Studio."],
     ["cloud", "In the cloud", "A provider's model. Quickest and cleverest; needs an account and sends requests out."]];
@@ -2227,7 +2231,7 @@ function aiPage(d, full, redraw) {
   const grid = el("div", { class: "ai-choices", role: "radiogroup" }, ...choices.map(([id, title, sub]) => {
     const b = el("button", { type: "button", class: "ai-choice", role: "radio", "aria-checked": String(id === shown) },
       el("span", { class: "title" }, title), el("span", { class: "sub" }, sub), id === where && c.model ? el("span", { class: "chip" }, "In use") : null);
-    b.addEventListener("click", () => { shown = id; grid.querySelectorAll(".ai-choice").forEach((x) => x.setAttribute("aria-checked", String(x === b))); pane.replaceChildren(...paneFor(id)); });
+    b.addEventListener("click", () => { shown = aiTab = id; grid.querySelectorAll(".ai-choice").forEach((x) => x.setAttribute("aria-checked", String(x === b))); pane.replaceChildren(...paneFor(id)); });
     return b;
   }));
   const paneFor = (id) => id === "builtin" ? builtinPane(d, redraw) : id === "server" ? serverPane(d, save) : cloudPane(d, save, "main");
@@ -2258,7 +2262,10 @@ function builtinPane(d, redraw) {
   const sp = d.spec, st = d.brain || {};
   const out = [];
   const facts = [sp.cpu || sp.arch, `${sp.cores} cores${sp.avx512 ? ", AVX-512" : sp.avx2 ? ", AVX2" : ""}`, `${gb(sp.memGB)} memory (${gb(sp.freeMemGB)} free)`, `${gb(sp.diskFreeGB)} free disk`, sp.gpu || "no graphics card visible here"];
-  out.push(el("div", { class: "ai-spec" }, el("span", { class: "title" }, "This computer"), el("span", { class: "sub" }, facts.join(" · "))));
+  // Read fresh from the computer every time this page loads; "Check again" after changing its hardware.
+  out.push(el("div", { class: "ai-spec" }, el("div", { class: "row" }, el("span", { class: "title grow" }, "This computer"),
+      el("button", { type: "button", class: "secondary small", onclick: () => redraw() }, "Check again")),
+    el("span", { class: "sub" }, facts.join(" · "))));
   if (!sp.engine) out.push(el("p", { class: "banner" }, "This FamLogic doesn't have the built-in engine (it's in the published Docker image). Use a model server instead."));
   if (sp.gpu === "NVIDIA graphics card") out.push(el("p", { class: "muted small" }, "There's a graphics card here: the built-in engine uses the CPU, so for speed run llama.cpp's CUDA image beside FamLogic (see \"On a computer at home\") and point Steward at it."));
   if (st.downloadError) out.push(el("p", { class: "banner" }, "The download stopped: " + st.downloadError));
@@ -2357,7 +2364,11 @@ function fallbackCard(d, save) {
   const timeout = el("select", {}, ...[[30, "30 seconds"], [60, "1 minute"], [90, "90 seconds"], [180, "3 minutes"]].map(([v, t]) => el("option", { value: v }, t)));
   timeout.value = String(c.timeout || 90);
   timeout.addEventListener("change", () => save({ timeout: Number(timeout.value) }, "Saved"));
-  const fill = () => body.replaceChildren(...(on.checked ? [...cloudPane(d, save, "fallback"), hoRow, el("label", {}, "Wait for the first model at most", timeout)] : []));
+  if (!has) { ho.disabled = true; timeout.disabled = true; }
+  const fill = () => body.replaceChildren(...(on.checked ? [
+    has ? null : el("p", { class: "muted small" }, "Fill this in and press Save the fallback: until then there isn't one."),
+    ...cloudPane(d, save, "fallback"), hoRow, el("label", {}, "Wait for the first model at most", timeout),
+    has ? null : el("p", { class: "muted small" }, "These two take effect once the fallback is saved.")] : []).filter(Boolean));
   on.addEventListener("change", () => { if (!on.checked && has) save({ fallback: null, handOff: false }, "No fallback"); fill(); });
   fill();
   return el("section", { class: "ai-card" }, el("h2", {}, "If it can't answer"), onRow, body);
