@@ -1170,3 +1170,19 @@ button.small { padding: .35rem .8rem; font-size: .85rem; border-radius: 999px; }
 @media (max-width: 800px) { .dossier { grid-template-columns: 1fr; } }
 dialog.quick-add { border: 0; border-radius: 22px; padding: 20px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); width: min(440px, 92vw); }
 dialog.quick-add h2 { margin-top: 0; }
+
+/* Two panes: a list on the left, the editor on the right */
+.two-pane { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; margin-top: 12px; }
+@media (max-width: 900px) { .two-pane { grid-template-columns: 1fr; } }
+.feat-jobs { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 4px 52px; }
+.feat-job { display: flex; align-items: center; gap: 10px; font-size: .9rem; color: var(--muted); }
+.feat-job span { flex: 1; }
+.feat-job select, .custom-jobs select { width: auto; }
+.custom-jobs li { display: flex; gap: 8px; align-items: center; }
+.custom-jobs input { flex: 1; }
+/* Module pages with two panes use the whole width */
+#module-soon:has(.two-pane), #module-soon:has(.dossier) { max-width: 1400px; background: transparent; box-shadow: none; padding: 0; }
+.quiz li:has(.feat-jobs) { flex-wrap: wrap; }
+.quiz li .feat-jobs { flex-basis: 100%; }
+.upkeep-add .feat-jobs label.feat-job { flex-direction: row; align-items: center; justify-content: space-between; text-align: left; }
+.subtabs .count:not(:empty) { margin-left: 6px; opacity: .7; }

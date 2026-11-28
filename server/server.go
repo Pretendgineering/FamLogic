@@ -182,6 +182,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PUT /api/display/stream", s.choreAuth(s.handleSetDisplayStream))
 	mux.HandleFunc("GET /api/home", s.choreAuth(s.handleHome))
 	mux.HandleFunc("PUT /api/home", s.choreAuth(s.handleSetHome))
+	mux.HandleFunc("POST /api/home/properties", s.choreAuth(s.handleAddProperty))
+	mux.HandleFunc("DELETE /api/home/properties/{id}", s.choreAuth(s.handleDeleteProperty))
 	mux.HandleFunc("GET /api/profiles", s.choreAuth(s.handleProfiles))
 	mux.HandleFunc("PUT /api/profiles/{id}", s.choreAuth(s.handleSetProfile))
 	mux.HandleFunc("POST /api/profiles/cards", s.choreAuth(s.handleAddCard))

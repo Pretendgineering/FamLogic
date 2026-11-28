@@ -3376,54 +3376,112 @@ function printProfiles(list, d, sections = d.sections) {
 // chores and bin days in Upkeep and Datebook from it; each chore's history is the log.
 let homeDrawnH = "";
 const DAYS = [["", "None"], ["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
-const EVERY_TEXT = (e) => ({ week: "every week", month: "every month", "2 weeks": "every 2 weeks", "3 months": "every 3 months", "6 months": "every 6 months", "12 months": "every year", "36 months": "every 3 years" }[e]
+const EVERY_TEXT = (e) => (/^\d+ (days|weeks|months)$/.test(e || "") && !["2 weeks", "3 months", "6 months", "12 months", "36 months"].includes(e) ? "every " + e : null) || ({ week: "every week", "2 months": "every 2 months", "24 months": "every 2 years", month: "every month", "2 weeks": "every 2 weeks", "3 months": "every 3 months", "6 months": "every 6 months", "12 months": "every year", "36 months": "every 3 years" }[e]
   || (DAYS.find(([k]) => k === e) ? "every " + DAYS.find(([k]) => k === e)[1] : e));
+let homeProperty = "home";
+const KIND_NAMES = { house: "A house", apartment: "A flat or apartment", cabin: "A cabin", outbuilding: "An outbuilding (barn, shed, workshop)", other: "Something else" };
 async function renderHomestead(box, force = false) {
   if (!force && box.contains(document.activeElement) && document.activeElement.matches("input, select")) return;
   let d;
-  try { d = await api("GET", "/api/home"); } catch (err) { box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
+  try { d = await api("GET", "/api/home?property=" + encodeURIComponent(homeProperty)); }
+  catch (err) { if (homeProperty !== "home") { homeProperty = "home"; return renderHomestead(box, true); } box.replaceChildren(el("p", { class: "muted" }, err.message)); return; }
   if (box.dataset.module !== "homestead") return;
-  const sig = JSON.stringify(d);
+  const sig = JSON.stringify([d, homeProperty]);
   if (!force && sig === homeDrawnH && box.childElementCount) return;
   homeDrawnH = sig;
   const p = d.profile;
+  const redraw = () => renderHomestead(box, true);
+  // The properties: the family's home first, then any others (a grandparent's flat, a cabin).
+  const props = el("nav", { class: "tabs subtabs", role: "tablist" }, ...(d.properties || []).map((x) => el("button", { role: "tab", "aria-selected": String(x.id === homeProperty),
+    onclick: () => { homeProperty = x.id; redraw(); } }, x.name)),
+    d.canEdit ? el("button", { type: "button", class: "link", onclick: async () => {
+      const name = prompt("What do you call it? (e.g. Gran's flat, The cabin, The barn)");
+      if (!name) return;
+      try { const made = await api("POST", "/api/home/properties", { name, kind: /barn|shed|garage|workshop/i.test(name) ? "outbuilding" : /flat|apartment/i.test(name) ? "apartment" : /cabin|cottage/i.test(name) ? "cabin" : "house" }); homeProperty = made.id; redraw(); }
+      catch (err) { alert(err.message); }
+    } }, "+ Another property") : null);
   // The upkeep it keeps: next due, last done, and Done.
   const jobs = d.jobs.slice().sort((a, b) => (a.due || "").localeCompare(b.due || ""));
   const jobRows = jobs.map((c) => {
     const done = el("button", { type: "button", class: "tonal" }, "Done");
-    done.addEventListener("click", async () => { try { await api("POST", `/api/chores/${c.id}/done`, {}); renderHomestead(box, true); } catch (err) { alert(err.message); } });
+    done.addEventListener("click", async () => { try { await api("POST", `/api/chores/${c.id}/done`, {}); redraw(); } catch (err) { alert(err.message); } });
     const last = c.done[0];
     return el("li", {}, el("div", { class: "grow" }, el("div", { class: "title" }, c.title),
       el("div", { class: "sub" }, [EVERY_TEXT(c.every), c.due && (c.due <= new Date().toISOString().slice(0, 10) ? "due now" : "next " + c.due), last ? "last done " + last.date : "not done yet"].filter(Boolean).join(" · "))), done);
   });
-  const parts = [el("h2", {}, "Upkeep for the home"), jobRows.length ? el("ul", { class: "list" }, ...jobRows)
-    : el("p", { class: "muted small" }, d.canEdit ? "Tick what your home has below, and its upkeep appears here, in Upkeep and on the calendar." : "Nothing set up yet.")];
+  const left = [el("h2", {}, "Upkeep for " + (p.id === "home" ? "the home" : p.name)), jobRows.length ? el("ul", { class: "list" }, ...jobRows)
+    : el("p", { class: "muted small" }, d.canEdit ? "Tick what it has, and its upkeep appears here, in Upkeep and on the calendar." : "Nothing set up yet.")];
+  const right = [];
   if (d.canEdit) {
+    const choices = d.everyChoices || ["week", "month", "3 months", "6 months", "12 months"];
+    // How often: the usual choices, or any number of days, weeks or months.
+    const everySel = (v, dflt) => {
+      const sel = el("select", { class: "every-sel" }, ...[...new Set([v || dflt, ...choices])].filter(Boolean).map((c) => el("option", { value: c }, EVERY_TEXT(c) + (c === dflt ? " (usual)" : ""))),
+        el("option", { value: "__other" }, "Something else…"));
+      sel.value = v || dflt;
+      sel.addEventListener("change", () => {
+        if (sel.value !== "__other") return;
+        const t = (prompt("How often? A number and days, weeks or months (e.g. 10 days, 4 months):", "") || "").trim().toLowerCase();
+        const m = t.match(/^(\d{1,2})\s*(day|week|month)s?$/);
+        if (!m) { sel.value = v || dflt; return; }
+        const val = `${m[1]} ${m[2]}s`;
+        sel.prepend(el("option", { value: val }, EVERY_TEXT(val)));
+        sel.value = val;
+      });
+      return sel;
+    };
+    const kind = el("select", {}, ...(d.kinds || Object.keys(KIND_NAMES)).map((k) => el("option", { value: k }, KIND_NAMES[k] || k)));
+    kind.value = p.kind || "house";
     const tenure = el("select", {}, ...[["", "Not saying"], ["own", "We own it"], ["rent", "We rent it"]].map(([v, t]) => el("option", { value: v }, t)));
     tenure.value = p.tenure || "";
     const daySel = (v) => { const s = el("select", {}, ...DAYS.map(([k, t]) => el("option", { value: k }, t))); s.value = v || ""; return s; };
     const bins = daySel(p.bins), recycling = daySel(p.recycling);
     const recEvery = el("select", {}, el("option", { value: "week" }, "Every week"), el("option", { value: "2 weeks" }, "Every 2 weeks"));
     recEvery.value = p.recyclingEvery || "week";
+    // What it has: a switch each, and (when on) how often each of its jobs comes round.
     const feats = el("ul", { class: "list quiz" }, ...d.catalog.map((f) => {
-      const box2 = el("input", { type: "checkbox", class: "switch", role: "switch", "data-key": f.key });
-      box2.checked = p.features.includes(f.key);
-      return el("li", {}, el("label", { class: "switch-label" }, box2, el("span", {}, f.name, el("span", { class: "muted small" }, " · " + f.jobs.map((j) => j.title + " " + EVERY_TEXT(j.every)).join("; ")))));
+      const sw = el("input", { type: "checkbox", class: "switch", role: "switch", "data-key": f.key });
+      sw.checked = p.features.includes(f.key);
+      const jobsBox = el("div", { class: "feat-jobs" }, ...f.jobs.map((j) => {
+        const sel = everySel((p.every || {})[j.key], j.every); sel.dataset.job = j.key; sel.dataset.usual = j.every;
+        return el("label", { class: "feat-job" }, el("span", {}, j.title), sel);
+      }));
+      jobsBox.hidden = !sw.checked;
+      sw.addEventListener("change", () => { jobsBox.hidden = !sw.checked; });
+      return el("li", {}, el("label", { class: "switch-label" }, sw, el("span", {}, f.name)), jobsBox);
     }));
+    // The family's own jobs.
+    const customList = el("ul", { class: "list custom-jobs" });
+    const addCustom = (j = { title: "", every: "month" }) => {
+      const title = el("input", { value: j.title, placeholder: "e.g. Bleed the radiators", maxlength: "80" });
+      const row = el("li", {}, title, everySel(j.every, ""), el("button", { type: "button", class: "link danger", onclick: () => row.remove() }, "Remove"));
+      customList.append(row);
+    };
+    (p.custom || []).forEach(addCustom);
     const save = el("button", { type: "submit" }, "Save");
     const form = el("form", { class: "upkeep-add" },
-      el("div", { class: "row" }, el("label", {}, "The home", tenure), el("label", {}, "Bins go out", bins), el("label", {}, "Recycling", recycling), el("label", {}, "How often", recEvery)),
-      el("div", { class: "muted small" }, "What the home has (each adds its upkeep as a chore for anyone):"), feats, el("div", { class: "row" }, save));
+      el("div", { class: "row" }, el("label", {}, "It's", kind), el("label", {}, "Owned or rented", tenure)),
+      el("div", { class: "row" }, el("label", {}, "Bins go out", bins), el("label", {}, "Recycling", recycling), el("label", {}, "How often", recEvery)),
+      el("h3", {}, "What it has"), el("div", { class: "muted small" }, "Each adds its upkeep as a chore for anyone. Change how often if the usual doesn't suit."), feats,
+      el("h3", {}, "Your own jobs"), customList, el("button", { type: "button", class: "link", onclick: () => addCustom() }, "+ Add a job"),
+      el("div", { class: "row" }, save,
+        p.id !== "home" ? el("button", { type: "button", class: "link danger", onclick: async () => {
+          if (!confirm(`Stop looking after ${p.name}? Its chores and bin days stop.`)) return;
+          try { await api("DELETE", `/api/home/properties/${encodeURIComponent(p.id)}`); homeProperty = "home"; redraw(); } catch (err) { alert(err.message); }
+        } }, "Remove this property") : null));
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
-      const body = { tenure: tenure.value, bins: bins.value, recycling: recycling.value, recyclingEvery: recEvery.value,
-        features: [...feats.querySelectorAll("input[data-key]")].filter((b) => b.checked).map((b) => b.dataset.key) };
+      const features = [...feats.querySelectorAll("input[data-key]")].filter((b) => b.checked).map((b) => b.dataset.key);
+      const every = {};
+      for (const sel of feats.querySelectorAll("select[data-job]")) if (sel.value !== sel.dataset.usual && sel.value !== "__other") every[sel.dataset.job] = sel.value;
+      const custom = [...customList.children].map((li) => ({ title: li.querySelector("input").value.trim(), every: li.querySelector("select").value })).filter((j) => j.title && j.every !== "__other");
+      const body = { kind: kind.value, tenure: tenure.value, bins: bins.value, recycling: recycling.value, recyclingEvery: recEvery.value, features, every, custom };
       save.disabled = true;
-      try { await api("PUT", "/api/home", body); renderHomestead(box, true); } catch (err) { alert(err.message); save.disabled = false; }
+      try { await api("PUT", "/api/home?property=" + encodeURIComponent(homeProperty), body); redraw(); } catch (err) { alert(err.message); save.disabled = false; }
     });
-    parts.push(el("h2", {}, "Your home"), form);
+    right.push(el("h2", {}, p.id === "home" ? "Your home" : p.name), form);
   }
-  box.replaceChildren(...parts);
+  box.replaceChildren(props, el("div", { class: "two-pane" }, el("div", { class: "panel" }, ...left), right.length ? el("div", { class: "panel" }, ...right) : null));
 }
 
 // Corkboard: the TV app and family displays. Parents start quiet time and send

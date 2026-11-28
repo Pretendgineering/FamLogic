@@ -72,3 +72,62 @@ func TestHomestead(t *testing.T) {
 		t.Fatal("duplicates")
 	}
 }
+
+func TestHomesteadProperties(t *testing.T) {
+	f := newChatFamily(t)
+	e := f.e
+	e.do("POST", "/api/admin/login", "", map[string]string{"password": "correct horse"})
+	e.status("PUT", "/api/admin/modules", "", map[string]any{"enabled": map[string]bool{"thereabouts": true, "chores": true, "calendar": true, "homestead": true}, "setupDone": true})
+	sources := func() map[string]map[string]any {
+		_, ch := e.status("GET", "/api/chores", f.mom, nil)
+		out := map[string]map[string]any{}
+		for _, c := range ch["chores"].([]any) {
+			cm := c.(map[string]any)
+			if src, _ := cm["source"].(string); strings.HasPrefix(src, "home") {
+				out[src] = cm
+			}
+		}
+		return out
+	}
+	// The family's home, with a frequency changed and a job of their own.
+	if st, res := e.status("PUT", "/api/home", f.mom, map[string]any{"features": []string{"gutters"}, "every": map[string]string{"gutters-clean": "3 months"},
+		"custom": []map[string]string{{"title": "Bleed the radiators", "every": "12 months"}}}); st != 200 {
+		t.Fatalf("set home: %d %v", st, res)
+	}
+	s := sources()
+	if s["home:gutters-clean"]["every"] != "3 months" || s["home:custom-bleed-the-radiators"] == nil {
+		t.Fatalf("home chores: %v", s)
+	}
+	// A second property: its own chores, for its name.
+	st, made := e.status("POST", "/api/home/properties", f.mom, map[string]any{"name": "Gran's flat", "kind": "apartment"})
+	if st != 200 {
+		t.Fatalf("add property: %d %v", st, made)
+	}
+	id := made["id"].(string)
+	if st, res := e.status("PUT", "/api/home?property="+id, f.mom, map[string]any{"features": []string{"smoke"}}); st != 200 {
+		t.Fatalf("set flat: %d %v", st, res)
+	}
+	s = sources()
+	c := s["home/"+id+":smoke-test"]
+	if c == nil || c["for"] != "Gran's flat" {
+		t.Fatalf("flat chores: %v", s)
+	}
+	if s["home:gutters-clean"] == nil {
+		t.Fatal("the flat's save retired the home's chores")
+	}
+	_, res := e.status("GET", "/api/home", f.mom, nil)
+	if len(res["properties"].([]any)) != 2 {
+		t.Fatalf("properties: %v", res["properties"])
+	}
+	// Removing it retires its chores, and leaves the home's.
+	if st, _ := e.status("DELETE", "/api/home/properties/"+id, f.mom, nil); st != 204 {
+		t.Fatalf("delete: %d", st)
+	}
+	s = sources()
+	if s["home/"+id+":smoke-test"] != nil || s["home:gutters-clean"] == nil {
+		t.Fatalf("after delete: %v", s)
+	}
+	if st, _ := e.status("DELETE", "/api/home/properties/home", f.mom, nil); st != 400 {
+		t.Fatalf("the home itself: %d", st)
+	}
+}
