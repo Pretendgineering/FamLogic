@@ -248,6 +248,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/openapi.json", s.handleOpenAPI)
 	mux.HandleFunc("POST /mcp", s.handleMCP)
 	mux.HandleFunc("GET /api/weather", s.device(s.handleWeather))
+	mux.HandleFunc("POST /api/admin/owner", s.handleOwner)
 	mux.HandleFunc("GET /api/console/home", s.handleWebHome)
 	mux.HandleFunc("PUT /api/console/home", s.handleWebHome)
 	mux.HandleFunc("GET /api/fridge", s.device(s.handleFridge))
@@ -1207,7 +1208,8 @@ func (s *Server) session(r *http.Request) Session {
 	if !found || m.role() != RoleParent || m.PasswordHash == "" {
 		return Session{} // removed, or no longer a parent
 	}
-	return Session{Member: m}
+	// The main admin signed in as themselves: the main admin's powers, as a family member.
+	return Session{Member: m, Owner: s.store.OwnerMember() == m.ID}
 }
 
 func (s *Server) isAdmin(r *http.Request) bool { return s.session(r).Admin() }
@@ -1320,7 +1322,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "please log in")
 		return
 	}
-	out := map[string]any{"owner": sess.Owner, "admin": sess.Admin(), "server": s.serverInfo()}
+	out := map[string]any{"owner": sess.Owner, "admin": sess.Admin(), "server": s.serverInfo(), "ownerInFamily": s.store.OwnerMember() != ""}
 	if sess.Member != nil {
 		out["member"] = toPublic([]Member{*sess.Member})[0]
 	}

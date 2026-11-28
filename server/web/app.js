@@ -1370,7 +1370,12 @@ function renderFamily() {
   const roles = serverFeatures.includes("roles");
   const canSetUp = isAdmin() || (me.member && me.member.role === "parent");
   const people = lastMembers.filter((m) => m.access !== "display");
-  $("#family-list").replaceChildren(...people.map((m) => {
+  // The main admin isn't in the family yet: offer to add them.
+  const meRow = me.owner && !me.member && !me.ownerInFamily ? el("li", { class: "acc you-row" },
+    el("div", { class: "acc-head" }, el("div", { class: "grow" }, el("div", { class: "title" }, "You're not in the family list yet"),
+      el("div", { class: "sub" }, "Make your own account so you're on the map and in chats. The admin password stays, for recovery.")),
+      el("button", { type: "button", class: "tonal", onclick: () => { setupStep = SETUP_STEPS.findIndex((x) => x.title === "You"); setupMade.length = 0; renderSetup(); setupDialog.showModal(); } }, "Add yourself"))) : null;
+  $("#family-list").replaceChildren(...(meRow ? [meRow] : []), ...people.map((m) => {
     const access = m.access || (m.role === "child" ? "younger_child" : m.role === "dependent" ? "dependent" : "parent");
     let control;
     if (!roles || !isAdmin() || access === "dependent") {
@@ -1889,6 +1894,25 @@ const SETUP_STEPS = [
       const pin = $("#setup-pin").value.trim();
       if (pin) await api("PUT", "/api/admin/pin", { pin });
     } },
+  // The main admin, logged in with the admin password: who are you in the family?
+  { title: "You", skip: () => !(me.owner && !me.member && !me.ownerInFamily), render(box) {
+      const parents = lastMembers.filter((m) => m.role === "parent" && m.access !== "display");
+      box.append(el("p", {}, "You're in the family too. Make your own account: you'll show up on the map and in chats like everyone else, and sign in here with it from now on."),
+        el("p", { class: "muted small" }, "The admin password still works, for when you're locked out."),
+        el("label", {}, "Your name", el("input", { id: "setup-me-name", maxlength: "40", placeholder: "e.g. Alex" })),
+        el("label", {}, "Username", el("input", { id: "setup-me-user", maxlength: "32", autocomplete: "username", placeholder: "e.g. alex" })),
+        el("label", {}, "Password", el("input", { id: "setup-me-pass", type: "password", autocomplete: "new-password", placeholder: "10 or more characters" })),
+        parents.length ? el("label", {}, "Or: I'm already in the family as", el("select", { id: "setup-me-existing" }, el("option", { value: "" }, "Nobody yet"), ...parents.map((m) => el("option", { value: m.id }, m.name)))) : null);
+    },
+    async save() {
+      const existing = ($("#setup-me-existing") || {}).value;
+      if (existing) { await api("POST", "/api/admin/owner", { id: existing }); me.ownerInFamily = true; return; }
+      const name = $("#setup-me-name").value.trim();
+      if (!name && !$("#setup-me-user").value.trim()) return; // skipped
+      const m = await api("POST", "/api/admin/owner", { name, username: $("#setup-me-user").value, password: $("#setup-me-pass").value });
+      me.member = m; me.ownerInFamily = true;
+      $("#whoami").textContent = `Logged in as ${m.name} (admin)`;
+    } },
   { title: "Who's in your family?", render(box) {
       const rows = el("div", { id: "setup-people", class: "setup-people" });
       const addRow = () => rows.append(el("div", { class: "row" }, el("input", { placeholder: "Name", maxlength: "40" }),
@@ -1950,8 +1974,7 @@ const SETUP_STEPS = [
     }, async save() {} },
   { title: "You're set", render(box) {
       box.append(el("ul", { class: "plain" },
-        el("li", {}, el("strong", {}, "Family: "), "people, roles and invites."),
-        el("li", {}, el("strong", {}, "Access & Control: "), "what each child can use, their home screen, the parent PIN."),
+        el("li", {}, el("strong", {}, "Family: "), "people, roles, invites, groups, and what each child can use (open someone)."),
         el("li", {}, el("strong", {}, "Settings: "), "modules, backups, AI and API, and Run setup again.")));
     }, async save() {} },
 ];
@@ -1971,14 +1994,15 @@ function openSetup() {
   renderSetup();
   if (!setupDialog.open) setupDialog.showModal();
 }
-$("#setup-back").addEventListener("click", () => { setupStep = Math.max(0, setupStep - 1); renderSetup(); });
+const stepSkipped = (i) => SETUP_STEPS[i] && SETUP_STEPS[i].skip && SETUP_STEPS[i].skip();
+$("#setup-back").addEventListener("click", () => { do { setupStep = Math.max(0, setupStep - 1); } while (setupStep > 0 && stepSkipped(setupStep)); renderSetup(); });
 $("#setup-later").addEventListener("click", () => { setupDialog.close(); refresh(); });
 $("#setup-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
     await SETUP_STEPS[setupStep].save();
     if (setupStep === SETUP_STEPS.length - 1) { setupDialog.close(); showView(view === "home" ? "home" : view); refresh(); return; }
-    setupStep++;
+    do { setupStep++; } while (setupStep < SETUP_STEPS.length - 1 && stepSkipped(setupStep));
     renderSetup();
   } catch (err) { alert(err.message); }
 });
@@ -1993,7 +2017,9 @@ let chatMsgs = [];
 let chatTimer = null;
 const personById = (id) => lastMembers.find((m) => m.id === id);
 const nameOf = (id) => (personById(id) || {}).name || "Someone";
-const chatBase = () => me.owner ? "/api/admin/chat" : "/api/chat";
+// The admin password login (not a family member): every chat, read only.
+const adminReader = () => me.owner && !me.member;
+const chatBase = () => adminReader() ? "/api/admin/chat" : "/api/chat";
 
 async function loadChats() {
   try {
@@ -2005,7 +2031,7 @@ async function loadChats() {
 }
 
 function renderChatList() {
-  $("#chat-note").textContent = me.owner ? "You're the main admin: you can read every chat, but not post. Log in with your own account to chat."
+  $("#chat-note").textContent = adminReader() ? "You're the main admin: you can read every chat, but not post. Log in with your own account to chat."
     : me.member && me.member.role === "parent" && chatConvs.some((c) => c.oversight) ? "Chats marked “Watching” are your children's: you can read them, not post." : "";
   $("#chat-convs").replaceChildren(...chatConvs.map((c) => {
     const last = c.last ? (c.last.text || "Photo") : "No messages yet";
@@ -2024,8 +2050,8 @@ function renderChatList() {
 const STATUS_LABELS = { pending: "Needs OK", paused: "Paused", blocked: "Blocked" };
 const hasChildIn = (conv) => conv.members.some((id) => (personById(id) || {}).role === "child");
 // Parents (and the main admin) manage chats with a child in them.
-const canModerate = (conv) => conv.kind !== "family" && (me.owner || (me.member && me.member.role === "parent" && hasChildIn(conv)));
-const modPath = (id) => (me.owner ? "/api/admin/chat/" : "/api/chat/") + encodeURIComponent(id) + "/moderate";
+const canModerate = (conv) => conv.kind !== "family" && (adminReader() || (me.member && me.member.role === "parent" && hasChildIn(conv)));
+const modPath = (id) => (adminReader() ? "/api/admin/chat/" : "/api/chat/") + encodeURIComponent(id) + "/moderate";
 
 async function moderate(conv, action) {
   if (action === "delete" && !confirm(`Delete "${conv.title}" and all its messages and photos for everyone? This can't be undone.`)) return;
@@ -2042,7 +2068,7 @@ async function moderate(conv, action) {
 async function deleteMessage(conv, m) {
   if (!confirm("Delete this message for everyone?")) return;
   try {
-    await api("DELETE", (me.owner ? "/api/admin/chat/" : "/api/chat/") + `${encodeURIComponent(conv.id)}/messages/${m.id}`);
+    await api("DELETE", (adminReader() ? "/api/admin/chat/" : "/api/chat/") + `${encodeURIComponent(conv.id)}/messages/${m.id}`);
     chatMsgs = chatMsgs.filter((x) => x.id !== m.id);
     await pollThread();
   } catch (err) { alert(err.message); }
@@ -2106,10 +2132,10 @@ function renderThread(data) {
   if (atBottom || box.dataset.conv !== conv.id) box.scrollTop = box.scrollHeight;
   box.dataset.conv = conv.id;
   renderModeration(conv);
-  const canPost = !!data.canPost && !me.owner;
+  const canPost = !!data.canPost && !adminReader();
   $("#chat-compose").hidden = !canPost;
   $("#chat-readonly").hidden = canPost;
-  $("#chat-readonly").textContent = me.owner ? "Read only (main admin)."
+  $("#chat-readonly").textContent = adminReader() ? "Read only (main admin)."
     : conv.status && conv.members.includes((me.member || {}).id) ? "" : "You can read this chat because a child of yours is in it. Only the people in it can post.";
   if (!$("#chat-readonly").textContent) $("#chat-readonly").hidden = true;
 }
@@ -2125,8 +2151,8 @@ async function pollThread() {
   if (!chatOpen) return;
   try {
     const after = chatMsgs.length ? chatMsgs[chatMsgs.length - 1].id : 0;
-    const data = await api("GET", `${chatBase()}/${encodeURIComponent(chatOpen)}/messages` + (after && !me.owner ? `?after=${after}` : ""));
-    if (after && !me.owner) chatMsgs = chatMsgs.concat(data.messages); else chatMsgs = data.messages;
+    const data = await api("GET", `${chatBase()}/${encodeURIComponent(chatOpen)}/messages` + (after && !adminReader() ? `?after=${after}` : ""));
+    if (after && !adminReader()) chatMsgs = chatMsgs.concat(data.messages); else chatMsgs = data.messages;
     renderThread(data);
     const newest = chatMsgs.length ? chatMsgs[chatMsgs.length - 1].id : 0;
     if (data.canPost && newest) {
@@ -2209,7 +2235,7 @@ $("#chat-new-form").addEventListener("submit", async (e) => {
 async function start() {
   try { me = await api("GET", "/api/admin/session"); } catch (_) { return; }
   document.body.classList.toggle("parent-mode", !me.admin);
-  document.body.classList.toggle("owner-mode", !!me.owner);
+  document.body.classList.toggle("owner-mode", !!me.owner && !me.member);
   $("#whoami").textContent = me.member ? `Logged in as ${me.member.name}${me.admin ? " (admin)" : ""}` : "Logged in as the main admin";
   $("#login").hidden = true;
   $("#app").hidden = false;
