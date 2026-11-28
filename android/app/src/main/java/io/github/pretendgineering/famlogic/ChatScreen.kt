@@ -103,6 +103,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -537,7 +539,9 @@ private fun ConversationView(
     var iconPicking by remember { mutableStateOf(false) }
     val readAloud = Access.younger && Access.can("voice")
     // Messages can be read aloud here (a speaker button beside each).
-    val canHear = Access.can("voice") && Voice.speaker(context, prefs.serverFeatures) != null
+    // Talking and reading aloud are accessibility features: children and Easy viewing only.
+    val voiceUi = Access.isChild || Access.big
+    val canHear = voiceUi && Access.can("voice") && Voice.speaker(context, prefs.serverFeatures) != null
     LaunchedEffect(convId) { prefs.lastChat = convId }
     DisposableEffect(convId) { Voice.warmUp(context); onDispose { Voice.stop() } }
     var deleting by remember { mutableStateOf<ChatMessage?>(null) }
@@ -843,7 +847,9 @@ private fun ConversationView(
                             scope.launch { if (!Voice.speak(context, prefs, "$name said: ${m.text}", who?.voice.orEmpty())) Voice.oops(context) }
                         }) else null,
                     )
-                    if (Access.can("chat_times") && (older == null || !sameDay(older.time, m.time))) DayHeader(m.time)
+                    // A marker for a new day, or after a quiet spell (an hour or more); otherwise
+                    // times stay out of the way (swipe a message to see its time).
+                    if (Access.can("chat_times") && (older == null || !sameDay(older.time, m.time) || m.time - older.time >= 3_600_000)) DayHeader(m.time)
                 }
             }
             LaunchedEffect(listState.firstVisibleItemIndex) { if (listState.firstVisibleItemIndex == 0) newBelow = 0 }
@@ -896,7 +902,7 @@ private fun ConversationView(
             }
             // Talking: younger children get a big push-to-talk button that sends what they say;
             // everyone else a small one that types it into the message box.
-            val canTalk = canPost && Access.can("voice") && Voice.listener(context, prefs.serverFeatures) != null
+            val canTalk = canPost && voiceUi && Access.can("voice") && Voice.listener(context, prefs.serverFeatures) != null
             // Children and tablets: a wide talk bar above the message box. Younger children's
             // goes straight out (and is read back); everyone else's types into the box.
             val talkBar = canTalk && (Access.isChild || LocalConfiguration.current.screenWidthDp >= 600)
@@ -930,14 +936,14 @@ private fun ConversationView(
                 TalkButton(
                     prefs, barH,
                     bar = true,
-                    // Younger children's message goes straight out; everyone else's is typed into the box first.
-                    label = "Hold to talk",
-                    letGo = if (Access.younger) "send" else "type it",
+                    // Children's messages go straight out when they stop talking; grown-ups' are typed into the box first.
+                    label = "Hold or tap to talk",
+                    letGo = if (Access.isChild) "send" else "type it",
                     modifier = Modifier.weight(1f),
                     onText = { said ->
                         when {
                             said.isEmpty() -> Voice.oops(context)
-                            Access.younger -> sendText(said) {
+                            Access.isChild -> sendText(said) {
                                 // A cheerful "Sent!", so they know it went (not the whole message again).
                                 Voice.sent(context)
                             }
@@ -980,7 +986,7 @@ private fun ConversationView(
                         shape = RoundedCornerShape(24.dp),
                     )
                     // A voice message, when nothing's typed; not with the talk bar there already.
-                    if (text.isBlank() && staged.isEmpty() && recording == null && Access.can("voice") && !talkBar) {
+                    if (text.isBlank() && staged.isEmpty() && recording == null && voiceUi && Access.can("voice") && !talkBar) {
                         // Nothing typed: a voice message instead.
                         IconButton(onClick = {
                             if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -1124,7 +1130,22 @@ private fun Bubble(
     onReact: (String) -> Unit = {}, onOpenPhoto: (Bitmap) -> Unit = {},
 ) {
     val sender = people.find { it.id == m.sender }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+    // Swipe a message sideways to see when it was sent (it hides again after a few seconds).
+    var reveal by remember { mutableStateOf(false) }
+    var dragged by remember { mutableStateOf(0f) }
+    LaunchedEffect(reveal) { if (reveal) { delay(4_000); reveal = false } }
+    val slide by androidx.compose.animation.core.animateFloatAsState(if (reveal) (if (mine) -24f else 24f) else 0f, label = "slide")
+    Row(
+        Modifier.fillMaxWidth()
+            .graphicsLayer { translationX = slide * density }
+            .then(androidx.compose.ui.Modifier.pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { dragged = 0f },
+                    onDragEnd = { if (kotlin.math.abs(dragged) > 40.dp.toPx()) reveal = true },
+                ) { _, dx -> dragged += dx }
+            }),
+        verticalAlignment = Alignment.Bottom,
+    ) {
     if (!mine) {
         // Their picture (emoji or initial, in their colour) so you can tell who wrote it without reading.
         val face = if (Access.big || Access.younger) 52 else 36
@@ -1180,8 +1201,8 @@ private fun Bubble(
         if (!mine) speaker()
         }
         ReactionChips(m.reactions, prefs.memberId, onReact)
-        // Times can be switched off for children (younger ones start without them).
-        val times = Access.can("chat_times")
+        // A message's time shows only when it's swiped sideways (and children may not have times at all).
+        val times = Access.can("chat_times") && reveal
         if (times || seenBy.isNotEmpty()) Text(
             (if (times) DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(m.time)) else "") +
                 if (seenBy.isNotEmpty()) (if (times) " · " else "") + "Seen by ${seenBy.joinToString(", ")}" else "",
@@ -1195,10 +1216,11 @@ private fun Bubble(
 
 @Composable
 private fun DayHeader(time: Long) {
+    val clock = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(time))
     val label = when {
-        sameDay(time, System.currentTimeMillis()) -> "Today"
-        sameDay(time, System.currentTimeMillis() - 86_400_000) -> "Yesterday"
-        else -> DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(time))
+        sameDay(time, System.currentTimeMillis()) -> "Today $clock"
+        sameDay(time, System.currentTimeMillis() - 86_400_000) -> "Yesterday $clock"
+        else -> DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(time)) + " " + clock
     }
     Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

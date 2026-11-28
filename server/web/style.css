@@ -1234,3 +1234,4 @@ button.link.danger, .link.danger { background: none; color: var(--danger); box-s
 .recipe-ings { columns: 2; }
 #module-soon:has(.meal-grid), #module-soon:has(.recipe-panes) { max-width: 1600px; background: transparent; box-shadow: none; padding: 0; }
 @media (max-width: 800px) { .recipe-ings { columns: 1; } }
+.steward-fab { border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--secondary)); color: #fff; box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 45%, transparent); }

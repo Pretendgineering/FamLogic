@@ -202,8 +202,12 @@ var errBadAudio = errors.New("send 16 kHz mono 16-bit WAV audio")
 // "Heart" and "Michael", two of its warmest English voices.
 var voiceSpeakers = map[string]int{"": 3, "female": 3, "male": 16}
 
-// slowSpeed reads a little slower for young children: unhurried, not sleepy.
-const slowSpeed = 0.85
+// Reading speeds: everyone hears a calm pace; young children a little slower still
+// (unhurried, not sleepy).
+const (
+	normalSpeed = 0.9
+	slowSpeed   = 0.8
+)
 
 func validVoice(v string) bool { _, ok := voiceSpeakers[v]; return ok }
 
@@ -222,7 +226,7 @@ func (v *Voice) Speak(ctx context.Context, text, voice string, slow bool) ([]byt
 	defer os.Remove(f.Name())
 	ctx, cancel := context.WithTimeout(ctx, voiceTimeout)
 	defer cancel()
-	speed := 1.0
+	speed := normalSpeed
 	if slow {
 		speed = slowSpeed
 	}

@@ -37,6 +37,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.draw.shadow
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -272,13 +275,19 @@ fun androidx.compose.foundation.layout.BoxScope.StewardButton(prefs: Prefs, page
         enter = androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn(),
         exit = androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut(),
     ) {
-    androidx.compose.material3.FloatingActionButton(
-        onClick = { Steward.sheetOpen = true },
-        shape = androidx.compose.foundation.shape.CircleShape,
-        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    // Steward's own look, so it's never mistaken for a page's button or a microphone:
+    // a round orb in the theme's two colours with a white sparkle.
+    val size = if (Access.pictures || Access.big) 64.dp else 56.dp
+    Box(
+        Modifier.size(size)
+            .shadow(8.dp, androidx.compose.foundation.shape.CircleShape, ambientColor = MaterialTheme.colorScheme.primary, spotColor = MaterialTheme.colorScheme.primary)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, Accent2)))
+            .clickable(onClickLabel = "Ask ${Access.name("steward")}") { Steward.sheetOpen = true }
+            .semantics { contentDescription = "Ask ${Access.name("steward")}" },
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(FamIcons.Spark, contentDescription = "Ask ${Access.name("steward")}", modifier = Modifier.size(if (Access.pictures || Access.big) 30.dp else 24.dp))
+        Icon(FamIcons.Spark, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(size * .48f))
     }
     }
     if (Steward.sheetOpen) {

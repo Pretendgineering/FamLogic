@@ -109,7 +109,7 @@ object Voice {
         val slow = Access.younger
         return when (speaker(context, prefs.serverFeatures)) {
             Engine.Phone -> {
-                tts?.engine?.setSpeechRate(if (slow) 0.85f else 1f)
+                tts?.engine?.setSpeechRate(if (slow) 0.8f else 0.9f)
                 tts?.engine?.speak(say, TextToSpeech.QUEUE_FLUSH, null, "famlogic-${say.hashCode()}")
                 true
             }

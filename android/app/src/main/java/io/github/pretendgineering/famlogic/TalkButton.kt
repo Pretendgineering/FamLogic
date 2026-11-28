@@ -91,35 +91,48 @@ fun TalkButton(
     val beat by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(450), RepeatMode.Reverse), label = "beat")
     val mouth = if (listening) 0.65f + 0.35f * beat else 0.8f
 
+    // Two ways to talk: hold it down and let go when done, or tap it once to start and
+    // tap again to stop. Either way, what was said goes to onText when the recording ends.
+    var take by remember { mutableStateOf<Voice.Take?>(null) }
+    var latched by remember { mutableStateOf(false) } // tapped on: recording until the next tap
+    fun finish(t: Voice.Take) {
+        listening = false; latched = false; take = null
+        thinking = true
+        scope.launch {
+            val text = runCatching { t.finish() }.getOrDefault("")
+            thinking = false
+            onText(text.trim())
+        }
+    }
     val press = Modifier
-        .semantics { contentDescription = "Hold to talk, let go to send" }
+        .semantics { contentDescription = if (latched) "Recording. Tap to stop and send." else "Hold to talk, or tap to start and tap again to stop" }
         .pointerInput(Unit) {
             detectTapGestures(onPress = {
                 if (thinking) return@detectTapGestures
+                // Tapped on earlier: this tap stops it.
+                take?.let { t -> if (latched) { haptics.performHapticFeedback(HapticFeedbackType.LongPress); finish(t); return@detectTapGestures } }
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                     askMic.launch(Manifest.permission.RECORD_AUDIO)
                     return@detectTapGestures
                 }
                 Voice.stop() // don't record the phone reading something aloud
-                val take = Voice.start(context, prefs)
-                if (take == null) {
+                val t = Voice.start(context, prefs)
+                if (t == null) {
                     Voice.oops(context)
                     return@detectTapGestures
                 }
+                take = t
                 listening = true
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                val down = System.currentTimeMillis()
                 val released = tryAwaitRelease()
-                listening = false
-                if (!released) {
-                    take.cancel()
+                if (!released) { // dragged off: nothing sent
+                    t.cancel(); take = null; listening = false
                     return@detectTapGestures
                 }
-                thinking = true
-                scope.launch {
-                    val text = runCatching { take.finish() }.getOrDefault("")
-                    thinking = false
-                    onText(text.trim())
-                }
+                // A quick tap: keep listening until it's tapped again. A hold: done now.
+                if (System.currentTimeMillis() - down < 400) latched = true
+                else finish(t)
             })
         }
 
@@ -140,7 +153,7 @@ fun TalkButton(
                     if (thinking) CircularProgressIndicator(Modifier.fillMaxSize(), strokeWidth = 4.dp)
                 }
                 Text(
-                    when { thinking -> "Just a moment…"; listening -> "Listening… let go to $letGo"; else -> label },
+                    when { thinking -> "Just a moment…"; latched -> "Listening… tap to $letGo"; listening -> "Listening… let go to $letGo"; else -> label },
                     Modifier.padding(start = 14.dp),
                     style = if (size >= 72.dp) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
