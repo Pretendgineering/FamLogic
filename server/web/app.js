@@ -2291,11 +2291,7 @@ async function renderUpkeep(box, force = false) {
   const ed = upkeepEdit;
   const title = el("input", { placeholder: "e.g. Unload the dishwasher", maxlength: "80", value: ed ? ed.title : "" });
   // Who it's for: a toggle button per person (lit when chosen), like the app.
-  const who = el("div", { class: "toggles" }, ...people.map((m) => {
-    const b = el("button", { type: "button", class: "toggle", "data-id": m.id, "aria-pressed": ed && ed.who.includes(m.id) ? "true" : "false" }, avatarOf(m), el("span", {}, m.name));
-    b.addEventListener("click", () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"));
-    return b;
-  }));
+  const who = whoPicker(people.filter((m) => m.access !== "display"), ed ? ed.who : []);
   const every = el("select", {}, ...REPEATS.map(([k, v]) => el("option", { value: k }, v)));
   const when = el("select", {}, ...WHENS.map(([k, v]) => el("option", { value: k }, v)));
   if (ed) { every.value = ed.every || ""; when.value = WHENS.some(([k]) => k === ed.when) ? ed.when : ""; }
@@ -2315,7 +2311,7 @@ async function renderUpkeep(box, force = false) {
   add.addEventListener("submit", (ev) => {
     ev.preventDefault();
     if (!title.value.trim()) return;
-    const body = { title: title.value.trim(), who: [...who.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.id),
+    const body = { title: title.value.trim(), who: who.chosen(),
       every: every.value, due: due.value, when: when.value, stars: Number(stars.value) || 0, notes: notes.value };
     if (ed) { upkeepEdit = null; act("PATCH", `/api/chores/${ed.id}`, body); } else act("POST", "/api/chores", body);
   });
@@ -2707,7 +2703,7 @@ async function renderLists(box, force = false) {
     const open = listOpen === l.id || data.lists.length === 1;
     const left = l.items.filter((i) => !i.done).length;
     const head = el("div", { class: "list-head clickable", onclick: () => { listOpen = open ? "" : l.id; renderLists(box, true); } },
-      el("div", { class: "title" }, l.title), el("span", { class: "muted small" }, `${l.kind === "todos" ? "To-dos" : "List"} · ${left ? left + " to go" : "all done"}`));
+      el("div", { class: "title" }, l.title), el("span", { class: "muted small" }, [(l.who || []).length ? l.who.map((id) => (lastMembers.find((m) => m.id === id) || {}).name).filter(Boolean).join(", ") : "Everyone", left ? left + " to go" : "all done"].join(" · ")));
     if (!open) return el("div", { class: "panel list-card" }, head);
     const rows = [...l.items.filter((i) => !i.done), ...l.items.filter((i) => i.done)].map((it) => {
       const box2 = el("input", { type: "checkbox", ...(it.done ? { checked: "" } : {}) });
@@ -2729,10 +2725,17 @@ async function renderLists(box, force = false) {
   };
   // A new list.
   const title = el("input", { placeholder: "e.g. Shopping, Beach trip", maxlength: "60" });
-  const kind = el("select", {}, el("option", { value: "list" }, "Shared list"), el("option", { value: "todos" }, "To-dos"));
-  const make = el("form", { class: "row list-add" }, title, kind, el("button", { type: "submit" }, "New list"));
-  make.addEventListener("submit", (ev) => { ev.preventDefault(); if (title.value.trim()) act("POST", "/api/lists", { title: title.value.trim(), kind: kind.value }); });
-  box.replaceChildren(...(data.lists.length ? data.lists.map(listCard) : [el("p", { class: "muted" }, "No lists yet.")]),
+  const kind = el("select", {}, el("option", { value: "list" }, "A shared list (things to get or pack)"), el("option", { value: "todos" }, "To-dos (jobs to get done)"));
+  const tags = whoPicker(people.filter((m) => m.access !== "display"));
+  const make = el("form", { class: "upkeep-add" }, el("div", { class: "row" }, el("label", { class: "grow" }, "Name", title), el("label", {}, "Kind", kind)),
+    el("div", { class: "muted small" }, "For (nobody picked: the whole family)"), tags, el("div", { class: "row" }, el("button", { type: "submit" }, "New list")));
+  make.addEventListener("submit", (ev) => { ev.preventDefault(); if (title.value.trim()) act("POST", "/api/lists", { title: title.value.trim(), kind: kind.value, who: tags.chosen() }); });
+  const shared = data.lists.filter((l) => l.kind !== "todos"), todos = data.lists.filter((l) => l.kind === "todos");
+  box.replaceChildren(el("div", { class: "two-pane" },
+    el("div", {}, el("h2", {}, "Shared lists"), el("p", { class: "muted small" }, "Things to get or pack, for anyone to tick off: shopping, a trip, a party."),
+      ...(shared.length ? shared.map(listCard) : [el("p", { class: "muted" }, "No shared lists yet.")])),
+    el("div", {}, el("h2", {}, "To-dos"), el("p", { class: "muted small" }, "Jobs to get done, each for someone (or everyone), with a day if it matters."),
+      ...(todos.length ? todos.map(listCard) : [el("p", { class: "muted" }, "No to-do lists yet.")]))),
     ...(data.canEdit ? [el("h2", {}, "Make a list"), make] : []));
 }
 
@@ -2816,7 +2819,8 @@ async function renderCalendar(box, force = false) {
   if (!force && sig === calDrawn && box.childElementCount) return;
   calDrawn = sig;
   const act = async (method, path, body) => { try { await api(method, path, body); renderCalendar(box, true); } catch (err) { alert(err.message); } };
-  const people = lastMembers.filter((m) => m.role !== "dependent");
+  // People to tag (family displays aren't people; Everyone covers them too).
+  const people = lastMembers.filter((m) => m.role !== "dependent" && m.access !== "display");
   const days = {};
   for (const e of data.events) {
     const d = new Date(Math.max(e.start, from.getTime())); d.setHours(0, 0, 0, 0);
@@ -2843,11 +2847,7 @@ async function renderCalendar(box, force = false) {
   const allDay = el("input", { type: "checkbox", class: "switch", role: "switch" });
   const where = el("input", { placeholder: "Where (optional)", maxlength: "100" });
   const every = el("select", {}, ...[["", "Once"], ["day", "Every day"], ["weekdays", "Weekdays"], ["week", "Every week"], ["2 weeks", "Every 2 weeks"], ["month", "Every month"], ["year", "Every year"]].map(([v, t]) => el("option", { value: v }, t)));
-  const who = el("div", { class: "toggles" }, ...people.map((m) => {
-    const b = el("button", { type: "button", class: "toggle", "data-id": m.id, "aria-pressed": "false" }, avatarOf(m), el("span", {}, m.name));
-    b.addEventListener("click", () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"));
-    return b;
-  }));
+  const who = whoPicker(people);
   const form = el("form", { class: "upkeep-add" }, el("label", {}, "What", title),
     el("div", { class: "row" }, el("label", {}, "Day", day), el("label", {}, "From", t1), el("label", {}, "To", t2), el("label", { class: "switch-label" }, allDay, "All day")),
     el("div", { class: "row" }, el("label", { class: "grow" }, "Where", where), el("label", {}, "Repeats", every)),
@@ -2856,7 +2856,7 @@ async function renderCalendar(box, force = false) {
     ev.preventDefault();
     if (!title.value.trim()) return;
     act("POST", "/api/events", { title: title.value.trim(), start: allDay.checked ? day.value : `${day.value}T${t1.value}`, end: allDay.checked ? "" : `${day.value}T${t2.value}`,
-      where: where.value.trim(), every: every.value, who: [...who.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.id) });
+      where: where.value.trim(), every: every.value, who: who.chosen() });
   });
   // Outside calendars (school, sports, holidays): parents add a link; everyone sees them.
   const feedRows = feeds.feeds.map((f) => {
@@ -2887,8 +2887,33 @@ async function renderCalendar(box, force = false) {
       el("li", {}, el("strong", {}, "Thunderbird: "), "New Calendar → On the network, location ", el("code", {}, location.origin + "/dav/"), ".")));
   const views = await calendarViews(box, () => renderCalendar(box, true));
   if (box.dataset.module !== "calendar") return;
-  box.replaceChildren(...views, ...(calMode !== "list" ? [] : agenda.length ? agenda : [el("p", { class: "muted" }, "Nothing on the calendar for the next few weeks.")]),
-    ...(data.canEdit ? [el("h2", {}, "Add an event"), form] : []), ...outside.filter(Boolean), sync);
+  // Two panes: adding an event (and, behind a button, outside calendars and phone sync)
+  // on the left; the calendar itself on the right.
+  const settingsBtn = el("button", { type: "button", class: "secondary wide", "aria-expanded": String(calSettingsOpen),
+    onclick: () => { calSettingsOpen = !calSettingsOpen; renderCalendar(box, true); } }, calSettingsOpen ? "Close calendar settings" : "Calendar settings: outside calendars, phones");
+  const left = el("div", { class: "cal-left" },
+    data.canEdit ? el("div", { class: "panel" }, el("h2", {}, "Add an event"), form) : null,
+    settingsBtn,
+    calSettingsOpen ? el("div", { class: "panel" }, ...outside.filter(Boolean)) : null,
+    calSettingsOpen ? sync : null);
+  const right = el("div", { class: "cal-right" }, ...views, ...(calMode !== "list" ? [] : agenda.length ? agenda : [el("p", { class: "muted" }, "Nothing on the calendar for the next few weeks.")]));
+  box.replaceChildren(el("div", { class: "two-pane cal-panes" }, left, right));
+}
+let calSettingsOpen = false;
+
+// Tagging people: a face each, and Everyone (the whole family, family displays too),
+// which greys the rest out. chosen() is the ids picked.
+function whoPicker(people, picked = []) {
+  const everyoneIds = lastMembers.filter((m) => m.role !== "dependent").map((m) => m.id);
+  const all = el("button", { type: "button", class: "toggle everyone", "aria-pressed": "false" }, el("span", { class: "avatar" }, "★"), el("span", {}, "Everyone"));
+  const faces = people.map((m) => el("button", { type: "button", class: "toggle", "data-id": m.id, "aria-pressed": String(picked.includes(m.id)) }, avatarOf(m), el("span", {}, m.name)));
+  const box = el("div", { class: "toggles" }, all, ...faces);
+  const sync = () => { const on = all.getAttribute("aria-pressed") === "true"; faces.forEach((b) => { b.disabled = on; b.classList.toggle("greyed", on); }); };
+  all.addEventListener("click", () => { all.setAttribute("aria-pressed", all.getAttribute("aria-pressed") === "true" ? "false" : "true"); sync(); });
+  faces.forEach((b) => b.addEventListener("click", () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true")));
+  if (picked.length && everyoneIds.every((id) => picked.includes(id))) { all.setAttribute("aria-pressed", "true"); sync(); }
+  box.chosen = () => all.getAttribute("aria-pressed") === "true" ? everyoneIds : faces.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.id);
+  return box;
 }
 
 // Huddle: family meetings. Parents write a short agenda ("## Topic", lines about it,

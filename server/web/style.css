@@ -1186,3 +1186,11 @@ dialog.quick-add h2 { margin-top: 0; }
 .quiz li .feat-jobs { flex-basis: 100%; }
 .upkeep-add .feat-jobs label.feat-job { flex-direction: row; align-items: center; justify-content: space-between; text-align: left; }
 .subtabs .count:not(:empty) { margin-left: 6px; opacity: .7; }
+
+.cal-panes { grid-template-columns: minmax(300px, 420px) 1fr; }
+.cal-left { display: flex; flex-direction: column; gap: 12px; }
+.cal-left .wide { width: 100%; }
+.cal-right { min-width: 0; }
+.toggle.greyed { opacity: .35; }
+.toggle.everyone .avatar { background: var(--secondary); color: var(--surface); }
+#module-soon:has(.cal-panes) { max-width: 1600px; background: transparent; box-shadow: none; padding: 0; }
